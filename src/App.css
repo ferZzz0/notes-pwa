@@ -1,0 +1,42 @@
+/* Отступы env(safe-area-inset-*) нужны установленному приложению на iPhone:
+   без них контент залезает под вырез камеры и «домашнюю полоску». */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.app-header {
+  padding: 20px 20px 8px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  padding: 20px;
+}
+
+.empty {
+  margin: auto;
+  text-align: center;
+}
+
+.empty-title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.empty-hint {
+  margin: 0;
+  color: var(--muted);
+}

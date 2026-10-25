@@ -1,0 +1,21 @@
+{
+  // Отладка приложения: сначала запусти dev-сервер (npm run dev),
+  // затем F5 — откроется браузер, точки останова ставь в src/**/*.tsx
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Отладка (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "Отладка (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}"
+    }
+  ]
+}

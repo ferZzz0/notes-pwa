@@ -1,0 +1,15 @@
+# Зависимости
+node_modules/
+
+# Результат сборки Vite (деплой собирает его заново)
+dist/
+# Service worker, который vite-plugin-pwa собирает в режиме разработки
+dev-dist/
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+
+# Логи и временное
+*.log
+.cache/

@@ -1,0 +1,13 @@
+// Конфиг деплоя на Cloudflare (Workers Static Assets).
+// Cloudflare при каждом push сам выполняет `npm run build` (Vite),
+// а затем `npx wrangler deploy` читает этот файл и выкладывает dist/.
+{
+  "name": "notes-pwa",
+  "compatibility_date": "2026-10-25",
+  "assets": {
+    "directory": "./dist",
+    // Любой незнакомый путь отдаёт index.html — чтобы прямые ссылки
+    // на экраны приложения (например, /note/123) открывались, а не давали 404
+    "not_found_handling": "single-page-application"
+  }
+}

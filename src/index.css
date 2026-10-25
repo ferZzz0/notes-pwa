@@ -1,0 +1,51 @@
+/* Общие стили: цвета темы, сброс браузерных отступов, шрифт */
+
+:root {
+  --bg: #fbf8f3;
+  --surface: #ffffff;
+  --text: #2b2621;
+  --muted: #8a7f72;
+  --border: #ece4d8;
+  --accent: #f28a2e;
+  --accent-text: #ffffff;
+  --shadow: 0 8px 24px rgb(60 40 10 / 0.12);
+
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1a17;
+    --surface: #26231f;
+    --text: #f3eee7;
+    --muted: #a39889;
+    --border: #3a352f;
+    --accent: #ffa94d;
+    --accent-text: #2b1a05;
+    --shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  /* Убираем серую вспышку при тапе на мобильных */
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
