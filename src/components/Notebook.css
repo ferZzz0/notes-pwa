@@ -1,36 +1,36 @@
-/* Тетрадь на весь экран: листы от края до края. Бумага уходит и под вырез
-   камеры, а текст держится от него на расстоянии отступов --safe-*
-   (их задаёт .app-root в App.css). Горизонтально листы лежат рядом,
-   вертикально — друг над другом (см. медиазапрос в конце файла). */
+/* Тетрадь — предмет в мире полотна (Canvas): размеры в px мира заданы в
+   Notebook.tsx, на экран её выводит камера полотна. */
 .notebook {
+  /* Клетка 5 мм; размеры текста на листах кратны ей (App.css) */
+  --cell: 25px;
+  --pad: calc(var(--cell) * 2);
+  /* Линия клетки — всегда 1 экранный пиксель: --zoom (масштаб камеры)
+     выставляет Canvas. Иначе при отдалении клетка исчезает */
+  --hairline: calc(1px / var(--zoom, 1));
+
   position: absolute;
   inset: 0;
   display: flex;
-  /* Единицы cq* внутри тетради считаются от её размеров */
-  container-type: size;
+  border-radius: 6px;
+  box-shadow:
+    0 2px 6px rgb(0 0 0 / 0.12),
+    0 40px 80px -30px rgb(0 0 0 / 0.45);
 }
 
 .page {
-  /* Размер клетки привязан к короткой стороне экрана — одинаковый в
-     вертикали и горизонтали, — но не мельче 12px (иначе на телефоне клетки
-     сливаются) и не крупнее 22px. */
-  --cell: clamp(12px, 100cqmin / 30, 22px);
-  --pad: calc(var(--cell) * 2);
-
   position: relative;
-  /* Ровно половина экрана, даже если отступы от выреза у листов разные —
-     иначе корешок съехал бы с границы листов */
+  /* Ровно половина разворота — корешок точно на границе листов */
   width: 50%;
   overflow: hidden;
   /* Содержимое страницы — столбиком; последний блок может растянуться
      до низа листа (например, поле заметки) */
   display: flex;
   flex-direction: column;
-  padding: calc(var(--pad) + var(--safe-top)) var(--pad) calc(var(--pad) + var(--safe-bottom));
+  padding: var(--pad);
   background-color: var(--paper);
   background-image:
-    linear-gradient(to right, var(--grid) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+    linear-gradient(to right, var(--grid) var(--hairline), transparent var(--hairline)),
+    linear-gradient(to bottom, var(--grid) var(--hairline), transparent var(--hairline));
   background-size: var(--cell) var(--cell);
   color: var(--ink);
   font-family: 'Caveat Variable', cursive;
@@ -39,11 +39,11 @@
 }
 
 .page-left {
-  padding-left: calc(var(--pad) + var(--safe-left));
+  border-radius: 6px 0 0 6px;
 }
 
 .page-right {
-  padding-right: calc(var(--pad) + var(--safe-right));
+  border-radius: 0 6px 6px 0;
 }
 
 /* Тень у сгиба: листы будто уходят в корешок */
@@ -67,7 +67,7 @@
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 2px;
+  width: 3px;
   transform: translateX(-50%);
   background: var(--fold-line);
   pointer-events: none;
@@ -77,12 +77,12 @@
 .staple {
   position: absolute;
   left: 50%;
-  width: 4px;
+  width: 8px;
   height: 7%;
   transform: translateX(-50%);
-  border-radius: 2px;
+  border-radius: 4px;
   background: linear-gradient(to right, #8d949c, #e9edf1 45%, #a1a8b0);
-  box-shadow: 0 1px 1px rgb(0 0 0 / 0.25);
+  box-shadow: 0 2px 2px rgb(0 0 0 / 0.25);
 }
 
 .staple:first-child {
@@ -91,65 +91,4 @@
 
 .staple:last-child {
   bottom: 26%;
-}
-
-/* Телефон держат вертикально — тетрадь поворачивается вместе с ним:
-   левый лист сверху, правый снизу, корешок со скрепками поперёк экрана.
-   Тот же запрос в JS — src/orientation.ts: в этом режиме только чтение. */
-@media (orientation: portrait) and (pointer: coarse) {
-  .notebook {
-    flex-direction: column;
-  }
-
-  .page {
-    width: 100%;
-    height: 50%;
-    padding: var(--pad) calc(var(--pad) + var(--safe-right)) var(--pad)
-      calc(var(--pad) + var(--safe-left));
-  }
-
-  .page-left {
-    padding-top: calc(var(--pad) + var(--safe-top));
-  }
-
-  .page-right {
-    padding-bottom: calc(var(--pad) + var(--safe-bottom));
-  }
-
-  .page-left::after {
-    background: linear-gradient(to top, var(--fold-shadow), transparent 9%);
-  }
-
-  .page-right::after {
-    background: linear-gradient(to bottom, var(--fold-shadow), transparent 9%);
-  }
-
-  .notebook-spine {
-    top: 50%;
-    bottom: auto;
-    left: 0;
-    right: 0;
-    width: auto;
-    height: 2px;
-    transform: translateY(-50%);
-  }
-
-  .staple {
-    width: 7%;
-    height: 4px;
-    transform: translateY(-50%);
-    background: linear-gradient(to bottom, #8d949c, #e9edf1 45%, #a1a8b0);
-  }
-
-  .staple:first-child {
-    top: 50%;
-    left: 26%;
-  }
-
-  .staple:last-child {
-    top: 50%;
-    bottom: auto;
-    left: auto;
-    right: 26%;
-  }
 }

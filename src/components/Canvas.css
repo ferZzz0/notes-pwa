@@ -1,0 +1,43 @@
+/* Полотно на весь экран — «стол», над которым летаем */
+.canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, var(--desk-light), var(--desk) 75%);
+  /* Перелёт не должен выделять текст и вызывать меню долгого нажатия */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  cursor: grab;
+}
+
+/* Все жесты обрабатывает Canvas.tsx: браузер ничего не прокручивает и не
+   масштабирует сам. Именно на всех потомках: прокручиваемый элемент
+   (например, поле заметки) иначе забирает жест себе, и перелёт обрывается */
+.canvas,
+.canvas * {
+  touch-action: none;
+}
+
+.canvas.is-panning {
+  cursor: grabbing;
+}
+
+.canvas-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.canvas.is-moving .canvas-world {
+  will-change: transform;
+}
+
+/* Невидимый замер отступов выреза камеры (env() есть только в CSS) */
+.canvas-insets {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}

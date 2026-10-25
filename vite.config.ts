@@ -28,10 +28,9 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        // Ориентацию не фиксируем: вертикально — режим чтения,
-        // горизонтально — режим письма (src/orientation.ts)
-        background_color: '#fffdf6',
-        theme_color: '#fffdf6',
+        // Ориентацию не фиксируем: в обеих всё работает одинаково
+        background_color: '#d9c5a8',
+        theme_color: '#d9c5a8',
         icons: [
           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },

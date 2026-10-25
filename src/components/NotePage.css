@@ -1,5 +1,4 @@
-/* Поле ввода (горизонталь) и текст для чтения (вертикаль) выглядят
-   одинаково — рукописью по клетке, поэтому смена режима незаметна. */
+/* Поле заметки без рамок и фона — текст пишется прямо по клетке */
 .note-text {
   flex: 1;
   min-height: 0;
@@ -14,37 +13,17 @@
   caret-color: var(--ink);
   font: inherit;
   line-height: inherit;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   overflow-y: auto;
   resize: none;
+  /* Полотно (Canvas.css) запрещает выделение, чтобы перелёт не выделял
+     текст; в самой заметке выделять можно */
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
-.note-text::placeholder,
-.note-empty {
+.note-text::placeholder {
   color: var(--ink-muted);
   opacity: 1;
-}
-
-/* Подсказка внизу правой страницы, когда пытаются писать в вертикали */
-.note-hint {
-  position: absolute;
-  left: var(--pad);
-  right: calc(var(--pad) + var(--safe-right));
-  bottom: calc(var(--pad) + var(--safe-bottom));
-  margin: 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow);
-  font: 15px/1.4 var(--ui-font);
-  animation: note-hint-in 0.2s ease-out;
-}
-
-@keyframes note-hint-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
 }
