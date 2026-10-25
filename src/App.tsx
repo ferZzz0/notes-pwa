@@ -1,5 +1,4 @@
 import { Notebook } from './components/Notebook';
-import { RotateHint } from './components/RotateHint';
 import { UpdatePrompt } from './components/UpdatePrompt';
 import './App.css';
 
@@ -8,7 +7,7 @@ const today = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long' }).f
 
 export default function App() {
   return (
-    <>
+    <div className="app-root">
       <Notebook
         left={
           <>
@@ -23,8 +22,7 @@ export default function App() {
           </>
         }
       />
-      <RotateHint />
       <UpdatePrompt />
-    </>
+    </div>
   );
 }

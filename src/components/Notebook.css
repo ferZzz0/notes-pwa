@@ -4,14 +4,15 @@
 .notebook-scene {
   --gap: clamp(8px, 3vmin, 32px);
 
-  position: fixed;
+  /* Заполняет .app-root (App.css), который в вертикали повёрнут на 90° */
+  position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  /* Отступы env(safe-area-inset-*): в горизонтали у iPhone вырез камеры
-     сбоку, без них тетрадь залезала бы под него. */
-  padding: max(var(--gap), env(safe-area-inset-top)) max(var(--gap), env(safe-area-inset-right))
-    max(var(--gap), env(safe-area-inset-bottom)) max(var(--gap), env(safe-area-inset-left));
+  /* Отступы --safe-*: в горизонтали у iPhone вырез камеры сбоку,
+     без них тетрадь залезала бы под него. */
+  padding: max(var(--gap), var(--safe-top)) max(var(--gap), var(--safe-right))
+    max(var(--gap), var(--safe-bottom)) max(var(--gap), var(--safe-left));
   background: radial-gradient(ellipse at 50% 40%, var(--desk-light), var(--desk) 70%);
   /* Размер сцены — точка отсчёта для единиц cqw/cqh у тетради */
   container-type: size;

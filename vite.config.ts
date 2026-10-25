@@ -29,7 +29,8 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         // Только горизонтально. Работает в установленном приложении на
-        // Android; iOS ключ игнорирует — там вертикаль закрывает RotateHint.
+        // Android; iOS ключ игнорирует — там в вертикали приложение само
+        // рисуется повёрнутым на 90° (.app-root в App.css).
         orientation: 'landscape',
         background_color: '#d9c5a8',
         theme_color: '#d9c5a8',

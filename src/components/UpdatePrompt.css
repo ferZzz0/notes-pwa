@@ -1,10 +1,12 @@
 .update-prompt {
   position: fixed;
   left: 50%;
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  /* fixed внутри повёрнутого .app-root отсчитывается от него самого,
+     поэтому плашка поворачивается вместе с приложением */
+  bottom: calc(16px + var(--safe-bottom));
   transform: translateX(-50%);
   width: max-content;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100% - 32px);
   display: flex;
   align-items: center;
   gap: 8px;
