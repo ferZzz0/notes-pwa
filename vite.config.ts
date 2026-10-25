@@ -2,13 +2,23 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Когда собрана версия. В приложении — __BUILD_TIME__, а рядом с ним на
+// сервере — version.json: настройки сравнивают их и показывают, дошло ли
+// обновление. version.json не кэшируется (его нет в globPatterns ниже)
+const BUILD_TIME = new Date().toISOString();
+
 export default defineConfig({
-  // Когда собрана версия — видно в настройках (дошло ли обновление)
   define: {
-    __BUILD_TIME__: JSON.stringify(new Date().toISOString())
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME)
   },
   plugins: [
     react(),
+    {
+      name: 'version-file',
+      generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ built: BUILD_TIME }) });
+      }
+    },
     // Делает сайт PWA: собирает service worker (Workbox) со списком всех
     // файлов сборки для офлайн-кэша и генерирует манифест. Версию кэша
     // вручную поднимать не нужно — список файлов с хэшами меняется сам.

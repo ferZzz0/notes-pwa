@@ -114,3 +114,20 @@
   background: #d64545;
   color: #fff;
 }
+
+/* Что сейчас происходит с обновлением */
+.settings-status {
+  margin: 0 0 10px;
+  color: var(--text);
+}
+
+.settings-panel .settings-update {
+  width: 100%;
+  margin-bottom: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.settings-panel .settings-update:disabled {
+  opacity: 0.5;
+}
