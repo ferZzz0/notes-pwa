@@ -33,6 +33,8 @@ export type Block = {
   // Поворот вокруг середины (градусы) и размер (1 — обычный)
   rotate?: number;
   scale?: number;
+  // Непрозрачность надписи, стикера или фото — от 0.1 до 1 (нет — 1)
+  opacity?: number;
   // Стикер: форма и цвет (#rrggbb; нет — цвет формы по умолчанию)
   sticker?: StickerId;
   fill?: string;

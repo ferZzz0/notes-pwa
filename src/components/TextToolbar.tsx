@@ -35,6 +35,8 @@ type Props = {
   // Стикер: форма и цвет (save = false — пока ведут пальцем по палитре);
   // слой — выше всех или ниже всех на листе
   onSticker: (patch: Partial<Block>, save?: boolean) => void;
+  // Непрозрачность с ползунка; final — палец отпустили (сохранить)
+  onOpacity: (opacity: number, final: boolean) => void;
   onLayer: (dir: 'up' | 'down') => void;
   onDelete: () => void;
   onDone: () => void;
@@ -43,7 +45,7 @@ type Props = {
 };
 
 // Что открыто над панелью
-type Menu = 'color' | 'font' | 'effect' | 'marker' | 'sticker' | 'delete' | null;
+type Menu = 'color' | 'font' | 'effect' | 'marker' | 'sticker' | 'opacity' | 'delete' | null;
 
 // Нажатие на панель не забирает фокус у поля ввода — клавиатура остаётся
 export const keepFocus = (e: MouseEvent) => e.preventDefault();
@@ -87,6 +89,63 @@ export function ConfirmDelete({ what, onDelete, onCancel }: { what: string; onDe
   );
 }
 
+// Непрозрачность — от MIN_OPACITY до 1, шагом 5%
+const MIN_OPACITY = 0.1;
+
+// Прозрачность надписи или фото: ползунок над панелью (свой, на касаниях,
+// как палитра, — обычный ползунок забрал бы фокус у надписи и закрыл
+// клавиатуру). Меняется, пока ведёшь пальцем; отпустили — сохранить
+export function OpacityMenu({ value = 1, onPick }: { value?: number; onPick: (opacity: number, final: boolean) => void }) {
+  const track = useRef<HTMLDivElement>(null);
+  const pick = (e: PointerEvent<HTMLDivElement>, final: boolean) => {
+    const r = track.current!.getBoundingClientRect();
+    const t = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    onPick(Math.round((MIN_OPACITY + t * (1 - MIN_OPACITY)) * 20) / 20, final);
+  };
+  const percent = Math.round(value * 100);
+  return (
+    <div className="toolbar-menu toolbar-opacity" role="dialog" aria-label="Прозрачность">
+      <div
+        ref={track}
+        className="opacity-track"
+        role="slider"
+        tabIndex={0}
+        aria-label="Непрозрачность"
+        aria-valuemin={MIN_OPACITY * 100}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        onPointerDown={e => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          pick(e, false);
+        }}
+        onPointerMove={e => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) pick(e, false);
+        }}
+        onPointerUp={e => pick(e, true)}
+        onKeyDown={e => {
+          const step = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 0.05 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -0.05 : 0;
+          if (!step) return;
+          e.preventDefault();
+          onPick(Math.round(Math.min(1, Math.max(MIN_OPACITY, value + step)) * 20) / 20, true);
+        }}
+      >
+        <span className="opacity-thumb" style={{ left: `${((value - MIN_OPACITY) / (1 - MIN_OPACITY)) * 100}%` }} />
+      </div>
+      <span className="opacity-value">{percent}%</span>
+    </div>
+  );
+}
+
+// Значок прозрачности: капля, наполовину светлая
+export function OpacityIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3.5c3.2 4.3 6 7.4 6 10.6a6 6 0 0 1-12 0c0-3.2 2.8-6.3 6-10.6z" />
+      <path d="M6 14.1a6 6 0 0 0 12 0z" style={{ fill: 'currentColor', opacity: 0.45 }} />
+    </svg>
+  );
+}
+
 // Наверх / вниз среди всего на листе
 export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => void }) {
   return (
@@ -110,10 +169,10 @@ export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => voi
 // Панель выбранной надписи или стикера внизу экрана (а при открытой
 // клавиатуре — над ней): цвет текста (круговая палитра), шрифт и эффект
 // (выпадающие списки), маркер (готовые варианты; только у надписи с
-// текстом), у стикера — его форма, цвет и слой, удалить (с подтверждением),
-// готово. Списки открываются над панелью, по одному.
+// текстом), у стикера — его форма, цвет и слой, прозрачность (ползунок),
+// удалить (с подтверждением), готово. Списки открываются над панелью, по одному.
 export function TextToolbar(props: Props) {
-  const { block, keyboard, onColor, onFont, onEffect, onMarker, onCapture, onSticker, onLayer, onDelete, onDone, onHeight } = props;
+  const { block, keyboard, onColor, onFont, onEffect, onMarker, onCapture, onSticker, onOpacity, onLayer, onDelete, onDone, onHeight } = props;
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
   const font = fontOf(block.font);
@@ -242,6 +301,8 @@ export function TextToolbar(props: Props) {
         </div>
       )}
 
+      {menu === 'opacity' && <OpacityMenu value={block.opacity} onPick={onOpacity} />}
+
       {menu === 'delete' && (
         <ConfirmDelete what={isSticker ? 'стикер' : 'надпись'} onDelete={onDelete} onCancel={() => setMenu(null)} />
       )}
@@ -279,6 +340,7 @@ export function TextToolbar(props: Props) {
             <path d="M4.5 4.5h15v10l-5 5h-10zM19.5 14.5h-5v5" />
           </svg>
         )}
+      {opener('opacity', 'Прозрачность', <OpacityIcon />)}
       {opener(
         'delete',
         isSticker ? 'Удалить стикер' : 'Удалить надпись',

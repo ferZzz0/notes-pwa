@@ -2,25 +2,27 @@ import { useState } from 'react';
 import { knownImageUrl } from '../images';
 import type { Block } from '../notes';
 import { FILTERS, FRAMES, filterOf, frameOf } from '../textStyle';
-import { ConfirmDelete, LayerButtons, keepFocus, menuRoom, useToolbarHeight } from './TextToolbar';
+import { ConfirmDelete, LayerButtons, OpacityIcon, OpacityMenu, keepFocus, menuRoom, useToolbarHeight } from './TextToolbar';
 import './TextToolbar.css';
 
 type Props = {
   block: Block;
   onPatch: (patch: Partial<Block>) => void;
+  // Непрозрачность с ползунка; final — палец отпустили (сохранить)
+  onOpacity: (opacity: number, final: boolean) => void;
   onLayer: (dir: 'up' | 'down') => void;
   onDelete: () => void;
   onDone: () => void;
   onHeight: (h: number) => void;
 };
 
-type Menu = 'frame' | 'filter' | 'layer' | 'delete' | null;
+type Menu = 'frame' | 'filter' | 'opacity' | 'layer' | 'delete' | null;
 
 // Панель выбранного фото — как у надписи (TextToolbar.css): рамка и фильтр
-// (выпадающие списки), слой (наверх / вниз), удалить (с подтверждением),
-// готово. Двигают, поворачивают и меняют размер фото
+// (выпадающие списки), прозрачность (ползунок), слой (наверх / вниз),
+// удалить (с подтверждением), готово. Двигают, поворачивают и меняют размер фото
 // пальцами, как надпись.
-export function ImageToolbar({ block, onPatch, onLayer, onDelete, onDone, onHeight }: Props) {
+export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onDone, onHeight }: Props) {
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
   const frame = frameOf(block.frame);
@@ -71,6 +73,8 @@ export function ImageToolbar({ block, onPatch, onLayer, onDelete, onDone, onHeig
         </ul>
       )}
 
+      {menu === 'opacity' && <OpacityMenu value={block.opacity} onPick={onOpacity} />}
+
       {menu === 'layer' && (
         <div className="toolbar-menu" role="dialog" aria-label="Слой">
           <LayerButtons onLayer={onLayer} />
@@ -89,6 +93,9 @@ export function ImageToolbar({ block, onPatch, onLayer, onDelete, onDone, onHeig
           <circle cx="12" cy="12" r="8.5" />
           <path d="M12 3.5a8.5 8.5 0 0 1 0 17z" style={{ fill: 'currentColor' }} />
         </svg>
+      </button>
+      <button type="button" className={menu === 'opacity' ? 'is-active' : undefined} aria-label="Прозрачность" onClick={() => toggle('opacity')}>
+        <OpacityIcon />
       </button>
       <button type="button" className={menu === 'layer' ? 'is-active' : undefined} aria-label="Слой" onClick={() => toggle('layer')}>
         <svg viewBox="0 0 24 24" aria-hidden="true">

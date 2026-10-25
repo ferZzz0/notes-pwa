@@ -68,10 +68,20 @@ type Props = {
   // Долгое нажатие на мир (палец стоит LONG_PRESS_MS; touch = true) или
   // правый клик — точка мира и точка экрана (px полотна); тапа после него нет
   onLongPress?: (world: Point, screen: Point, touch: boolean) => void;
+  // Палец после долгого нажатия отпустили (activated — это touchend, ещё
+  // «жест пользователя»: в нём браузер даёт читать буфер обмена) или касание
+  // оборвалось (touchcancel — false)
+  onLongPressEnd?: (activated: boolean) => void;
   // Смахнули лист вбок там, где он дальше не едет (лист по экрану или
   // камера упёрлась в его край): палец влево — 'next', вправо — 'prev';
   // start — где палец лёг (px полотна), width — ширина полотна
   onSwipe?: (dir: 'next' | 'prev', start: Point, width: number) => void;
+  // Лист начали и закончили двигать пальцами (перелёт или щипок, не предмет);
+  // конец — в отпускании пальца
+  onPanStart?: () => void;
+  onPanEnd?: () => void;
+  // Скользит ли лист по инерции после броска (по умолчанию да)
+  inertia?: boolean;
   children: ReactNode;
 };
 
@@ -88,9 +98,6 @@ const SWIPE_PX = 50;
 const SWIPE_MS = 700;
 const SWIPE_RATIO = 1.5;
 const SWIPE_SLIP = 0.25;
-// Невидимое поле под бумагой для системной «Вставить» на iPhone (Notebook):
-// касания по нему — касания по листу, а не по полю ввода
-const EDITABLE_EXCEPT = ':not([data-paste-layer])';
 const FRICTION = 0.94; // инерция: доля скорости, остающаяся за 16 мс
 const MIN_SPEED = 0.02; // px/мс — медленнее инерция останавливается
 const MAX_SPEED = 3; // px/мс — быстрее бросок не разгоняет
@@ -100,7 +107,7 @@ const mid = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y)
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 const matches = (t: EventTarget | null, selector: string) => t instanceof Element && t.closest(selector) !== null;
-const EDITABLE = `textarea, input, [contenteditable]:not([contenteditable="false"])${EDITABLE_EXCEPT}`;
+const EDITABLE = 'textarea, input, [contenteditable]:not([contenteditable="false"])';
 const isEditable = (t: EventTarget | null) => matches(t, EDITABLE);
 // По таким элементам тап и двойной тап — их собственные
 const isInteractive = (t: EventTarget | null) => matches(t, `${EDITABLE}, button, a`);
@@ -125,7 +132,11 @@ export function Canvas({
   onDoubleTap,
   grab,
   onLongPress,
+  onLongPressEnd,
   onSwipe,
+  onPanStart,
+  onPanEnd,
+  inertia = true,
   children
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -133,8 +144,8 @@ export function Canvas({
   const insetsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<(CanvasHandle & { reclamp: () => void }) | null>(null);
   // Свежие пропсы для обработчиков, подписанных один раз
-  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onSwipe });
-  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onSwipe };
+  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd, onSwipe, onPanStart, onPanEnd, inertia });
+  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd, onSwipe, onPanStart, onPanEnd, inertia };
 
   useImperativeHandle(
     ref,
@@ -436,9 +447,11 @@ export function Canvas({
     let swallowMouse = false;
     let samples: { t: number; x: number; y: number }[] = [];
     let lastTap = { t: 0, x: 0, y: 0 };
-    // Долгое нажатие: его таймер и сработало ли оно (тогда отпускание — не тап)
+    // Долгое нажатие: его таймер, сработало ли оно (тогда отпускание — не
+    // тап) и сообщили ли уже, что палец отпустили
     let pressTimer = 0;
     let pressed = false;
+    let pressEnded = false;
     // Для смахивания: когда лёг палец, где тогда была камера и было ли в
     // жесте больше одного пальца
     let downTime = 0;
@@ -452,6 +465,7 @@ export function Canvas({
       if (moving) return;
       moving = true;
       viewport.classList.add('is-panning');
+      if (!grabbed) props.current.onPanStart?.();
       // Захватываем пальцы, только когда жест точно не тап: иначе тап по
       // тексту не поставил бы в него курсор
       for (const id of pointers.keys()) {
@@ -480,6 +494,7 @@ export function Canvas({
         multi = false;
         grabbed = props.current.grab?.(p) ?? null;
         pressed = false;
+        pressEnded = false;
         clearTimeout(pressTimer);
         // Мышью долгое нажатие — правый клик (ниже)
         if (!grabbed && e.pointerType !== 'mouse' && !isInteractive(e.target)) {
@@ -561,6 +576,7 @@ export function Canvas({
 
       if (moving) {
         moving = false;
+        props.current.onPanEnd?.();
         // Смахнули вбок, а лист не поехал (упёрся) — перелистнуть, без инерции
         const end = local(e.clientX, e.clientY);
         const dx = end.x - downAt.x;
@@ -579,7 +595,7 @@ export function Canvas({
         }
         // Бросок: скорость по движению за последние 100 мс
         const recent = samples.filter(s => e.timeStamp - s.t < 100);
-        if (e.type === 'pointerup' && recent.length > 1) {
+        if (props.current.inertia && e.type === 'pointerup' && recent.length > 1) {
           const a = recent[0];
           const b = recent[recent.length - 1];
           const dt = b.t - a.t;
@@ -656,11 +672,31 @@ export function Canvas({
     viewport.addEventListener('pointercancel', onUp);
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length > 0) return;
+      if (pressed && !pressEnded) {
+        pressEnded = true;
+        e.preventDefault();
+        props.current.onLongPressEnd?.(true);
+        return;
+      }
       if (!swallowMouse) return;
       swallowMouse = false;
       e.preventDefault();
     };
     viewport.addEventListener('touchend', onTouchEnd, { passive: false });
+    const onTouchCancel = () => {
+      if (!pressed || pressEnded) return;
+      pressEnded = true;
+      props.current.onLongPressEnd?.(false);
+    };
+    viewport.addEventListener('touchcancel', onTouchCancel);
+    // Касание по бумаге — только наше: без этого iOS на долгом нажатии
+    // включает свои лупу и меню и обрывает касание (touchcancel), и
+    // отпускания пальца — где можно читать буфер обмена — уже не бывает.
+    // В надписи, где печатают, касания свои (курсор, выделение, лупа)
+    const onTouchStart = (e: TouchEvent) => {
+      if (!isEditable(e.target)) e.preventDefault();
+    };
+    viewport.addEventListener('touchstart', onTouchStart, { passive: false });
     viewport.addEventListener('contextmenu', onContextMenu);
     viewport.addEventListener('wheel', onWheel, { passive: false });
     viewport.addEventListener('gesturestart', onGestureStart);
@@ -677,6 +713,8 @@ export function Canvas({
       viewport.removeEventListener('pointerup', onUp);
       viewport.removeEventListener('pointercancel', onUp);
       viewport.removeEventListener('touchend', onTouchEnd);
+      viewport.removeEventListener('touchcancel', onTouchCancel);
+      viewport.removeEventListener('touchstart', onTouchStart);
       viewport.removeEventListener('contextmenu', onContextMenu);
       clearTimeout(pressTimer);
       viewport.removeEventListener('wheel', onWheel);

@@ -57,27 +57,24 @@
   white-space: nowrap;
 }
 
-/* --- Поверх полотна, в координатах экрана --- */
-
-/* iPhone: невидимое поле под бумагой (Notebook: paste-layer). Долгое
-   нажатие на нём — системное меню iOS с «Вставить»; текста и курсора в нём
-   не видно, клавиатура не открывается (inputmode="none") */
-.paste-layer {
+/* Надпись или фото обрезаны по корешку: то, что после поворота или
+   увеличения заходит на соседнюю страницу, там не видно (просьба автора).
+   Обёртка стоит в начале мира и не поворачивается — граница ровно корешок */
+.item-clip {
   position: absolute;
-  inset: 0;
-  box-sizing: border-box;
-  overflow: hidden;
-  /* Строка — PASTE_CARET в Notebook.tsx; её начало (отступы) ставится под
-     палец — там курсор и системное меню */
-  font: 16px/20px var(--ui-font);
-  white-space: nowrap;
-  outline: none;
-  color: transparent;
-  caret-color: transparent;
-  -webkit-user-select: text;
-  user-select: text;
-  -webkit-touch-callout: default;
+  top: 0;
+  left: 0;
 }
+
+.item-clip[data-clip='left'] {
+  clip-path: polygon(-100000px -100000px, 0 -100000px, 0 100000px, -100000px 100000px);
+}
+
+.item-clip[data-clip='right'] {
+  clip-path: polygon(0 -100000px, 100000px -100000px, 100000px 100000px, 0 100000px);
+}
+
+/* --- Поверх полотна, в координатах экрана --- */
 
 /* Пузырёк «Вставить» после долгого нажатия на лист — над пальцем (у верха
    экрана — под ним), с хвостиком к точке нажатия. Нажатие мимо закрывает */

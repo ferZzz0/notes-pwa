@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { STICKERS, type StickerId } from '../textStyle';
 import './AddMenu.css';
 
@@ -7,11 +7,33 @@ type Props = {
   onSticker: (sticker: StickerId) => void;
 };
 
+// Выбор фото: на каждое нажатие — новое поле выбора файла (в документе —
+// иначе iOS его не откроет), после выбора или отмены его убираем. С одним
+// постоянным полем iOS после отмены выбора открывал его снова: следующее
+// нажатие на «+» вело в медиатеку, а не в меню
+function pickPhoto(onPhoto: (file: File) => void) {
+  for (const old of document.querySelectorAll('.add-input')) old.remove();
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.className = 'add-input';
+  input.tabIndex = -1;
+  input.setAttribute('aria-hidden', 'true');
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    input.remove();
+    if (file) onPhoto(file);
+  });
+  input.addEventListener('cancel', () => input.remove());
+  document.body.appendChild(input);
+  // Открывается прямо из нажатия на кнопку — иначе iOS не покажет выбор
+  input.click();
+}
+
 // «+» внизу экрана (рядом с шестерёнкой): добавить на лист фото из галереи
 // (или снять) либо готовый стикер, на котором сразу можно писать.
 export function AddMenu({ onPhoto, onSticker }: Props) {
   const [open, setOpen] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
 
   return (
     <>
@@ -26,20 +48,6 @@ export function AddMenu({ onPhoto, onSticker }: Props) {
           <path d="M12 5v14M5 12h14" />
         </svg>
       </button>
-      {/* Выбор фото; открывается прямо из нажатия на кнопку — иначе iOS не покажет */}
-      <input
-        ref={input}
-        className="add-input"
-        type="file"
-        accept="image/*"
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={e => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (file) onPhoto(file);
-        }}
-      />
 
       {open && (
         <>
@@ -50,7 +58,7 @@ export function AddMenu({ onPhoto, onSticker }: Props) {
               className="add-photo"
               onClick={() => {
                 setOpen(false);
-                input.current?.click();
+                pickPhoto(onPhoto);
               }}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">

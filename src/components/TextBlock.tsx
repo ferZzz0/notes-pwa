@@ -117,7 +117,8 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
     maxWidth,
     minWidth,
     '--ink-color': inkColor(block.color),
-    transform: rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : undefined
+    transform: rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : undefined,
+    opacity: block.opacity
   } as CSSProperties;
   // Поворот и размер — ещё и в атрибутах: по ним Notebook меряет, сколько
   // места надпись занимает на листе

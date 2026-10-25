@@ -77,9 +77,11 @@ const NEW_TEXT_OFFSET = { x: 12, y: 30 };
 // Касание и жест попадают в надпись и чуть рядом с ней (экранные px)
 const TAP_PAD = 8;
 const GRAB_PAD = 16;
-// Размер надписи — от 0.4 до 4; поворот рядом с прямым углом и размер рядом
-// с обычным «прилипают» к ним
+// Размер надписи — от 0.4 до 4, фото уменьшается вчетверо сильнее (до 0.1 —
+// просьба автора); поворот рядом с прямым углом и размер рядом с обычным
+// «прилипают» к ним
 const MIN_TEXT_SCALE = 0.4;
+const MIN_PHOTO_SCALE = 0.1;
 const MAX_TEXT_SCALE = 4;
 const SNAP_DEG = 4;
 const SNAP_SCALE = 0.06;
@@ -109,13 +111,8 @@ const STICKER_SIZE = { w: 230, h: 210 };
 const PASTE_ROOM = 90;
 // iPhone и iPad (iPad представляется компьютером Mac, но с сенсорным экраном):
 // читая буфер обмена, Safari сам показывает свою кнопку «Вставить», поэтому
-// там вставляют системным меню (paste-layer), а не своим пузырьком
+// своего пузырька там нет — буфер читаем, когда отпускают палец
 const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-// iPhone: столько ждём после долгого нажатия системное меню (поле под
-// бумагой получает фокус); не дождались — показываем свой пузырёк
-const NATIVE_MENU_WAIT = 600;
-// Высота строки (и курсора) в этом поле, px экрана (Notebook.css: .paste-layer)
-const PASTE_CARET = 20;
 // «Отменить»: столько последних действий помним; набор в одной надписи с
 // паузами короче MERGE_MS — одно действие
 const HISTORY_SIZE = 100;
@@ -190,6 +187,9 @@ function stampDates(next: Spreads, old: Spreads): Spreads {
 const blurActive = () => {
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 };
+
+// Страница, на которой надпись или фото (левый край левее корешка — левая)
+const sideOfBlock = (b: Block): Side => (b.x < 0 ? 'left' : 'right');
 
 // Наибольшая ширина строк надписи: у левой страницы — не дальше корешка
 const maxWidthOf = (b: Block) => (b.x < 0 ? Math.max(MIN_TEXT_WIDTH, Math.min(TEXT_WIDTH, -b.x - SPINE_GAP)) : TEXT_WIDTH);
@@ -296,10 +296,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Пузырёк «Вставить» после долгого нажатия: куда вставлять (мир) и где он
   // (экран)
   const [pasteMenu, setPasteMenu] = useState<{ world: Point; screen: Point } | null>(null);
-  // iPhone: невидимое поле под бумагой (системное меню «Вставить» при
-  // долгом нажатии) и точка этого нажатия — туда ляжет вставленное
-  const pasteLayer = useRef<HTMLDivElement>(null);
-  const pastePoint = useRef<Point | null>(null);
+  // iPhone: долгое нажатие, вставку из которого делаем, когда отпустят палец
+  const pasteOnRelease = useRef<{ world: Point; screen: Point } | null>(null);
   // Открытая страница; на развороте — любая из двух его страниц
   const [page, setPage] = useState(() => loadPage(source));
   const portrait = usePortrait();
@@ -421,7 +419,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // ничего и не написали, — сразу; а ту, где был текст, стёрли целиком —
   // только после подтверждения (отмена возвращает текст)
   const dropIfEmpty = (id: string) => {
-    document.body.classList.remove('caret-moving');
+    panCaret.current = null;
     setFocused(f => (f === id ? null : f));
     setTyping(false);
     const b = spreads[spread]?.blocks.find(x => x.id === id);
@@ -682,6 +680,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         node.style.top = `${m.y}px`;
         node.style.transform = rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : '';
       }
+      // Перешла на другую страницу — и обрезаться по корешку с другой стороны
+      const clip = el.parentElement;
+      if (clip?.classList.contains('item-clip')) clip.dataset.clip = m.x < 0 ? 'left' : 'right';
       // По ним меряют место на листе и ставят рамку
       if (rotate) el.dataset.rotate = String(rotate);
       else delete el.dataset.rotate;
@@ -712,7 +713,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           const [a, c] = p;
           from = midpoint(a0, c0);
           to = midpoint(a, c);
-          scale = Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, (s0 * distance(a, c)) / Math.max(distance(a0, c0), 1)));
+          const minScale = b.kind === 'image' ? MIN_PHOTO_SCALE : MIN_TEXT_SCALE;
+          scale = Math.min(MAX_TEXT_SCALE, Math.max(minScale, (s0 * distance(a, c)) / Math.max(distance(a0, c0), 1)));
           if (Math.abs(scale - 1) < SNAP_SCALE) scale = 1;
           rotate = snapAngle(normalize(r0 + angleDeg(a, c) - angleDeg(a0, c0)));
         }
@@ -735,8 +737,10 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   };
 
   const onDoubleTap = (p: Point) => {
-    // По надписи двойное касание — выбрать и печатать (это сделали касания)
-    if (turning || blockAt(p)) return;
+    // По надписи двойное касание — выбрать и печатать (это сделали касания);
+    // по фото — новая надпись прямо на нём (просьба автора)
+    const hit = blockAt(p);
+    if (turning || (hit && hit.kind !== 'image')) return;
     // Выше верха текста (полоса под вырезом камеры) или за корешком одной
     // страницы не пишем — просто к началу листа
     const tapSide: Side = p.x < 0 ? 'left' : 'right';
@@ -756,21 +760,26 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   };
 
   // Долгое нажатие на пустое место листа — пузырёк «Вставить». На iPhone
-  // своего пузырька нет: палец лежит на невидимом поле под бумагой, и iOS
-  // сама показывает на нём системное меню с «Вставить» (одну кнопку); если
-  // меню так и не появилось (поле не получило фокус) — всё же свой пузырёк
+  // своего пузырька нет: буфер читаем, когда палец отпустят (Canvas:
+  // onLongPressEnd), и Safari показывает одну свою кнопку «Вставить» — без
+  // лупы и меню поля ввода (невидимое поле под бумагой давало их — просьба
+  // автора: «только вставка»)
   const onLongPress = (p: Point, screen: Point, touch: boolean) => {
+    pasteOnRelease.current = null;
     if (turning || blockAt(p)) return;
-    // Поле под бумагой не трогаем — на нём сейчас откроется системное меню
-    if (document.activeElement !== pasteLayer.current) blurActive();
-    setSelected(null);
-    if (!(IOS && touch && pasteLayer.current)) {
-      setPasteMenu({ world: p, screen });
-      return;
-    }
-    window.setTimeout(() => {
-      if (document.activeElement !== pasteLayer.current) setPasteMenu({ world: p, screen });
-    }, NATIVE_MENU_WAIT);
+    deselect();
+    if (IOS && touch) pasteOnRelease.current = { world: p, screen };
+    else setPasteMenu({ world: p, screen });
+  };
+
+  // Палец отпустили — читаем буфер; касание оборвалось (буфер читать уже
+  // нельзя) — свой пузырёк, как на других устройствах
+  const onLongPressEnd = (activated: boolean) => {
+    const press = pasteOnRelease.current;
+    pasteOnRelease.current = null;
+    if (!press) return;
+    if (activated) void pasteAt(press.world);
+    else setPasteMenu(press);
   };
 
   // Повернули экран — пузырёк уже не там, где нажимали
@@ -790,25 +799,17 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       if (!data || turning || erased) return;
       const target = e.target instanceof Element ? e.target : null;
       if (target?.closest('input, textarea')) return;
-      // Системная «Вставить» на поле под бумагой (iPhone) — в точку долгого
-      // нажатия; в само поле ничего не попадает
-      const toLayer = target?.closest('[data-paste-layer]');
-      const at = toLayer ? (pastePoint.current ?? undefined) : undefined;
-      if (toLayer) {
-        e.preventDefault();
-        pasteLayer.current?.blur();
-      }
-      const inText = !toLayer && target?.closest('[contenteditable]:not([contenteditable="false"])');
+      const inText = target?.closest('[contenteditable]:not([contenteditable="false"])');
       const file = [...data.files].find(f => f.type.startsWith('image/'));
       if (file) {
         e.preventDefault();
-        void addPhoto(file, at);
+        void addPhoto(file);
         return;
       }
       const text = data.getData('text/plain');
       if (inText || !text.trim()) return;
       e.preventDefault();
-      pasteText(text, at ?? viewCenter());
+      pasteText(text, viewCenter());
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
@@ -839,29 +840,50 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   };
 
   // Лист двигают, пока печатают: iOS рисует курсор поверх страницы сам и
-  // оставляет его там, где был текст, — курсор «улетал». Пока камера
-  // движется, курсор прячем (caret-moving на body: класс самой надписи
-  // React перезаписал бы), а когда замерла — то же выделение заново, и
-  // курсор встаёт к тексту. Надпись за экраном — курсор так и прячем, иначе
-  // iOS сама прокрутила бы к нему экран
+  // оставляет его на месте экрана, а не у текста (сдвиг листа — только
+  // transform, для iOS текст «не двигался»; спрятать курсор цветом нельзя —
+  // iOS его не подхватывает). Поэтому, пока лист двигают пальцами,
+  // выделения в надписи нет вовсе (нет и курсора), а когда палец отпустили —
+  // то же выделение снова, и курсор встаёт у текста. Надпись за экраном —
+  // выделение ждёт, пока она вернётся (иначе iOS прокрутила бы к ней экран)
+  const panCaret = useRef<{ el: HTMLElement; range: TextRange } | null>(null);
+  const onScreen = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    const vv = window.visualViewport;
+    const top = vv?.offsetTop ?? 0;
+    const bottom = top + (vv?.height ?? window.innerHeight);
+    return r.bottom > top && r.top < bottom && r.right > 0 && r.left < window.innerWidth;
+  };
+  const restoreCaret = () => {
+    const saved = panCaret.current;
+    if (!saved) return;
+    if (document.activeElement !== saved.el) {
+      panCaret.current = null;
+      return;
+    }
+    if (!onScreen(saved.el)) return;
+    panCaret.current = null;
+    setRange(saved.el, saved.range);
+  };
+  const onPanStart = () => {
+    const el = document.activeElement;
+    if (!isEditor(el) || panCaret.current) return;
+    const range = getRange(el);
+    if (!range) return;
+    panCaret.current = { el, range };
+    window.getSelection()?.removeAllRanges();
+  };
+  // Лист сдвинулся сам (лист вернулся в границы, поднялась строка над
+  // клавиатурой): когда замер — то же выделение заново
   const caretTimer = useRef(0);
   const followCaret = () => {
     if (!isEditor(document.activeElement)) return;
-    document.body.classList.add('caret-moving');
     clearTimeout(caretTimer.current);
     caretTimer.current = window.setTimeout(() => {
       const el = document.activeElement;
-      if (!isEditor(el)) {
-        document.body.classList.remove('caret-moving');
-        return;
-      }
-      const r = el.getBoundingClientRect();
-      const vv = window.visualViewport;
-      const top = vv?.offsetTop ?? 0;
-      const bottom = top + (vv?.height ?? window.innerHeight);
-      if (r.bottom < top || r.top > bottom || r.right < 0 || r.left > window.innerWidth) return;
-      document.body.classList.remove('caret-moving');
-      redrawCaret(el);
+      if (!isEditor(el)) return;
+      if (panCaret.current) restoreCaret();
+      else if (onScreen(el)) redrawCaret(el);
     }, CARET_SETTLE_MS);
   };
 
@@ -988,7 +1010,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // отменить, Ctrl/⌘+Shift+Z и Ctrl+Y — вернуть (в надписи — её собственные)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]:not([contenteditable="false"]):not([data-paste-layer])')) return;
+      if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]:not([contenteditable="false"])')) return;
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyZ' || e.code === 'KeyY')) {
         e.preventDefault();
         if (turning) return;
@@ -1038,40 +1060,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               : 0
         }
         locked={turning}
-        background={
-          <>
-            <Paper ref={paper} display={display} />
-            {IOS && (
-              // Невидимое поле под бумагой: долгое нажатие на нём — системное
-              // меню iOS с «Вставить» (без клавиатуры: inputMode none);
-              // остальные касания по нему Canvas считает касаниями по листу
-              <div
-                ref={pasteLayer}
-                className="paste-layer"
-                data-paste-layer
-                contentEditable
-                suppressContentEditableWarning
-                inputMode="none"
-                aria-hidden="true"
-                // Точка касания — куда ляжет вставленное (iOS может забрать
-                // долгое нажатие себе раньше, чем его заметит Canvas)
-                onPointerDown={e => {
-                  const c = camera.current;
-                  pastePoint.current = { x: (e.clientX - c.x) / c.scale, y: (e.clientY - c.y) / c.scale };
-                  // Курсор пустого поля — в его начале, а системное меню
-                  // встаёт над курсором: начало поля (отступы) — под палец,
-                  // иначе «Вставить» всегда появлялась в левом верхнем углу
-                  const el = e.currentTarget;
-                  el.style.paddingLeft = `${Math.round(e.clientX)}px`;
-                  el.style.paddingTop = `${Math.max(0, Math.round(e.clientY - PASTE_CARET / 2))}px`;
-                }}
-                onInput={e => {
-                  e.currentTarget.textContent = '';
-                }}
-              />
-            )}
-          </>
-        }
+        background={<Paper ref={paper} display={display} />}
         onFrame={(cam, size) => {
           const moved = cam.x !== camera.current.x || cam.y !== camera.current.y || cam.scale !== camera.current.scale;
           camera.current = cam;
@@ -1082,6 +1071,12 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         onTap={onTap}
         onDoubleTap={onDoubleTap}
         onLongPress={onLongPress}
+        onLongPressEnd={onLongPressEnd}
+        onPanStart={onPanStart}
+        onPanEnd={restoreCaret}
+        // Пока печатают, лист без инерции — останавливается вместе с пальцем
+        // (тогда и курсор встаёт на место сразу)
+        inertia={focused === null}
         // Смахнули лист вбок — перелистнуть (стрелок нет — просьба автора),
         // если начали с той трети экрана, что ближе к странице, куда
         // листаем: дальше — с правой, назад — с левой (как берутся за край
@@ -1096,30 +1091,32 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         {display !== 'left' && pageSide(underRight, 'right')}
 
         {/* Надписи видимых страниц — одним слоем (координаты мира), чтобы
-            надпись, перенесённая через корешок, оставалась тем же полем ввода */}
+            надпись, перенесённая через корешок, оставалась тем же полем ввода.
+            Каждая — в обёртке, обрезающей её по корешку (item-clip) */}
         {!flip && (
           <div className="page-side page-texts">
-            {visibleBlocks.map(b =>
-              b.kind === 'image' ? (
-                <ImageItem key={b.id} block={b} />
-              ) : (
-                <TextBlock
-                  key={b.id}
-                  block={b}
-                  width={maxWidthOf(b)}
-                  editing={focused === b.id}
-                  onContent={setRuns}
-                  onBlur={dropIfEmpty}
-                  onFocus={(id, el) => {
-                    textBefore.current.set(id, { text: b.text, runs: b.runs });
-                    setSelected(id);
-                    setFocused(id);
-                    setTimeout(() => keepVisible(el), 350);
-                  }}
-                  onInput={el => requestAnimationFrame(() => keepVisible(el))}
-                />
-              )
-            )}
+            {visibleBlocks.map(b => (
+              <div key={b.id} className="item-clip" data-clip={sideOfBlock(b)}>
+                {b.kind === 'image' ? (
+                  <ImageItem block={b} />
+                ) : (
+                  <TextBlock
+                    block={b}
+                    width={maxWidthOf(b)}
+                    editing={focused === b.id}
+                    onContent={setRuns}
+                    onBlur={dropIfEmpty}
+                    onFocus={(id, el) => {
+                      textBefore.current.set(id, { text: b.text, runs: b.runs });
+                      setSelected(id);
+                      setFocused(id);
+                      setTimeout(() => keepVisible(el), 350);
+                    }}
+                    onInput={el => requestAnimationFrame(() => keepVisible(el))}
+                  />
+                )}
+              </div>
+            ))}
           </div>
         )}
 
@@ -1181,6 +1178,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             <ImageToolbar
               block={selectedBlock}
               onPatch={patch => patchBlock(selectedBlock.id, patch)}
+              onOpacity={(opacity, final) => patchBlock(selectedBlock.id, { opacity: opacity < 1 ? opacity : undefined }, final)}
               onLayer={dir => reorder(selectedBlock.id, dir)}
               onDelete={() => {
                 removeBlock(selectedBlock.id);
@@ -1199,6 +1197,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               onMarker={marker => restyle(selectedBlock.id, { marker })}
               onCapture={captureRange}
               onSticker={(patch, save) => patchBlock(selectedBlock.id, patch, save)}
+              onOpacity={(opacity, final) => patchBlock(selectedBlock.id, { opacity: opacity < 1 ? opacity : undefined }, final)}
               onLayer={dir => reorder(selectedBlock.id, dir)}
               onDelete={() => {
                 removeBlock(selectedBlock.id);
@@ -1267,11 +1266,13 @@ function PageSide({ spread, side, blocks, date, day }: PageSideProps) {
           {date && <span className={`page-date page-date-${side}`}>{date}</span>}
         </>
       )}
-      {blocks
-        .filter(b => (side === 'left' ? b.x < 0 : b.x >= 0))
-        .map(b => (
-          b.kind === 'image' ? <ImageItem key={b.id} block={b} /> : <TextBlock key={b.id} block={b} width={maxWidthOf(b)} face />
-        ))}
+      <div className="item-clip" data-clip={side}>
+        {blocks
+          .filter(b => sideOfBlock(b) === side)
+          .map(b =>
+            b.kind === 'image' ? <ImageItem key={b.id} block={b} /> : <TextBlock key={b.id} block={b} width={maxWidthOf(b)} face />
+          )}
+      </div>
     </div>
   );
 }

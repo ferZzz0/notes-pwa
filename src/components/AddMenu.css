@@ -11,9 +11,12 @@
   transform: rotate(45deg);
 }
 
-/* Поле выбора файла не видно, но открывается по кнопке «Фото» */
+/* Поле выбора файла (AddMenu.tsx: pickPhoto) не видно, но открывается по
+   кнопке «Фото» */
 .add-input {
   position: fixed;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   opacity: 0;

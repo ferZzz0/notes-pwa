@@ -30,7 +30,8 @@ export function ImageItem({ block }: { block: Block }) {
     left: block.x,
     top: block.y,
     width: block.width ?? DEFAULT_WIDTH,
-    transform: rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : undefined
+    transform: rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : undefined,
+    opacity: block.opacity
   } as CSSProperties;
 
   return (
