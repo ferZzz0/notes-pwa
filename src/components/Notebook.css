@@ -1,34 +1,106 @@
-/* Тетрадь — предмет в мире полотна (Canvas): размеры в px мира заданы в
-   Notebook.tsx, на экран её выводит камера полотна. Листы — Page.css. */
-.notebook {
-  /* Клетка 5 мм; размеры текста на листах кратны ей */
-  --cell: 25px;
-  --pad: calc(var(--cell) * 2);
-  /* Линия клетки — 1 экранный пиксель: --zoom (масштаб камеры) выставляет
-     Canvas, когда камера замерла. Иначе при отдалении клетка исчезает */
-  --hairline: calc(1px / var(--zoom, 1));
-  --flip-time: 650ms;
+/* Тетрадь в мире полотна (координаты — px мира: верх листа y = 0, корешок
+   x = 0). Сам бесконечный лист рисует Paper. */
 
+/* Сторона разворота — точка отсчёта для её содержимого */
+.page-side {
   position: absolute;
-  inset: 0;
-  display: flex;
-  border-radius: 6px;
-  /* Тень с небольшим размытием: большое размытие дорого перерисовывать */
-  box-shadow:
-    0 2px 4px rgb(0 0 0 / 0.15),
-    0 14px 24px -10px rgb(0 0 0 / 0.35);
-  /* Глубина для переворота листа */
-  perspective: 3400px;
+  top: 0;
+  left: 0;
 }
 
-/* Переворачиваемый лист: лицо и оборот — две страницы спиной друг к другу,
-   лист поворачивается вокруг корешка на 180° */
+.page-number,
+.page-date {
+  position: absolute;
+  top: 24px;
+  font-family: 'Caveat Variable', cursive;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+/* Номера страниц — у корешка, по обе стороны */
+.page-number-left {
+  right: 40px;
+}
+
+.page-number-right {
+  left: 40px;
+}
+
+/* Дата, когда на развороте начали писать (на пустом — сегодня, бледно) */
+.page-date {
+  left: 120px;
+  font-size: 36px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.page-date-empty {
+  opacity: 0.4;
+}
+
+/* Подсказки на самой первой странице */
+.title-note {
+  position: absolute;
+  top: 110px;
+  right: 40px;
+  width: 480px;
+  font-family: 'Caveat Variable', cursive;
+  font-size: 40px;
+  line-height: 52px;
+  color: var(--ink-muted);
+}
+
+.title-note h1 {
+  margin: 0 0 20px;
+  font-size: 64px;
+  line-height: 72px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.title-note p {
+  margin: 0 0 20px;
+}
+
+/* Скрепки на корешке у верха листа */
+.staple {
+  position: absolute;
+  left: -4px;
+  width: 8px;
+  height: 72px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #8d949c, #e9edf1 45%, #a1a8b0);
+  box-shadow: 0 2px 2px rgb(0 0 0 / 0.25);
+  pointer-events: none;
+}
+
+.staple-top {
+  top: 180px;
+}
+
+.staple-bottom {
+  top: 560px;
+}
+
+/* --- Переворот листа ---
+   Сцена — у корешка (ширина 0), глубину задаёт perspective из Notebook.tsx.
+   Лист — половина разворота, поворачивается на 180° вокруг корешка; лицо
+   и оборот — две стороны листа спиной друг к другу. */
+.flip-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  perspective-origin: 0 50%;
+  --flip-time: 650ms;
+}
+
 .flip {
   position: absolute;
   top: 0;
-  bottom: 0;
-  z-index: 1;
-  width: 50%;
+  height: 100%;
   transform-style: preserve-3d;
   pointer-events: none;
   animation-duration: var(--flip-time);
@@ -37,13 +109,11 @@
 }
 
 .flip-next {
-  left: 50%;
   transform-origin: left center;
   animation-name: flip-next;
 }
 
 .flip-prev {
-  left: 0;
   transform-origin: right center;
   animation-name: flip-prev;
 }
@@ -60,24 +130,33 @@
   }
 }
 
-.flip .flip-face {
+.flip-face {
   position: absolute;
   inset: 0;
-  width: 100%;
+  overflow: hidden;
+  background-color: var(--paper);
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
 
-.flip .flip-back {
+/* Тень у сгиба на стороне листа — как у бумаги (Paper.css): 150 px мира */
+.flip-face-right {
+  background-image: linear-gradient(to right, var(--fold-shadow), transparent 150px);
+}
+
+.flip-face-left {
+  background-image: linear-gradient(to left, var(--fold-shadow), transparent 150px);
+}
+
+.flip-back {
   transform: rotateY(180deg);
 }
 
 /* Свет на листе: темнеет, пока встаёт ребром, и светлеет, ложась */
-.flip-face::before {
+.flip-face::after {
   content: '';
   position: absolute;
   inset: 0;
-  z-index: 1;
   background: rgb(0 0 0 / 0.22);
   pointer-events: none;
   animation-duration: var(--flip-time);
@@ -85,12 +164,12 @@
   animation-fill-mode: forwards;
 }
 
-.flip-front::before {
+.flip-front::after {
   opacity: 0;
   animation-name: flip-shade-front;
 }
 
-.flip-back::before {
+.flip-back::after {
   opacity: 1;
   animation-name: flip-shade-back;
 }
@@ -112,39 +191,77 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .notebook {
+  .flip-stage {
     --flip-time: 1ms;
   }
 }
 
-.notebook-spine {
+/* --- Поверх полотна, в координатах экрана --- */
+
+/* Загнутый уголок листа в нижнем углу экрана — перелистнуть. Кнопка крупнее
+   рисунка, чтобы в неё легко попасть пальцем */
+.flip-corner {
+  position: fixed;
+  bottom: var(--safe-bottom);
+  z-index: 5;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.flip-corner-next {
+  right: var(--safe-right);
+}
+
+.flip-corner-prev {
+  left: var(--safe-left);
+}
+
+/* По диагонали — сгиб: снаружи видна страница под листом, внутри —
+   загнутый кусок листа (его оборот) с тенью */
+.flip-corner::before {
+  content: '';
   position: absolute;
-  top: 0;
   bottom: 0;
+  width: 44px;
+  height: 44px;
+  filter: drop-shadow(0 0 4px rgb(0 0 0 / 0.2));
+  transition:
+    width 0.2s ease-out,
+    height 0.2s ease-out;
+}
+
+.flip-corner-next::before {
+  right: 0;
+  background: linear-gradient(to top left, var(--paper-under) 50%, var(--paper-flap) 50%);
+}
+
+.flip-corner-prev::before {
+  left: 0;
+  background: linear-gradient(to top right, var(--paper-under) 50%, var(--paper-flap) 50%);
+}
+
+@media (hover: hover) {
+  .flip-corner:hover::before {
+    width: 56px;
+    height: 56px;
+  }
+}
+
+.home-button {
+  position: fixed;
+  top: calc(12px + var(--safe-top));
   left: 50%;
-  z-index: 2;
-  width: 3px;
+  z-index: 5;
   transform: translateX(-50%);
-  background: var(--fold-line);
-  pointer-events: none;
-}
-
-/* Две скрепки на сгибе, как у тонкой школьной тетради */
-.staple {
-  position: absolute;
-  left: 50%;
-  width: 8px;
-  height: 7%;
-  transform: translateX(-50%);
-  border-radius: 4px;
-  background: linear-gradient(to right, #8d949c, #e9edf1 45%, #a1a8b0);
-  box-shadow: 0 2px 2px rgb(0 0 0 / 0.25);
-}
-
-.staple:first-child {
-  top: 26%;
-}
-
-.staple:last-child {
-  bottom: 26%;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font: 15px/1.2 var(--ui-font);
+  color: var(--text);
 }

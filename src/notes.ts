@@ -1,18 +1,31 @@
-// Записи тетради в памяти телефона (localStorage). Страницы нумеруются с 1;
-// храним только исписанные — пустых сколько угодно, тетрадь бесконечна.
-// У установленного на iPhone приложения память своя, отдельная от Safari.
+// Записи тетради в памяти телефона (localStorage). Разворот s (с 0) —
+// страницы 2s+1 (левая) и 2s+2 (правая); у каждого разворота бесконечный
+// лист: вниз и в стороны от корешка (x = 0, левая страница — x < 0).
+// Текст можно написать в любом месте листа — это блоки с координатами мира.
+// Храним только развороты с текстом; у установленного на iPhone приложения
+// память своя, отдельная от Safari.
 
-export type PageData = {
+export type Block = {
+  id: string;
+  // Левый верхний угол блока в координатах мира (px; верх листа — y = 0)
+  x: number;
+  y: number;
   text: string;
-  // Когда на странице впервые написали — ГГГГ-ММ-ДД по местному времени
-  created: string;
 };
 
-export type Pages = Record<number, PageData>;
+export type Spread = {
+  // Когда на развороте впервые написали — ГГГГ-ММ-ДД по местному времени
+  created?: string;
+  blocks: Block[];
+};
 
-const PAGES_KEY = 'notes-pwa:pages';
+export type Spreads = Record<number, Spread>;
+
+const SPREADS_KEY = 'notes-pwa:spreads';
 const SPREAD_KEY = 'notes-pwa:spread';
-// Раньше была одна заметка — справа на первом развороте, то есть страница 2
+// Прежние форматы: текст на каждую страницу целиком, а ещё раньше — одна
+// заметка (она была справа на первом развороте, то есть страница 2)
+const OLD_PAGES_KEY = 'notes-pwa:pages';
 const OLD_DRAFT_KEY = 'notes-pwa:draft';
 
 // Сегодня — ГГГГ-ММ-ДД по местному времени (toISOString дал бы UTC,
@@ -21,6 +34,12 @@ export function localDate(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function newBlockId(): string {
+  return typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function read<T>(key: string, fallback: T): T {
@@ -40,32 +59,53 @@ function write(key: string, value: unknown): void {
   }
 }
 
-export function loadPages(): Pages {
-  const pages = read<Pages>(PAGES_KEY, {});
+// Где окажется текст из прежней «страницы целиком» на бесконечном листе
+const OLD_PAGE_X = { left: -700, right: 60 };
+const OLD_PAGE_Y = 140;
+
+function migrate(spreads: Spreads): void {
   try {
+    const pages = read<Record<string, { text: string; created: string }>>(OLD_PAGES_KEY, {});
     const draft = localStorage.getItem(OLD_DRAFT_KEY);
-    if (draft !== null) {
-      if (draft && !pages[2]) pages[2] = { text: draft, created: localDate() };
-      write(PAGES_KEY, pages);
-      localStorage.removeItem(OLD_DRAFT_KEY);
+    if (draft && !pages[2]) pages[2] = { text: draft, created: localDate() };
+    const entries = Object.entries(pages);
+    if (entries.length === 0 && draft === null) return;
+
+    for (const [key, page] of entries) {
+      const n = Number(key);
+      if (!page.text) continue;
+      const s = Math.floor((n - 1) / 2);
+      const spread = spreads[s] ?? { blocks: [] };
+      spread.blocks.push({
+        id: newBlockId(),
+        x: n % 2 === 1 ? OLD_PAGE_X.left : OLD_PAGE_X.right,
+        y: OLD_PAGE_Y,
+        text: page.text
+      });
+      if (!spread.created || page.created < spread.created) spread.created = page.created;
+      spreads[s] = spread;
     }
+    write(SPREADS_KEY, spreads);
+    localStorage.removeItem(OLD_PAGES_KEY);
+    localStorage.removeItem(OLD_DRAFT_KEY);
   } catch {
     // нет доступа к памяти — переносить нечего
   }
-  return pages;
 }
 
-// Новый текст страницы n: сохраняет и возвращает обновлённые записи.
-// Опустевшая страница снова считается чистой (и теряет дату).
-export function savePageText(pages: Pages, n: number, text: string): Pages {
-  const next = { ...pages };
-  if (text) next[n] = { text, created: pages[n]?.created ?? localDate() };
-  else delete next[n];
-  write(PAGES_KEY, next);
-  return next;
+export function loadSpreads(): Spreads {
+  const spreads = read<Spreads>(SPREADS_KEY, {});
+  migrate(spreads);
+  // Пустые блоки могли остаться, если приложение закрыли, ничего не написав
+  for (const s of Object.values(spreads)) s.blocks = s.blocks.filter(b => b.text);
+  return spreads;
 }
 
-// Открытый разворот (с 0) — чтобы после перезапуска вернуться туда же
+export function saveSpreads(spreads: Spreads): void {
+  write(SPREADS_KEY, spreads);
+}
+
+// Открытый разворот — чтобы после перезапуска вернуться туда же
 export function loadSpread(): number {
   const n = read<number>(SPREAD_KEY, 0);
   return Number.isInteger(n) && n >= 0 ? n : 0;

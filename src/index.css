@@ -8,7 +8,6 @@
   /* Загнутый уголок: страница под листом и оборот загнутого куска */
   --paper-under: #ece5d6;
   --paper-flap: #f7f3ea;
-  --grid: rgb(91 141 199 / 0.32);
   --ink: #24398c;
   --ink-muted: rgb(36 57 140 / 0.55);
   --fold-shadow: rgb(70 50 20 / 0.16);
@@ -42,7 +41,6 @@
     --paper: #e4ddcd;
     --paper-under: #c9c1b0;
     --paper-flap: #d9d2c2;
-    --grid: rgb(62 104 160 / 0.35);
     --ink: #1c2c70;
     --ink-muted: rgb(28 44 112 / 0.6);
     --fold-shadow: rgb(0 0 0 / 0.25);

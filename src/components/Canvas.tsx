@@ -1,21 +1,44 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useImperativeHandle, useLayoutEffect, useRef, type ReactNode, type Ref } from 'react';
 import './Canvas.css';
 
+// «Камера»: точка мира (wx, wy) видна на экране в (x + wx·scale, y + wy·scale)
+export type Camera = { x: number; y: number; scale: number };
+export type Point = { x: number; y: number };
+export type Rect = { x: number; y: number; w: number; h: number };
+export type Size = { w: number; h: number };
+
+export type CanvasHandle = {
+  // Плавно вернуться к стартовому виду; промис — когда долетели
+  goHome: () => Promise<void>;
+  // Какая часть мира сейчас на экране
+  visibleRect: () => Rect;
+  // Плавно сдвинуть камеру на (dx, dy) экранных px
+  panBy: (dx: number, dy: number) => void;
+};
+
 type Props = {
-  worldWidth: number;
-  worldHeight: number;
+  ref?: Ref<CanvasHandle>;
+  // Стартовый вид: точка мира (x, y) — середина верхнего края кадра; по
+  // ширине помещается width px мира, но масштаб не мельче minScale
+  home: { x: number; y: number; width: number; minScale: number };
+  // Пока true, жесты не двигают камеру (например, во время переворота листа)
+  locked?: boolean;
+  // Рисуется под миром, в координатах экрана (например, бумага)
+  background?: ReactNode;
+  // Каждый кадр, когда камера сдвинулась
+  onFrame?: (cam: Camera, size: Size) => void;
+  // Когда камера замерла
+  onSettle?: (cam: Camera, size: Size) => void;
+  // Двойное касание по миру (не по полю ввода или кнопке) — точка мира
+  onDoubleTap?: (p: Point) => void;
   children: ReactNode;
 };
 
-// «Камера»: точка мира (wx, wy) видна на экране в (x + wx·scale, y + wy·scale)
-type Camera = { x: number; y: number; scale: number };
-type Rect = { x: number; y: number; w: number; h: number };
-type Point = { x: number; y: number };
-
-const FIT_PADDING = 16; // отступ вокруг, когда показываем что-то целиком
-const MIN_ZOOM = 0.5; // отдалить можно вдвое дальше, чем «весь мир на экране»
-const MAX_SCALE = 2.5; // приблизить — до 2.5 экранных px на px мира
-const KEEP_VISIBLE = 80; // столько px мира всегда остаётся на экране
+const FIT_PADDING = 16; // отступ от краёв экрана для стартового вида
+const MIN_SCALE = 0.12;
+const MAX_SCALE = 2.5; // до 2.5 экранных px на px мира
+// Верх мира (y = 0, верхний край листа) нельзя опустить ниже этой доли экрана
+const MAX_TOP_GAP = 0.4;
 const TAP_SLOP = 8; // сдвиг пальца, после которого это уже не тап, а перелёт
 const DOUBLE_TAP_MS = 300;
 const FRICTION = 0.94; // инерция: доля скорости, остающаяся за 16 мс
@@ -28,34 +51,42 @@ const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 const matches = (t: EventTarget | null, selector: string) => t instanceof Element && t.closest(selector) !== null;
 const isEditable = (t: EventTarget | null) => matches(t, 'textarea, input, [contenteditable="true"]');
-// По таким элементам двойное касание не приближает: у них своё действие
+// По таким элементам тап и двойной тап — их собственные
 const isInteractive = (t: EventTarget | null) => matches(t, 'textarea, input, button, a, [contenteditable="true"]');
 
-// Полотно, над которым «летают»: одним пальцем (или мышью по пустому месту)
+// Бесконечное полотно, над которым «летают»: одним пальцем (или мышью)
 // мир двигается, после броска скользит по инерции; щипок, Ctrl/⌘ + колесо
-// или щипок на тачпаде — масштаб; двойное касание по [data-zoom-target]
-// приближает к нему, повторное или по пустому месту — показывает мир
-// целиком. Все жесты обрабатываем сами (touch-action: none), а камеру
-// пишем прямо в стиль — без перерисовки React на каждом кадре.
-// Элементы с [data-no-pan] (например, уголки для перелистывания) полотно
-// не трогает: нажатие на них — их собственное.
-// К листу двойное касание приближает «по ширине»: в горизонтали на
-// телефоне лист и так упирается в высоту, и «целиком» не приблизило бы.
-export function Canvas({ worldWidth, worldHeight, children }: Props) {
+// или щипок на тачпаде — масштаб. Мир ограничен только сверху (y = 0).
+// Все жесты обрабатываем сами (touch-action: none), а камеру пишем прямо в
+// стиль — без перерисовки React на каждом кадре. Элементы с [data-no-pan]
+// полотно не трогает: нажатие на них — их собственное.
+export function Canvas({ ref, home, locked = false, background, onFrame, onSettle, onDoubleTap, children }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const insetsRef = useRef<HTMLDivElement>(null);
+  const apiRef = useRef<CanvasHandle | null>(null);
+  // Свежие пропсы для обработчиков, подписанных один раз
+  const props = useRef({ home, locked, onFrame, onSettle, onDoubleTap });
+  props.current = { home, locked, onFrame, onSettle, onDoubleTap };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      goHome: () => apiRef.current?.goHome() ?? Promise.resolve(),
+      visibleRect: () => apiRef.current!.visibleRect(),
+      panBy: (dx, dy) => apiRef.current?.panBy(dx, dy)
+    }),
+    []
+  );
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current!;
     const world = worldRef.current!;
     const insetsProbe = insetsRef.current!;
-    const worldRect: Rect = { x: 0, y: 0, w: worldWidth, h: worldHeight };
 
     let cam: Camera = { x: 0, y: 0, scale: 1 };
-    let size = { w: 0, h: 0 };
+    let size: Size = { w: 0, h: 0 };
     let origin: Point = { x: 0, y: 0 };
-    let fitScale = 1;
     let frame = 0;
     let writeFrame = 0;
     let settleTimer = 0;
@@ -68,6 +99,7 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
     const write = () => {
       writeFrame = 0;
       world.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.scale})`;
+      props.current.onFrame?.(cam, size);
     };
 
     const flush = () => {
@@ -75,16 +107,14 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
       write();
     };
 
-    // Чёткость после масштаба: «картинка» слоя осталась в старом разрешении,
-    // поэтому, когда камера замерла, один раз пересоздаём слой (снимаем и
-    // возвращаем will-change) — браузер перерисует его в новом масштабе.
-    // Тогда же обновляем --zoom: по нему клетка рисуется линиями в один
-    // экранный пиксель. Если менять --zoom на каждом кадре щипка, мир
-    // перерисовывается целиком каждый кадр — это и были лаги.
-    const rerasterize = () => {
+    // Чёткость текста после масштаба: «картинка» слоя осталась в старом
+    // разрешении, поэтому, когда камера замерла, один раз пересоздаём слой
+    // (снимаем и возвращаем will-change) — браузер перерисует его в новом
+    // масштабе. На каждом кадре так делать нельзя — это и давало лаги.
+    const settle = () => {
+      props.current.onSettle?.(cam, size);
       if (cam.scale === rasterScale) return;
       rasterScale = cam.scale;
-      world.style.setProperty('--zoom', String(cam.scale));
       world.style.willChange = 'auto';
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
@@ -96,7 +126,7 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
     const apply = () => {
       if (!writeFrame) writeFrame = requestAnimationFrame(write);
       clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(rerasterize, 200);
+      settleTimer = window.setTimeout(settle, 200);
     };
 
     // Отступы от выреза камеры и «домашней полоски»: env() есть только в
@@ -111,43 +141,20 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
       };
     };
 
-    // Камера, при которой прямоугольник мира r виден целиком
-    const fitTo = (r: Rect): Camera => {
+    const homeCamera = (): Camera => {
+      const { x, y, width, minScale } = props.current.home;
       const i = insets();
       const aw = size.w - i.left - i.right - 2 * FIT_PADDING;
-      const ah = size.h - i.top - i.bottom - 2 * FIT_PADDING;
-      const scale = Math.min(aw / r.w, ah / r.h);
-      return {
-        scale,
-        x: i.left + FIT_PADDING + (aw - r.w * scale) / 2 - r.x * scale,
-        y: i.top + FIT_PADDING + (ah - r.h * scale) / 2 - r.y * scale
-      };
+      const scale = clamp(aw / width, minScale, MAX_SCALE);
+      return { scale, x: size.w / 2 - x * scale, y: i.top + FIT_PADDING - y * scale };
     };
 
-    // Камера, при которой r занимает всю ширину экрана, а его верх — у верха
-    // экрана (как при чтении документа); невысокий r — по центру
-    const fitWidth = (r: Rect): Camera => {
-      const i = insets();
-      const aw = size.w - i.left - i.right - 2 * FIT_PADDING;
-      const ah = size.h - i.top - i.bottom - 2 * FIT_PADDING;
-      const scale = Math.min(aw / r.w, MAX_SCALE);
-      const top = r.h * scale > ah ? 0 : (ah - r.h * scale) / 2;
-      return {
-        scale,
-        x: i.left + FIT_PADDING + (aw - r.w * scale) / 2 - r.x * scale,
-        y: i.top + FIT_PADDING + top - r.y * scale
-      };
-    };
+    const clampScale = (s: number) => clamp(s, MIN_SCALE, MAX_SCALE);
 
-    const clampScale = (s: number) => clamp(s, fitScale * MIN_ZOOM, Math.max(MAX_SCALE, fitScale));
-
-    // Мир нельзя увести за край экрана целиком
+    // Над верхним краем мира — не дальше MAX_TOP_GAP экрана; вниз и в
+    // стороны мир бесконечен
     const set = (c: Camera) => {
-      const w = worldWidth * c.scale;
-      const h = worldHeight * c.scale;
-      const mx = Math.min(KEEP_VISIBLE, w);
-      const my = Math.min(KEEP_VISIBLE, h);
-      cam = { scale: c.scale, x: clamp(c.x, mx - w, size.w - mx), y: clamp(c.y, my - h, size.h - my) };
+      cam = { scale: c.scale, x: c.x, y: Math.min(c.y, size.h * MAX_TOP_GAP) };
       apply();
     };
 
@@ -162,22 +169,29 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
       frame = 0;
     };
 
-    const animateTo = (to: Camera, duration = 320) => {
-      stop();
-      const from = cam;
-      const start = performance.now();
-      const step = (now: number) => {
-        const t = Math.min((now - start) / duration, 1);
-        const k = 1 - (1 - t) ** 3;
-        set({
-          x: from.x + (to.x - from.x) * k,
-          y: from.y + (to.y - from.y) * k,
-          scale: from.scale + (to.scale - from.scale) * k
-        });
-        frame = t < 1 ? requestAnimationFrame(step) : 0;
-      };
-      frame = requestAnimationFrame(step);
-    };
+    const animateTo = (to: Camera, duration = 320) =>
+      new Promise<void>(resolve => {
+        stop();
+        const from = cam;
+        const start = performance.now();
+        const step = (now: number) => {
+          const t = Math.min((now - start) / duration, 1);
+          const k = 1 - (1 - t) ** 3;
+          set({
+            x: from.x + (to.x - from.x) * k,
+            y: from.y + (to.y - from.y) * k,
+            scale: from.scale + (to.scale - from.scale) * k
+          });
+          if (t < 1) {
+            frame = requestAnimationFrame(step);
+          } else {
+            frame = 0;
+            flush();
+            resolve();
+          }
+        };
+        frame = requestAnimationFrame(step);
+      });
 
     // Инерция после броска: скорость в px/мс постепенно гаснет
     const glide = (vx: number, vy: number) => {
@@ -201,24 +215,12 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
     };
 
     const local = (clientX: number, clientY: number): Point => ({ x: clientX - origin.x, y: clientY - origin.y });
+    const toWorld = (p: Point): Point => ({ x: (p.x - cam.x) / cam.scale, y: (p.y - cam.y) / cam.scale });
 
-    // Прямоугольник элемента в координатах мира
-    const worldRectOf = (el: Element): Rect => {
-      const r = el.getBoundingClientRect();
-      const p = local(r.left, r.top);
-      return { x: (p.x - cam.x) / cam.scale, y: (p.y - cam.y) / cam.scale, w: r.width / cam.scale, h: r.height / cam.scale };
-    };
-
-    const zoomToTarget = (target: EventTarget | null) => {
-      flush(); // положение элемента меряем по уже применённой камере
-      const el = target instanceof Element ? target.closest('[data-zoom-target]') : null;
-      const goal = el ? fitWidth(worldRectOf(el)) : fitTo(worldRect);
-      // Уже приближены к этому листу — повторное касание показывает всё
-      const already =
-        Math.abs(goal.scale - cam.scale) / goal.scale < 0.05 &&
-        Math.abs(goal.x - cam.x) < 20 &&
-        Math.abs(goal.y - cam.y) < 20;
-      animateTo(already ? fitTo(worldRect) : goal);
+    apiRef.current = {
+      goHome: () => animateTo(homeCamera()),
+      visibleRect: () => ({ x: -cam.x / cam.scale, y: -cam.y / cam.scale, w: size.w / cam.scale, h: size.h / cam.scale }),
+      panBy: (dx, dy) => void animateTo({ ...cam, x: cam.x + dx, y: cam.y + dy }, 250)
     };
 
     const resize = () => {
@@ -227,19 +229,15 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
       if (size.w === prev.w && size.h === prev.h) return;
       const r = viewport.getBoundingClientRect();
       origin = { x: r.left, y: r.top };
-      fitScale = fitTo(worldRect).scale;
       if (prev.w === 0) {
-        // Первый показ — мир целиком, сразу, до первой отрисовки
-        set(fitTo(worldRect));
+        // Первый показ — начало листа, сразу, до первой отрисовки
+        set(homeCamera());
         flush();
-        rerasterize();
         return;
       }
       // Поворот экрана: точка мира в центре экрана остаётся в центре
-      const cx = (prev.w / 2 - cam.x) / cam.scale;
-      const cy = (prev.h / 2 - cam.y) / cam.scale;
-      const s = clampScale(cam.scale);
-      set({ scale: s, x: size.w / 2 - cx * s, y: size.h / 2 - cy * s });
+      const c = toWorld({ x: prev.w / 2, y: prev.h / 2 });
+      set({ scale: cam.scale, x: size.w / 2 - c.x * cam.scale, y: size.h / 2 - c.y * cam.scale });
     };
 
     // --- Пальцы и мышь ---
@@ -257,7 +255,7 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
       moving = true;
       viewport.classList.add('is-panning');
       // Захватываем пальцы, только когда жест точно не тап: иначе тап по
-      // заметке не поставил бы в неё курсор
+      // тексту не поставил бы в него курсор
       for (const id of pointers.keys()) {
         try {
           viewport.setPointerCapture(id);
@@ -268,8 +266,8 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
     };
 
     const onDown = (e: PointerEvent) => {
-      if (matches(e.target, '[data-no-pan]')) return;
-      // Мышью по тексту заметки — выделение текста, а не перелёт
+      if (props.current.locked || matches(e.target, '[data-no-pan]')) return;
+      // Мышью по тексту — выделение текста, а не перелёт
       if (e.pointerType === 'mouse' && (e.button !== 0 || isEditable(e.target))) return;
       stop();
       const p = local(e.clientX, e.clientY);
@@ -330,13 +328,15 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
         return;
       }
 
-      // Это был тап; второй тап подряд — приблизить/показать всё
-      if (e.type !== 'pointerup') return;
+      // Это был тап
+      if (e.type !== 'pointerup' || isInteractive(e.target)) return;
+      // Тап по пустому месту убирает клавиатуру
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       const p = local(e.clientX, e.clientY);
       if (e.timeStamp - lastTap.t < DOUBLE_TAP_MS && dist(p, lastTap) < 30) {
         lastTap = { t: 0, x: 0, y: 0 };
-        // Двойной тап по заметке выделяет слово, по кнопке — нажимает её
-        if (!isInteractive(e.target)) zoomToTarget(e.target);
+        flush(); // точка мира — по уже применённой камере
+        props.current.onDoubleTap?.(toWorld(p));
       } else {
         lastTap = { t: e.timeStamp, x: p.x, y: p.y };
       }
@@ -346,6 +346,7 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
     // иначе — сдвиг (прокрутка двумя пальцами по тачпаду)
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      if (props.current.locked) return;
       stop();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? size.h : 1;
       if (e.ctrlKey || e.metaKey) {
@@ -366,7 +367,7 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
     };
     const onGestureChange = (e: Event) => {
       e.preventDefault();
-      if (pointers.size > 0) return;
+      if (pointers.size > 0 || props.current.locked) return;
       const g = e as GestureEvent;
       zoomAt(local(g.clientX, g.clientY), gestureBase * g.scale);
     };
@@ -387,6 +388,7 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
       cancelAnimationFrame(writeFrame);
       clearTimeout(settleTimer);
       observer.disconnect();
+      apiRef.current = null;
       viewport.removeEventListener('pointerdown', onDown);
       viewport.removeEventListener('pointermove', onMove);
       viewport.removeEventListener('pointerup', onUp);
@@ -395,12 +397,13 @@ export function Canvas({ worldWidth, worldHeight, children }: Props) {
       viewport.removeEventListener('gesturestart', onGestureStart);
       viewport.removeEventListener('gesturechange', onGestureChange);
     };
-  }, [worldWidth, worldHeight]);
+  }, []);
 
   return (
     <div ref={viewportRef} className="canvas">
       <div ref={insetsRef} className="canvas-insets" aria-hidden="true" />
-      <div ref={worldRef} className="canvas-world" style={{ width: worldWidth, height: worldHeight }}>
+      {background}
+      <div ref={worldRef} className="canvas-world">
         {children}
       </div>
     </div>

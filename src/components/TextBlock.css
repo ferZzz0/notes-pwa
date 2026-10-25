@@ -1,0 +1,28 @@
+/* Текст на листе: рукопись синими чернилами. Поле ввода и текст «картинкой»
+   выглядят одинаково, поэтому переворот листа незаметно подменяет одно
+   другим. Размеры — в px мира полотна. */
+.text-block {
+  position: absolute;
+  width: 640px;
+  min-height: 52px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  appearance: none;
+  background: transparent;
+  color: var(--ink);
+  caret-color: var(--ink);
+  font-family: 'Caveat Variable', cursive;
+  font-size: 40px;
+  line-height: 52px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  resize: none;
+  /* Полотно запрещает выделение, чтобы перелёт не выделял текст;
+     в самом тексте выделять можно */
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
