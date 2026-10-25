@@ -59,48 +59,18 @@
 
 /* --- Поверх полотна, в координатах экрана --- */
 
-/* Стрелки внизу экрана — перелистнуть. Светлые и лёгкие: полупрозрачная
-   бумага с размытием того, что под ней, и бледные чернила — в тёмной теме
-   тоже (бумага там светлая) */
-.page-arrow {
-  position: fixed;
-  bottom: calc(16px + var(--safe-bottom));
-  z-index: 5;
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  padding: 0;
-  border: 1px solid rgb(60 40 10 / 0.08);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--paper) 72%, transparent);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 2px 8px rgb(60 40 10 / 0.12);
-  color: var(--ink-muted);
-  cursor: pointer;
-}
-
-.page-arrow-next {
-  right: calc(16px + var(--safe-right));
-}
-
-.page-arrow-prev {
-  left: calc(16px + var(--safe-left));
-}
-
-.page-arrow svg {
-  width: 24px;
-  height: 24px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.page-arrow:active {
-  transform: scale(0.94);
+/* iPhone: невидимое поле под бумагой (Notebook: paste-layer). Долгое
+   нажатие на нём — системное меню iOS с «Вставить»; текста и курсора в нём
+   не видно, клавиатура не открывается (inputmode="none") */
+.paste-layer {
+  position: absolute;
+  inset: 0;
+  outline: none;
+  color: transparent;
+  caret-color: transparent;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 /* Пузырёк «Вставить» после долгого нажатия на лист — над пальцем (у верха

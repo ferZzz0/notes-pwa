@@ -21,8 +21,7 @@
   z-index: 7;
   display: flex;
   justify-content: center;
-  /* Пять кнопок между стрелками и на узком iPhone (375 px) */
-  gap: clamp(8px, 3vw, 12px);
+  gap: 12px;
   pointer-events: none;
 }
 

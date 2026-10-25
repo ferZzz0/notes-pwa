@@ -4,6 +4,10 @@
   position: absolute;
   box-sizing: border-box;
   transform-origin: center;
+  /* Скотч рамки (z-index) — над своей картинкой, а не над всем листом:
+     иначе при перелистывании он проступал сквозь страницу, которая его ещё
+     закрывает */
+  isolation: isolate;
   /* Касания — полотну: оно выбирает фото и двигает его */
   pointer-events: none;
 }

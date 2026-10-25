@@ -103,9 +103,12 @@ const STICKER_SIZE = { w: 230, h: 210 };
 // Пузырёк «Вставить» стоит над пальцем, если над ним столько места (px экрана)
 const PASTE_ROOM = 90;
 // iPhone и iPad (iPad представляется компьютером Mac, но с сенсорным экраном):
-// читая буфер обмена, Safari сам показывает свою кнопку «Вставить», так что
-// своего пузырька там нет — иначе кнопок две
+// читая буфер обмена, Safari сам показывает свою кнопку «Вставить», поэтому
+// там вставляют системным меню (paste-layer), а не своим пузырьком
 const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// iPhone: столько ждём после долгого нажатия системное меню (поле под
+// бумагой получает фокус); не дождались — показываем свой пузырёк
+const NATIVE_MENU_WAIT = 600;
 // «Отменить»: столько последних действий помним; набор в одной надписи с
 // паузами короче MERGE_MS — одно действие
 const HISTORY_SIZE = 100;
@@ -286,8 +289,10 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Пузырёк «Вставить» после долгого нажатия: куда вставлять (мир) и где он
   // (экран)
   const [pasteMenu, setPasteMenu] = useState<{ world: Point; screen: Point } | null>(null);
-  // iPhone: куда вставить, когда отпустят палец после долгого нажатия
-  const pasteOnRelease = useRef<Point | null>(null);
+  // iPhone: невидимое поле под бумагой (системное меню «Вставить» при
+  // долгом нажатии) и точка этого нажатия — туда ляжет вставленное
+  const pasteLayer = useRef<HTMLDivElement>(null);
+  const pastePoint = useRef<Point | null>(null);
   // Открытая страница; на развороте — любая из двух его страниц
   const [page, setPage] = useState(() => loadPage(source));
   const portrait = usePortrait();
@@ -505,10 +510,10 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     addBlock(newText(p, t));
   };
 
-  // «Вставить» после долгого нажатия: картинка из буфера обмена — фото,
-  // текст — надпись, в точку нажатия p. Буфер читаем прямо в нажатии на
-  // кнопку (на iPhone — в отпускании пальца) — иначе браузер не даст; iOS
-  // ещё покажет свою кнопку «Вставить», если скопировано не здесь
+  // «Вставить» из своего пузырька: картинка из буфера обмена — фото, текст —
+  // надпись, в точку нажатия p. Буфер читаем прямо в нажатии на кнопку —
+  // иначе браузер не даст; iOS ещё покажет свою кнопку «Вставить», если
+  // скопировано не здесь
   const pasteAt = async (p: Point) => {
     setPasteMenu(null);
     const clip = navigator.clipboard;
@@ -743,20 +748,21 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   };
 
   // Долгое нажатие на пустое место листа — пузырёк «Вставить». На iPhone
-  // своего пузырька нет: буфер читаем, как только палец отпустят, и Safari
-  // покажет свою кнопку «Вставить» (одну)
+  // своего пузырька нет: палец лежит на невидимом поле под бумагой, и iOS
+  // сама показывает на нём системное меню с «Вставить» (одну кнопку); если
+  // меню так и не появилось (поле не получило фокус) — всё же свой пузырёк
   const onLongPress = (p: Point, screen: Point, touch: boolean) => {
-    pasteOnRelease.current = null;
     if (turning || blockAt(p)) return;
-    deselect();
-    if (IOS && touch) pasteOnRelease.current = p;
-    else setPasteMenu({ world: p, screen });
-  };
-
-  const onLongPressEnd = () => {
-    const p = pasteOnRelease.current;
-    pasteOnRelease.current = null;
-    if (p) void pasteAt(p);
+    // Поле под бумагой не трогаем — на нём сейчас откроется системное меню
+    if (document.activeElement !== pasteLayer.current) blurActive();
+    setSelected(null);
+    if (!(IOS && touch && pasteLayer.current)) {
+      setPasteMenu({ world: p, screen });
+      return;
+    }
+    window.setTimeout(() => {
+      if (document.activeElement !== pasteLayer.current) setPasteMenu({ world: p, screen });
+    }, NATIVE_MENU_WAIT);
   };
 
   // Повернули экран — пузырёк уже не там, где нажимали
@@ -776,17 +782,25 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       if (!data || turning || erased) return;
       const target = e.target instanceof Element ? e.target : null;
       if (target?.closest('input, textarea')) return;
-      const inText = target?.closest('[contenteditable]:not([contenteditable="false"])');
+      // Системная «Вставить» на поле под бумагой (iPhone) — в точку долгого
+      // нажатия; в само поле ничего не попадает
+      const toLayer = target?.closest('[data-paste-layer]');
+      const at = toLayer ? (pastePoint.current ?? undefined) : undefined;
+      if (toLayer) {
+        e.preventDefault();
+        pasteLayer.current?.blur();
+      }
+      const inText = !toLayer && target?.closest('[contenteditable]:not([contenteditable="false"])');
       const file = [...data.files].find(f => f.type.startsWith('image/'));
       if (file) {
         e.preventDefault();
-        void addPhoto(file);
+        void addPhoto(file, at);
         return;
       }
       const text = data.getData('text/plain');
       if (inText || !text.trim()) return;
       e.preventDefault();
-      pasteText(text, viewCenter());
+      pasteText(text, at ?? viewCenter());
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
@@ -939,7 +953,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // отменить, Ctrl/⌘+Shift+Z и Ctrl+Y — вернуть (в надписи — её собственные)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]:not([contenteditable="false"])')) return;
+      if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]:not([contenteditable="false"]):not([data-paste-layer])')) return;
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyZ' || e.code === 'KeyY')) {
         e.preventDefault();
         if (turning) return;
@@ -989,7 +1003,34 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               : 0
         }
         locked={turning}
-        background={<Paper ref={paper} display={display} />}
+        background={
+          <>
+            <Paper ref={paper} display={display} />
+            {IOS && (
+              // Невидимое поле под бумагой: долгое нажатие на нём — системное
+              // меню iOS с «Вставить» (без клавиатуры: inputMode none);
+              // остальные касания по нему Canvas считает касаниями по листу
+              <div
+                ref={pasteLayer}
+                className="paste-layer"
+                data-paste-layer
+                contentEditable
+                suppressContentEditableWarning
+                inputMode="none"
+                aria-hidden="true"
+                // Точка касания — куда ляжет вставленное (iOS может забрать
+                // долгое нажатие себе раньше, чем его заметит Canvas)
+                onPointerDown={e => {
+                  const c = camera.current;
+                  pastePoint.current = { x: (e.clientX - c.x) / c.scale, y: (e.clientY - c.y) / c.scale };
+                }}
+                onInput={e => {
+                  e.currentTarget.textContent = '';
+                }}
+              />
+            )}
+          </>
+        }
         onFrame={(cam, size) => {
           camera.current = cam;
           paper.current?.update(cam, size);
@@ -998,7 +1039,11 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         onTap={onTap}
         onDoubleTap={onDoubleTap}
         onLongPress={onLongPress}
-        onLongPressEnd={onLongPressEnd}
+        // Смахнули лист вбок — перелистнуть (стрелок нет — просьба автора);
+        // пока что-то выбрано, смахивание не листает
+        onSwipe={dir => {
+          if (!turning && !selectedBlock && !pasteMenu) turn(dir);
+        }}
         grab={grab}
       >
         {display !== 'right' && pageSide(underLeft, 'left')}
@@ -1120,7 +1165,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         </>
       )}
 
-      {/* Пока надпись выбрана, внизу — её панель: стрелки и кнопки прячем */}
+      {/* Пока надпись выбрана, внизу — её панель: кнопки прячем */}
       {!turning && !selectedBlock && (
         <>
           <div className="bottom-center">
@@ -1144,35 +1189,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             <AddMenu onPhoto={file => void addPhoto(file)} onSticker={addSticker} />
             <Settings />
           </div>
-          {(dayDate !== null || page > (single ? 1 : 2)) && (
-            <button
-              type="button"
-              className="page-arrow page-arrow-prev"
-              aria-label={dayDate ? 'Предыдущий день' : 'Назад'}
-              onClick={() => turn('prev')}
-            >
-              <ArrowIcon dir="prev" />
-            </button>
-          )}
-          <button
-            type="button"
-            className="page-arrow page-arrow-next"
-            aria-label={dayDate ? 'Следующий день' : 'Дальше'}
-            onClick={() => turn('next')}
-          >
-            <ArrowIcon dir="next" />
-          </button>
         </>
       )}
     </>
-  );
-}
-
-function ArrowIcon({ dir }: { dir: FlipDir }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d={dir === 'next' ? 'M9 5l7 7-7 7' : 'M15 5l-7 7 7 7'} />
-    </svg>
   );
 }
 

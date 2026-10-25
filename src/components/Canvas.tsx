@@ -68,9 +68,9 @@ type Props = {
   // Долгое нажатие на мир (палец стоит LONG_PRESS_MS; touch = true) или
   // правый клик — точка мира и точка экрана (px полотна); тапа после него нет
   onLongPress?: (world: Point, screen: Point, touch: boolean) => void;
-  // Палец после долгого нажатия отпустили — это ещё «жест пользователя»
-  // (touchend): в нём браузер даёт читать буфер обмена
-  onLongPressEnd?: () => void;
+  // Смахнули лист вбок там, где он дальше не едет (лист по экрану или
+  // камера упёрлась в его край): палец влево — 'next', вправо — 'prev'
+  onSwipe?: (dir: 'next' | 'prev') => void;
   children: ReactNode;
 };
 
@@ -80,6 +80,16 @@ const EDGE_ZONE = 0.2; // содержимое ближе этой доли эк
 const TAP_SLOP = 8; // сдвиг пальца, после которого это уже не тап, а перелёт
 const DOUBLE_TAP_MS = 300;
 const LONG_PRESS_MS = 500;
+// Смахивание: не короче SWIPE_PX (экранные px), быстрее SWIPE_MS, вбок в
+// SWIPE_RATIO раз больше, чем вверх-вниз; лист за это время сдвинулся не
+// больше чем на SWIPE_SLIP пути пальца (упёрся в край)
+const SWIPE_PX = 50;
+const SWIPE_MS = 700;
+const SWIPE_RATIO = 1.5;
+const SWIPE_SLIP = 0.25;
+// Невидимое поле под бумагой для системной «Вставить» на iPhone (Notebook):
+// касания по нему — касания по листу, а не по полю ввода
+const EDITABLE_EXCEPT = ':not([data-paste-layer])';
 const FRICTION = 0.94; // инерция: доля скорости, остающаяся за 16 мс
 const MIN_SPEED = 0.02; // px/мс — медленнее инерция останавливается
 const MAX_SPEED = 3; // px/мс — быстрее бросок не разгоняет
@@ -89,7 +99,7 @@ const mid = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y)
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 const matches = (t: EventTarget | null, selector: string) => t instanceof Element && t.closest(selector) !== null;
-const EDITABLE = 'textarea, input, [contenteditable]:not([contenteditable="false"])';
+const EDITABLE = `textarea, input, [contenteditable]:not([contenteditable="false"])${EDITABLE_EXCEPT}`;
 const isEditable = (t: EventTarget | null) => matches(t, EDITABLE);
 // По таким элементам тап и двойной тап — их собственные
 const isInteractive = (t: EventTarget | null) => matches(t, `${EDITABLE}, button, a`);
@@ -114,7 +124,7 @@ export function Canvas({
   onDoubleTap,
   grab,
   onLongPress,
-  onLongPressEnd,
+  onSwipe,
   children
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -122,8 +132,8 @@ export function Canvas({
   const insetsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<(CanvasHandle & { reclamp: () => void }) | null>(null);
   // Свежие пропсы для обработчиков, подписанных один раз
-  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd });
-  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd };
+  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onSwipe });
+  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onSwipe };
 
   useImperativeHandle(
     ref,
@@ -401,11 +411,14 @@ export function Canvas({
     let swallowMouse = false;
     let samples: { t: number; x: number; y: number }[] = [];
     let lastTap = { t: 0, x: 0, y: 0 };
-    // Долгое нажатие: его таймер, сработало ли оно (тогда отпускание — не
-    // тап) и сообщили ли уже, что палец отпустили
+    // Долгое нажатие: его таймер и сработало ли оно (тогда отпускание — не тап)
     let pressTimer = 0;
     let pressed = false;
-    let pressEnded = false;
+    // Для смахивания: когда лёг палец, где тогда была камера и было ли в
+    // жесте больше одного пальца
+    let downTime = 0;
+    let downCamX = 0;
+    let multi = false;
 
     const firstTwo = () => [...pointers.values()].slice(0, 2) as [Point, Point];
 
@@ -437,9 +450,11 @@ export function Canvas({
         moving = false;
         samples = [];
         flush(); // предмет ищут по уже применённой камере
+        downTime = e.timeStamp;
+        downCamX = cam.x;
+        multi = false;
         grabbed = props.current.grab?.(p) ?? null;
         pressed = false;
-        pressEnded = false;
         clearTimeout(pressTimer);
         // Мышью долгое нажатие — правый клик (ниже)
         if (!grabbed && e.pointerType !== 'mouse' && !isInteractive(e.target)) {
@@ -451,6 +466,7 @@ export function Canvas({
           }, LONG_PRESS_MS);
         }
       } else {
+        multi = true;
         beginMoving();
         grabbed?.begin(firstTwo());
       }
@@ -504,7 +520,7 @@ export function Canvas({
       viewport.classList.remove('is-panning');
       clearTimeout(pressTimer);
 
-      // После долгого нажатия отпускание — не тап (его touchend — ниже)
+      // После долгого нажатия отпускание — не тап
       if (pressed) {
         grabbed = null;
         return;
@@ -520,6 +536,22 @@ export function Canvas({
 
       if (moving) {
         moving = false;
+        // Смахнули вбок, а лист не поехал (упёрся) — перелистнуть, без инерции
+        const end = local(e.clientX, e.clientY);
+        const dx = end.x - downAt.x;
+        const dy = end.y - downAt.y;
+        if (
+          e.type === 'pointerup' &&
+          !multi &&
+          Math.abs(dx) >= SWIPE_PX &&
+          Math.abs(dx) > SWIPE_RATIO * Math.abs(dy) &&
+          e.timeStamp - downTime < SWIPE_MS &&
+          Math.abs(cam.x - downCamX) < Math.abs(dx) * SWIPE_SLIP &&
+          props.current.onSwipe
+        ) {
+          props.current.onSwipe(dx < 0 ? 'next' : 'prev');
+          return;
+        }
         // Бросок: скорость по движению за последние 100 мс
         const recent = samples.filter(s => e.timeStamp - s.t < 100);
         if (e.type === 'pointerup' && recent.length > 1) {
@@ -599,12 +631,6 @@ export function Canvas({
     viewport.addEventListener('pointercancel', onUp);
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length > 0) return;
-      if (pressed && !pressEnded) {
-        pressEnded = true;
-        e.preventDefault();
-        props.current.onLongPressEnd?.();
-        return;
-      }
       if (!swallowMouse) return;
       swallowMouse = false;
       e.preventDefault();
