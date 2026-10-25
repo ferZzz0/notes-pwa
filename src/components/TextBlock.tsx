@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react';
 import type { Block } from '../notes';
-import { fontClass, inkColor } from '../textStyle';
+import { effectOf, fontClass, inkColor, markerOf } from '../textStyle';
 import './TextBlock.css';
 
 // Поля вокруг текста (px мира): завитки рукописных букв выступают за
@@ -48,11 +48,20 @@ type Props = {
 
 // Надпись в любом месте листа, без рамок: шириной по тексту (не шире
 // width), растёт вниз вместе с ним. Цвет, шрифт, поворот и размер — из
-// блока; поворачивается и растёт вокруг своей середины.
+// блока; поворачивается и растёт вокруг своей середины. Маркер и эффекты
+// с тенями (свечение, тень, объём) рисует слой под полем ввода (.text-decor):
+// те же буквы, только прозрачные, — поле ввода обрезало бы тени по своему
+// краю, а маркер должен лежать под буквами построчно.
 export function TextBlock({ block, width, face = false, editing = false, onText, onBlur, onFocus, onInput }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const decor = useRef<HTMLDivElement>(null);
   const className = `text-block ${fontClass(block.font)}`;
   const maxWidth = width + 2 * BLEED_X;
+  const effect = effectOf(block.effect);
+  const marker = markerOf(block.marker);
+  const effectClass = effect === 'none' ? '' : ` effect-${effect}`;
+  // Контур — у самих букв; остальные эффекты — в слое под ними
+  const hasDecor = marker !== 'none' || (effect !== 'none' && effect !== 'outline');
 
   const fit = () => {
     const el = ref.current;
@@ -60,9 +69,13 @@ export function TextBlock({ block, width, face = false, editing = false, onText,
     el.style.width = `${Math.min(maxWidth, Math.max(MIN_WIDTH, textWidth(el.value, className, maxWidth) + CARET))}px`;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
+    if (decor.current) {
+      decor.current.style.width = el.style.width;
+      decor.current.style.height = el.style.height;
+    }
   };
 
-  useLayoutEffect(fit, [block.text, block.font, width]);
+  useLayoutEffect(fit, [block.text, block.font, width, hasDecor]);
 
   // Размер, посчитанный до загрузки шрифта, пересчитываем: со шрифтом строки
   // переносятся иначе, и низ текста обрезался бы
@@ -77,40 +90,56 @@ export function TextBlock({ block, width, face = false, editing = false, onText,
 
   const rotate = block.rotate ?? 0;
   const scale = block.scale ?? 1;
-  const style: CSSProperties = {
+  // Цвет — ещё и переменной: им светятся и отбрасывают тень прозрачные буквы слоя
+  // под полем
+  const style = {
     left: block.x,
     top: block.y,
-    color: inkColor(block.color),
+    '--ink-color': inkColor(block.color),
     transform: rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : undefined
-  };
+  } as CSSProperties;
+  // Текст с маркером: маркер — фон строчного span, по строкам
+  const marked = (text: string) => (marker === 'none' ? text : <span className={`mark-${marker}`}>{text}</span>);
   // Поворот и размер — ещё и в атрибутах: по ним Notebook меряет, сколько
   // места надпись занимает на листе
   const data = { 'data-rotate': rotate || undefined, 'data-scale': scale !== 1 ? scale : undefined };
 
   if (face) {
     return (
-      <div className={`${className} text-face`} style={{ ...style, maxWidth }} {...data}>
-        {block.text}
+      <div className={`${className}${effectClass} text-face`} style={{ ...style, maxWidth }} {...data}>
+        {marked(block.text)}
       </div>
     );
   }
 
   return (
-    <textarea
-      ref={ref}
-      className={editing ? `${className} is-editing` : className}
-      style={style}
-      data-block={block.id}
-      {...data}
-      rows={1}
-      value={block.text}
-      aria-label="Запись"
-      onChange={e => {
-        onText?.(block.id, e.target.value);
-        onInput?.(e.target);
-      }}
-      onFocus={e => onFocus?.(block.id, e.currentTarget)}
-      onBlur={() => onBlur?.(block.id)}
-    />
+    <>
+      {hasDecor && (
+        <div
+          ref={decor}
+          className={`${className}${effect === 'outline' ? '' : effectClass} text-decor`}
+          style={style}
+          aria-hidden="true"
+        >
+          {marked(block.text)}
+        </div>
+      )}
+      <textarea
+        ref={ref}
+        className={`${className}${effect === 'outline' ? effectClass : ''}${editing ? ' is-editing' : ''}`}
+        style={style}
+        data-block={block.id}
+        {...data}
+        rows={1}
+        value={block.text}
+        aria-label="Запись"
+        onChange={e => {
+          onText?.(block.id, e.target.value);
+          onInput?.(e.target);
+        }}
+        onFocus={e => onFocus?.(block.id, e.currentTarget)}
+        onBlur={() => onBlur?.(block.id)}
+      />
+    </>
   );
 }

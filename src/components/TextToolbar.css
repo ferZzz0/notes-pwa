@@ -1,5 +1,6 @@
 /* Панель выбранной надписи — светлая, как стрелки перелистывания, в одну
-   строку: цвет, шрифты, удалить, готово. Над ней — круговая палитра. */
+   строку: цвет, шрифт, эффект, маркер, удалить, готово. Над ней — палитра,
+   выпадающие списки и подтверждение удаления. */
 .text-toolbar {
   position: fixed;
   left: 50%;
@@ -8,7 +9,7 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: max-content;
   max-width: calc(100% - 12px - var(--safe-left) - var(--safe-right));
   padding: 6px 8px;
@@ -21,16 +22,10 @@
   touch-action: manipulation;
 }
 
-.text-toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-}
-
-.text-toolbar button {
+.text-toolbar > button {
   display: grid;
   place-items: center;
-  width: 36px;
+  width: 38px;
   height: 38px;
   padding: 0;
   border: none;
@@ -39,33 +34,7 @@
   color: var(--ink);
 }
 
-/* Кнопка цвета: радужное кольцо, внутри — цвет надписи */
-.text-toolbar .text-toolbar-color {
-  width: 38px;
-  border-radius: 50%;
-}
-
-.text-toolbar-color span {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background:
-    radial-gradient(closest-side, var(--color) 0 66%, var(--paper) 66% 80%, transparent 80%),
-    conic-gradient(from 90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
-}
-
-.text-toolbar .text-toolbar-font {
-  font-size: 19px;
-  line-height: 1;
-  font-weight: 400;
-}
-
-.text-toolbar .text-toolbar-font.font-hand,
-.text-toolbar .text-toolbar-font.font-script {
-  font-size: 23px;
-}
-
-.text-toolbar button.is-active {
+.text-toolbar > button.is-active {
   background: rgb(36 57 140 / 0.12);
 }
 
@@ -79,9 +48,147 @@
   stroke-linejoin: round;
 }
 
-.text-toolbar .text-toolbar-done {
+/* Кнопка цвета: радужное кольцо, внутри — цвет надписи */
+.text-toolbar > .text-toolbar-color {
+  border-radius: 50%;
+}
+
+.text-toolbar-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, var(--color) 0 66%, var(--paper) 66% 80%, transparent 80%),
+    conic-gradient(from 90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+
+/* Шрифт: «Аа» этим шрифтом и стрелка списка */
+.text-toolbar > .text-toolbar-font {
+  display: flex;
+  gap: 2px;
+  width: auto;
+  padding: 0 6px 0 8px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.text-toolbar .text-toolbar-chevron {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
+}
+
+.text-toolbar > .text-toolbar-done {
   background: var(--ink);
   color: var(--paper);
+}
+
+/* Выпадающий список над панелью — по середине; если места мало (открыта
+   клавиатура), прокручивается */
+.toolbar-menu {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  width: max-content;
+  min-width: 220px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgb(60 40 10 / 0.08);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 16px rgb(60 40 10 / 0.16);
+  touch-action: pan-y;
+  animation: toolbar-menu-in 0.15s ease-out;
+}
+
+@keyframes toolbar-menu-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+.toolbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: 16px/1.2 var(--ui-font);
+  text-align: left;
+}
+
+.toolbar-menu-item.is-active {
+  background: rgb(36 57 140 / 0.12);
+}
+
+/* Шрифты в списке — каждый своим шрифтом (классы .font-* — TextBlock.css),
+   рукописные покрупнее */
+.toolbar-menu-font .font-hand,
+.toolbar-menu-font .font-script {
+  font-size: 24px;
+}
+
+.toolbar-menu-font .font-marker {
+  font-size: 18px;
+}
+
+.toolbar-menu-font .font-mono {
+  font-weight: 600;
+}
+
+/* Образец эффекта или маркера — цветом и шрифтом надписи */
+.toolbar-menu-preview {
+  min-width: 56px;
+  color: var(--ink-color);
+  font-size: 26px;
+  line-height: 36px;
+  text-align: center;
+}
+
+/* Подтверждение удаления */
+.toolbar-confirm {
+  min-width: 240px;
+  padding: 12px;
+  font: 15px/1.3 var(--ui-font);
+  color: var(--text);
+}
+
+.toolbar-confirm p {
+  margin: 0 0 10px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.toolbar-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.toolbar-confirm-actions button {
+  flex: 1;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--border);
+  color: var(--text);
+  font: 600 15px/1.2 var(--ui-font);
+}
+
+.toolbar-confirm-actions .toolbar-confirm-delete {
+  background: #d64545;
+  color: #fff;
 }
 
 /* Круговая палитра — над панелью, у её левого края (над кнопкой цвета) */
@@ -99,11 +206,10 @@
 }
 
 /* По кругу — оттенок (0° — вправо, по часовой), к середине — чернее:
-   ровно hsl(оттенок, 100%, 50%·доля радиуса), как в textStyle.ts */
+   ровно hsl(оттенок, 100%, 50%·доля радиуса), как в textStyle.ts.
+   Размер — из TextToolbar.tsx (меньше, если мало места) */
 .color-wheel {
   position: relative;
-  width: 180px;
-  height: 180px;
   border-radius: 50%;
   background:
     radial-gradient(closest-side, #000, transparent),

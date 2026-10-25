@@ -29,6 +29,36 @@ export const FONTS = [
 
 export type FontId = (typeof FONTS)[number]['id'];
 
+// Эффекты букв (TextBlock.css: .effect-*). Тени и свечение рисует слой под
+// полем ввода — поле обрезало бы их по своему краю
+export const EFFECTS = [
+  { id: 'none', label: 'Без эффекта' },
+  { id: 'glow', label: 'Свечение' },
+  { id: 'shadow', label: 'Тень' },
+  { id: 'emboss', label: 'Объём' },
+  { id: 'outline', label: 'Контур' }
+] as const;
+
+// Маркер на готовом тексте — готовые варианты (TextBlock.css: .mark-*):
+// выделение цветным маркером и подчёркивания. Рисуется построчно, под буквами
+export const MARKERS = [
+  { id: 'none', label: 'Без маркера' },
+  { id: 'yellow', label: 'Жёлтый маркер' },
+  { id: 'pink', label: 'Розовый маркер' },
+  { id: 'green', label: 'Зелёный маркер' },
+  { id: 'blue', label: 'Голубой маркер' },
+  { id: 'under-yellow', label: 'Подчеркнуть жёлтым' },
+  { id: 'under-red', label: 'Подчеркнуть красным' },
+  { id: 'wavy', label: 'Подчеркнуть волной' }
+] as const;
+
+export type EffectId = (typeof EFFECTS)[number]['id'];
+export type MarkerId = (typeof MARKERS)[number]['id'];
+
+// Незнакомое значение — без эффекта / без маркера
+export const effectOf = (id?: string): EffectId => EFFECTS.find(e => e.id === id)?.id ?? 'none';
+export const markerOf = (id?: string): MarkerId => MARKERS.find(m => m.id === id)?.id ?? 'none';
+
 const HEX = /^#[0-9a-f]{6}$/i;
 
 // Цвет надписи для CSS; незнакомое значение — обычные чернила

@@ -6,7 +6,7 @@
 // Храним только развороты с текстом; у установленного на iPhone приложения
 // память своя, отдельная от Safari.
 
-import type { FontId } from './textStyle';
+import type { EffectId, FontId, MarkerId } from './textStyle';
 
 export type Block = {
   id: string;
@@ -19,6 +19,9 @@ export type Block = {
   // имя чернил, textStyle.ts)
   color?: string;
   font?: FontId;
+  // Эффект букв (свечение, тень…) и маркер на тексте; нет — без них
+  effect?: EffectId;
+  marker?: MarkerId;
   // Поворот вокруг середины надписи (градусы) и размер (1 — обычный)
   rotate?: number;
   scale?: number;

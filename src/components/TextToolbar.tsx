@@ -1,6 +1,19 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import type { Block } from '../notes';
-import { FONTS, fontOf, inkColor, wheelColor, wheelPosition, type FontId } from '../textStyle';
+import {
+  EFFECTS,
+  FONTS,
+  MARKERS,
+  effectOf,
+  fontOf,
+  inkColor,
+  markerOf,
+  wheelColor,
+  wheelPosition,
+  type EffectId,
+  type FontId,
+  type MarkerId
+} from '../textStyle';
 import './TextToolbar.css';
 
 type Props = {
@@ -10,22 +23,37 @@ type Props = {
   // Цвет с палитры; final — палец отпустили (сохранить)
   onColor: (color: string, final: boolean) => void;
   onFont: (font: FontId) => void;
+  onEffect: (effect: EffectId) => void;
+  onMarker: (marker: MarkerId) => void;
   onDelete: () => void;
   onDone: () => void;
   // Высота панели — чтобы лист можно было поднять над ней
   onHeight: (h: number) => void;
 };
 
+// Что открыто над панелью
+type Menu = 'color' | 'font' | 'effect' | 'marker' | 'delete' | null;
+
 // Нажатие на панель не забирает фокус у поля ввода — клавиатура остаётся
 const keepFocus = (e: MouseEvent) => e.preventDefault();
 
+// Над панелью и под верхом экрана — столько места оставляем
+const MENU_MARGIN = 96;
+const WHEEL_SIZE = 180;
+
 // Панель выбранной надписи внизу экрана (а при открытой клавиатуре — над
-// ней): цвет (кнопка открывает круговую палитру), шрифт, удалить, готово.
-export function TextToolbar({ block, keyboard, onColor, onFont, onDelete, onDone, onHeight }: Props) {
+// ней): цвет (круговая палитра), шрифт и эффект (выпадающие списки), маркер
+// (готовые варианты; только у надписи с текстом), удалить (с
+// подтверждением), готово. Списки открываются над панелью, по одному.
+export function TextToolbar({ block, keyboard, onColor, onFont, onEffect, onMarker, onDelete, onDone, onHeight }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const [palette, setPalette] = useState(false);
+  const [menu, setMenu] = useState<Menu>(null);
   const font = fontOf(block.font);
+  const effect = effectOf(block.effect);
+  const marker = markerOf(block.marker);
   const color = inkColor(block.color);
+  // Сколько места над панелью — с открытой клавиатурой его мало
+  const room = Math.max(120, window.innerHeight - keyboard - MENU_MARGIN);
 
   useLayoutEffect(() => {
     const el = ref.current!;
@@ -36,6 +64,21 @@ export function TextToolbar({ block, keyboard, onColor, onFont, onDelete, onDone
     return () => observer.disconnect();
   }, []);
 
+  const toggle = (m: Menu) => setMenu(menu === m ? null : m);
+  // Кнопка, открывающая список
+  const opener = (m: Exclude<Menu, null>, label: string, content: ReactNode, className = '') => (
+    <button
+      type="button"
+      className={`${className}${menu === m ? ' is-active' : ''}`}
+      aria-label={label}
+      aria-expanded={menu === m}
+      onClick={() => toggle(m)}
+    >
+      {content}
+    </button>
+  );
+  const inkStyle = { '--ink-color': color } as CSSProperties;
+
   return (
     <div
       ref={ref}
@@ -45,53 +88,144 @@ export function TextToolbar({ block, keyboard, onColor, onFont, onDelete, onDone
       style={keyboard > 0 ? { bottom: keyboard + 8 } : undefined}
       onMouseDown={keepFocus}
     >
-      {palette && <ColorWheel color={block.color} onPick={onColor} />}
-      <button
-        type="button"
-        className={palette ? 'text-toolbar-color is-active' : 'text-toolbar-color'}
-        aria-label="Цвет"
-        aria-expanded={palette}
-        onClick={() => setPalette(!palette)}
-      >
-        <span style={{ '--color': color } as CSSProperties} />
+      {menu === 'color' && <ColorWheel color={block.color} size={Math.min(WHEEL_SIZE, room - 20)} onPick={onColor} />}
+
+      {menu === 'font' && (
+        <ul className="toolbar-menu" style={{ maxHeight: room }} role="listbox" aria-label="Шрифт">
+          {FONTS.map(f => (
+            <li key={f.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={f.id === font}
+                className={`toolbar-menu-item toolbar-menu-font${f.id === font ? ' is-active' : ''}`}
+                onClick={() => {
+                  setMenu(null);
+                  onFont(f.id);
+                }}
+              >
+                <span className={`font-${f.id}`}>{f.label}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {menu === 'effect' && (
+        <ul className="toolbar-menu" style={{ maxHeight: room }} role="listbox" aria-label="Эффект">
+          {EFFECTS.map(e => (
+            <li key={e.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={e.id === effect}
+                className={`toolbar-menu-item${e.id === effect ? ' is-active' : ''}`}
+                onClick={() => {
+                  setMenu(null);
+                  onEffect(e.id);
+                }}
+              >
+                <span className={`toolbar-menu-preview font-${font} effect-${e.id}`} style={inkStyle}>
+                  Аа
+                </span>
+                {e.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {menu === 'marker' && (
+        <ul className="toolbar-menu" style={{ maxHeight: room }} role="listbox" aria-label="Маркер">
+          {MARKERS.map(m => (
+            <li key={m.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={m.id === marker}
+                className={`toolbar-menu-item${m.id === marker ? ' is-active' : ''}`}
+                onClick={() => {
+                  setMenu(null);
+                  onMarker(m.id);
+                }}
+              >
+                <span className={`toolbar-menu-preview font-${font}`} style={inkStyle}>
+                  <span className={`mark-${m.id}`}>текст</span>
+                </span>
+                {m.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {menu === 'delete' && (
+        <div className="toolbar-menu toolbar-confirm" role="alertdialog" aria-label="Удалить надпись?">
+          <p>Удалить надпись?</p>
+          <div className="toolbar-confirm-actions">
+            <button type="button" className="toolbar-confirm-delete" onClick={onDelete}>
+              Удалить
+            </button>
+            <button type="button" onClick={() => setMenu(null)}>
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
+
+      {opener('color', 'Цвет', <span className="text-toolbar-swatch" style={{ '--color': color } as CSSProperties} />, 'text-toolbar-color')}
+      {opener(
+        'font',
+        'Шрифт',
+        <>
+          <span className={`font-${font}`}>Аа</span>
+          <Chevron />
+        </>,
+        'text-toolbar-font'
+      )}
+      {opener(
+        'effect',
+        'Эффект',
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M11 3.5l1.9 5.6 5.6 1.9-5.6 1.9L11 18.5l-1.9-5.6L3.5 11l5.6-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
+        </svg>
+      )}
+      {block.text.trim() !== '' &&
+        opener(
+          'marker',
+          'Маркер',
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M14.5 4.5l5 5-8 8-4-1-1-4zM6.5 12.5l5 5M4 20.5h7" />
+          </svg>
+        )}
+      {opener(
+        'delete',
+        'Удалить надпись',
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5" />
+        </svg>
+      )}
+      <button type="button" className="text-toolbar-done" aria-label="Готово" onClick={onDone}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
       </button>
-      <div className="text-toolbar-group">
-        {FONTS.map(f => (
-          <button
-            key={f.id}
-            type="button"
-            className={`text-toolbar-font font-${f.id}${f.id === font ? ' is-active' : ''}`}
-            aria-label={f.label}
-            aria-pressed={f.id === font}
-            onClick={() => {
-              setPalette(false);
-              onFont(f.id);
-            }}
-          >
-            Аа
-          </button>
-        ))}
-      </div>
-      <div className="text-toolbar-group">
-        <button type="button" className="text-toolbar-action" aria-label="Удалить надпись" onClick={onDelete}>
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5" />
-          </svg>
-        </button>
-        <button type="button" className="text-toolbar-action text-toolbar-done" aria-label="Готово" onClick={onDone}>
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M5 12.5l4.5 4.5L19 7.5" />
-          </svg>
-        </button>
-      </div>
     </div>
+  );
+}
+
+function Chevron() {
+  return (
+    <svg className="text-toolbar-chevron" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 14l5-5 5 5" />
+    </svg>
   );
 }
 
 // Круговая палитра над панелью: по кругу — оттенок, от середины к краю — от
 // чёрного к яркому (textStyle.ts: wheelColor). Цвет меняется, пока ведёшь
 // пальцем; отметка — где цвет надписи сейчас.
-function ColorWheel({ color, onPick }: { color?: string; onPick: (color: string, final: boolean) => void }) {
+function ColorWheel({ color, size, onPick }: { color?: string; size: number; onPick: (color: string, final: boolean) => void }) {
   const wheel = useRef<HTMLDivElement>(null);
   const { h, r } = wheelPosition(color);
   const a = (h * Math.PI) / 180;
@@ -110,6 +244,7 @@ function ColorWheel({ color, onPick }: { color?: string; onPick: (color: string,
       <div
         ref={wheel}
         className="color-wheel"
+        style={{ width: size, height: size }}
         onPointerDown={e => {
           e.currentTarget.setPointerCapture(e.pointerId);
           pick(e, false);

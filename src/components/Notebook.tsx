@@ -60,9 +60,10 @@ const MIN_TEXT_SCALE = 0.4;
 const MAX_TEXT_SCALE = 4;
 const SNAP_DEG = 4;
 const SNAP_SCALE = 0.06;
-// Перелистывание (мс): горизонтально — быстро (просьба автора), вертикально
+// Перелистывание (мс): горизонтально — быстро (просьба автора: сначала в 5 раз
+// быстрее прежних 850, потом вдвое медленнее этого), вертикально
 // за ним ещё летит камера к новой странице
-const TURN_MS = { spread: 170, single: 850 };
+const TURN_MS = { spread: 340, single: 850 };
 // Перелёт к началу листа перед перелистыванием (если лист приближен)
 const TURN_HOME_MS = 200;
 
@@ -580,6 +581,8 @@ export function Notebook() {
             keyboard={keyboard}
             onColor={(color, final) => restyle(selectedBlock.id, { color }, final)}
             onFont={font => restyle(selectedBlock.id, { font })}
+            onEffect={effect => patchBlock(selectedBlock.id, { effect: effect === 'none' ? undefined : effect })}
+            onMarker={marker => patchBlock(selectedBlock.id, { marker: marker === 'none' ? undefined : marker })}
             onDelete={() => {
               removeBlock(selectedBlock.id);
               deselect();

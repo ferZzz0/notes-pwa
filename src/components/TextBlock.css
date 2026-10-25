@@ -1,6 +1,6 @@
 /* Надпись на листе. Поле ввода и текст «картинкой» выглядят одинаково,
    поэтому переворот листа незаметно подменяет одно другим. Размеры — в px
-   мира полотна; цвет, поворот и размер — из TextBlock.tsx. */
+   мира полотна; цвет (--ink-color), поворот и размер — из TextBlock.tsx. */
 .text-block {
   position: absolute;
   /* Поля под завитки букв (BLEED_X в TextBlock.tsx) — сверху, снизу и по
@@ -12,6 +12,7 @@
   outline: none;
   appearance: none;
   background: transparent;
+  color: var(--ink-color, var(--ink));
   caret-color: currentColor;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -33,9 +34,82 @@
   pointer-events: auto;
 }
 
-/* Текст «картинкой» — шириной по тексту, как и поле ввода */
+/* Текст «картинкой» — шириной по тексту, как и поле ввода; тени не обрезаем */
 .text-face {
   width: max-content;
+  overflow: visible;
+}
+
+/* Слой под полем ввода: те же буквы, только прозрачные, — под ними маркер,
+   от них тени и свечение (поле ввода обрезало бы их по своему краю) */
+.text-block.text-decor {
+  color: transparent;
+  overflow: visible;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Эффекты букв: цвет теней — цвет надписи (--ink-color) */
+.effect-glow {
+  text-shadow:
+    0 0 6px color-mix(in srgb, var(--ink-color, var(--ink)) 80%, transparent),
+    0 0 16px color-mix(in srgb, var(--ink-color, var(--ink)) 55%, transparent),
+    0 0 32px color-mix(in srgb, var(--ink-color, var(--ink)) 35%, transparent);
+}
+
+.effect-shadow {
+  text-shadow: 3px 5px 5px rgb(40 30 10 / 0.38);
+}
+
+.effect-emboss {
+  text-shadow:
+    1px 1px 0 color-mix(in srgb, var(--ink-color, var(--ink)) 65%, #000),
+    2px 2px 0 color-mix(in srgb, var(--ink-color, var(--ink)) 55%, #000),
+    3px 3px 0 color-mix(in srgb, var(--ink-color, var(--ink)) 45%, #000),
+    4px 6px 6px rgb(0 0 0 / 0.25);
+}
+
+/* Контур — у самих букв: пустые внутри, обведённые цветом надписи */
+.effect-outline {
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 1.5px var(--ink-color, var(--ink));
+}
+
+/* Маркер — фон строчного span: по строкам, под буквами */
+[class^='mark-'] {
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.mark-yellow {
+  background: linear-gradient(176deg, transparent 22%, rgb(255 221 0 / 0.55) 24% 88%, transparent 90%);
+}
+
+.mark-pink {
+  background: linear-gradient(176deg, transparent 22%, rgb(255 110 180 / 0.42) 24% 88%, transparent 90%);
+}
+
+.mark-green {
+  background: linear-gradient(176deg, transparent 22%, rgb(90 220 120 / 0.45) 24% 88%, transparent 90%);
+}
+
+.mark-blue {
+  background: linear-gradient(176deg, transparent 22%, rgb(80 190 255 / 0.42) 24% 88%, transparent 90%);
+}
+
+.mark-under-yellow {
+  background: linear-gradient(178deg, transparent 68%, rgb(255 200 0 / 0.75) 70% 90%, transparent 92%);
+}
+
+.mark-under-red {
+  background: linear-gradient(178deg, transparent 68%, rgb(230 60 50 / 0.6) 70% 88%, transparent 90%);
+}
+
+.mark-wavy {
+  text-decoration: underline wavy #e0483e;
+  text-decoration-thickness: 0.07em;
+  text-underline-offset: 0.2em;
+  text-decoration-skip-ink: none;
 }
 
 /* Невидимая копия надписи: по ней меряют ширину текста */
