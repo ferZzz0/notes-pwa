@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { clearImages } from '../images';
 import { clearAll } from '../notes';
 import { hasWaitingVersion, serverBuildTime, updateNow } from '../update';
 import './Settings.css';
@@ -91,7 +92,7 @@ export function Settings() {
               <div className="settings-confirm">
                 <p className="settings-note">Все записи на этом устройстве удалятся навсегда, вернуть их будет нельзя.</p>
                 <div className="settings-actions">
-                  <button type="button" className="settings-danger" onClick={wipe}>
+                  <button type="button" className="settings-danger" onClick={() => void wipe()}>
                     Стереть
                   </button>
                   <button type="button" onClick={() => setConfirming(false)}>
@@ -111,9 +112,10 @@ export function Settings() {
   );
 }
 
-// Стираем память и начинаем с чистого листа — перезапуском, чтобы ничего из
-// уже открытой тетради не сохранилось заново
-function wipe() {
+// Стираем память (и фото) и начинаем с чистого листа — перезапуском, чтобы
+// ничего из уже открытой тетради не сохранилось заново
+async function wipe() {
+  await clearImages();
   clearAll();
   location.reload();
 }

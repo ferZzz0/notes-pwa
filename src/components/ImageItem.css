@@ -1,0 +1,78 @@
+/* Фото на листе (ImageItem.tsx). Размеры — в px мира; рамка — поля и тень
+   вокруг самой картинки (.item-image-photo). */
+.item-image {
+  position: absolute;
+  box-sizing: border-box;
+  transform-origin: center;
+  /* Касания — полотну: оно выбирает фото и двигает его */
+  pointer-events: none;
+}
+
+.item-image-photo {
+  position: relative;
+  overflow: hidden;
+  /* Пока картинка читается из памяти — бледный прямоугольник */
+  background: rgb(60 40 10 / 0.06);
+}
+
+.item-image-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/* Белая рамка, как у напечатанной фотографии */
+.frame-white {
+  padding: 14px;
+  background: #fff;
+  box-shadow: 0 4px 10px rgb(40 30 10 / 0.22);
+}
+
+/* Полароид: внизу поле шире */
+.frame-polaroid {
+  padding: 16px 16px 64px;
+  background: #fffefa;
+  box-shadow: 0 5px 12px rgb(40 30 10 / 0.24);
+}
+
+/* Приклеено скотчем за верхние углы */
+.frame-tape {
+  box-shadow: 0 3px 8px rgb(40 30 10 / 0.2);
+}
+
+.frame-tape::before,
+.frame-tape::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: -14px;
+  width: 110px;
+  height: 34px;
+  background: repeating-linear-gradient(-45deg, rgb(238 226 190 / 0.82) 0 10px, rgb(226 212 170 / 0.82) 10px 20px);
+  box-shadow: 0 1px 2px rgb(40 30 10 / 0.15);
+}
+
+.frame-tape::before {
+  left: -30px;
+  transform: rotate(-35deg);
+}
+
+.frame-tape::after {
+  right: -30px;
+  transform: rotate(35deg);
+}
+
+.frame-shadow {
+  box-shadow: 0 8px 18px rgb(40 30 10 / 0.32);
+}
+
+.frame-round .item-image-photo {
+  border-radius: 28px;
+}
+
+.frame-circle .item-image-photo {
+  border-radius: 50%;
+}

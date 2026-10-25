@@ -186,3 +186,139 @@
   font-weight: 600;
   min-height: 54px;
 }
+
+/* --- Стикеры ---
+   Стикер — та же надпись, только поля вокруг текста шире: они и есть сам
+   стикер. Его форму рисует .sticker-shape в слое под полем ввода (и в
+   тексте «картинкой») — под буквами, во весь блок; цвет — --fill. */
+.text-block.is-sticker {
+  margin: -28px 0 0 -36px;
+  padding: 28px 36px;
+}
+
+.text-block.sticker-note {
+  min-height: 210px;
+}
+
+/* Форма стикера уходит под текст (z-index: −1), но не дальше своего блока */
+.text-block.text-decor,
+.text-face {
+  isolation: isolate;
+}
+
+.sticker-shape {
+  --sticker-line: #2b3047;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 5px rgb(40 30 10 / 0.22));
+}
+
+.sticker-shape::before,
+.sticker-shape::after {
+  content: '';
+  position: absolute;
+}
+
+.sticker-shape::before {
+  inset: 0;
+  background: var(--fill);
+}
+
+/* Записка с загнутым уголком */
+.shape-note::before {
+  background: linear-gradient(315deg, transparent 22px, var(--fill) 22px);
+}
+
+.shape-note::after {
+  right: 0;
+  bottom: 0;
+  width: 31px;
+  height: 31px;
+  border-radius: 0 0 0 6px;
+  background: linear-gradient(315deg, transparent 50%, color-mix(in srgb, var(--fill) 70%, #5a4a10) 50%);
+}
+
+/* Реплика: обведённое «облачко» с хвостиком */
+.shape-bubble::before {
+  border: 3px solid var(--sticker-line);
+  border-radius: 34px;
+}
+
+.shape-bubble::after {
+  left: 46px;
+  bottom: -16px;
+  width: 30px;
+  height: 30px;
+  border-right: 3px solid var(--sticker-line);
+  border-bottom: 3px solid var(--sticker-line);
+  background: var(--fill);
+  transform: rotate(45deg) skew(12deg, 12deg);
+}
+
+/* Облачко: округлое, с двумя «клубами» сверху */
+.shape-cloud::before {
+  border-radius: 60px;
+}
+
+.shape-cloud::after {
+  top: -22%;
+  left: 10%;
+  width: 38%;
+  height: 58%;
+  border-radius: 50%;
+  background: var(--fill);
+  box-shadow: 70px 8px 0 -10px var(--fill);
+}
+
+/* Бирка: срезанный край с дырочкой */
+.shape-tag::before {
+  clip-path: polygon(26px 0, 100% 0, 100% 100%, 26px 100%, 0 50%);
+  background: radial-gradient(circle at 22px 50%, transparent 7px, var(--fill) 8px);
+}
+
+/* Лента с вырезами на концах */
+.shape-ribbon::before {
+  clip-path: polygon(0 0, 100% 0, calc(100% - 24px) 50%, 100% 100%, 0 100%, 24px 50%);
+}
+
+/* Значок: овал с пунктиром внутри */
+.shape-badge::before {
+  border-radius: 50%;
+}
+
+.shape-badge::after {
+  inset: 9px;
+  border: 2.5px dashed rgb(255 255 255 / 0.85);
+  border-radius: 50%;
+}
+
+/* Полоска скотча: полупрозрачная, в полоску, с рваными краями */
+.shape-tape {
+  filter: drop-shadow(0 1px 2px rgb(40 30 10 / 0.15));
+}
+
+.shape-tape::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--fill) 78%, transparent) 0 12px,
+    color-mix(in srgb, var(--fill) 58%, transparent) 12px 24px
+  );
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    calc(100% - 7px) 16%,
+    100% 33%,
+    calc(100% - 7px) 50%,
+    100% 67%,
+    calc(100% - 7px) 84%,
+    100% 100%,
+    0 100%,
+    7px 84%,
+    0 67%,
+    7px 50%,
+    0 33%,
+    7px 16%
+  );
+}

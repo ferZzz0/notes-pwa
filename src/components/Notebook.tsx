@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { deleteImage, importImage } from '../images';
 import {
+  isBlank,
   loadPage,
   loadSpreads,
   loadStyle,
@@ -16,12 +18,16 @@ import {
   type TextStyle
 } from '../notes';
 import { usePortrait } from '../orientation';
+import type { StickerId } from '../textStyle';
+import { AddMenu } from './AddMenu';
 import { Canvas, type Camera, type CanvasHandle, type Fixed, type Grab, type Home, type Point, type Rect } from './Canvas';
+import { ImageItem } from './ImageItem';
+import { ImageToolbar } from './ImageToolbar';
 import { PageTurn } from './PageTurn';
 import { Paper, type PaperDisplay, type PaperHandle } from './Paper';
 import { Selection, type SelectionHandle } from './Selection';
 import { Settings } from './Settings';
-import { BLEED_X, BLEED_Y, TextBlock } from './TextBlock';
+import { TextBlock } from './TextBlock';
 import { TextToolbar } from './TextToolbar';
 import './Notebook.css';
 
@@ -66,6 +72,10 @@ const SNAP_SCALE = 0.06;
 const TURN_MS = { spread: 340, single: 850 };
 // Перелёт к началу листа перед перелистыванием (если лист приближен)
 const TURN_HOME_MS = 200;
+// Новое фото — не шире этой доли видимой части листа и не выше этой
+const PHOTO_SHARE = { w: 0.55, h: 0.6 };
+// Примерный размер нового стикера (мир) — чтобы поставить его посередине экрана
+const STICKER_SIZE = { w: 230, h: 210 };
 
 const dateFormat = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long' });
 
@@ -95,7 +105,8 @@ function blockRect(el: HTMLElement): Rect {
   return { x: cx - ex, y: cy - ey, w: 2 * ex, h: 2 * ey };
 }
 
-const blockElement = (id: string) => document.querySelector<HTMLTextAreaElement>(`.page-texts [data-block="${id}"]`);
+// Надпись, стикер (их поле ввода) или фото на листе
+const blockElement = (id: string) => document.querySelector<HTMLElement>(`.page-texts [data-block="${id}"]`);
 
 // Попадает ли точка мира в надпись — с её поворотом и размером и с запасом
 // pad (px мира) вокруг
@@ -192,22 +203,89 @@ export function Notebook() {
     commit({ ...spreads, [spread]: { created: cur.created ?? (text ? localDate() : undefined), blocks } });
   };
 
-  // Убрать надпись с листа; разворот без текста не храним
+  // Убрать надпись, стикер или фото с листа (у фото — и саму картинку);
+  // пустой разворот не храним
   const removeBlock = (id: string) => {
     const cur = spreads[spread];
     if (!cur) return;
+    const gone = cur.blocks.find(b => b.id === id);
+    if (gone?.image) void deleteImage(gone.image);
     const blocks = cur.blocks.filter(b => b.id !== id);
     const next = { ...spreads };
-    if (blocks.some(b => b.text)) next[spread] = { ...cur, blocks };
+    if (blocks.some(b => !isBlank(b))) next[spread] = { ...cur, blocks };
     else delete next[spread];
     commit(next);
   };
 
-  // Стёртый до пустоты текст исчезает с листа
+  // Стёртая до пустоты надпись исчезает с листа (стикер остаётся)
   const dropIfEmpty = (id: string) => {
     setFocused(f => (f === id ? null : f));
-    if (spreads[spread]?.blocks.find(b => b.id === id)?.text) return;
-    removeBlock(id);
+    const b = spreads[spread]?.blocks.find(x => x.id === id);
+    if (b && isBlank(b)) removeBlock(id);
+  };
+
+  // Наверх / вниз среди всего на листе: порядок в списке — порядок слоёв
+  const reorder = (id: string, dir: 'up' | 'down') =>
+    setSpreads(prev => {
+      const cur = prev[spread];
+      const b = cur?.blocks.find(x => x.id === id);
+      if (!cur || !b) return prev;
+      const rest = cur.blocks.filter(x => x.id !== id);
+      const next = { ...prev, [spread]: { ...cur, blocks: dir === 'up' ? [...rest, b] : [b, ...rest] } };
+      saveSpreads(next);
+      return next;
+    });
+
+  // Добавить на открытый разворот (стикер или фото) и выбрать
+  const addBlock = (block: Block) => {
+    const cur = spreads[spread] ?? { blocks: [] };
+    flushSync(() => {
+      commit({ ...spreads, [spread]: { created: cur.created ?? localDate(), blocks: [...cur.blocks, block] } });
+      setSelected(block.id);
+    });
+  };
+
+  // Середина того, что сейчас видно на листе (мир)
+  const viewCenter = (): Point => {
+    const v = canvas.current!.visibleRect();
+    return { x: v.x + v.w / 2, y: Math.max(0, v.y) + (v.y + v.h - Math.max(0, v.y)) / 2 };
+  };
+
+  // Стикер — посередине экрана, и сразу можно писать (фокус — прямо в
+  // нажатии, иначе iOS не покажет клавиатуру)
+  const addSticker = (sticker: StickerId) => {
+    const c = viewCenter();
+    const pos = place(STICKER_SIZE.w, c.x - STICKER_SIZE.w / 2, c.y - STICKER_SIZE.h / 2);
+    const block: Block = {
+      id: newBlockId(),
+      kind: 'sticker',
+      sticker,
+      ...pos,
+      text: '',
+      // На красной ленте — белые буквы, на остальных — как у прошлой надписи
+      ...(sticker === 'ribbon' ? { color: '#ffffff' } : style.color ? { color: style.color } : {}),
+      ...(style.font && style.font !== 'hand' ? { font: style.font } : {})
+    };
+    addBlock(block);
+    edit(block.id);
+  };
+
+  // Фото из галереи: уменьшаем и сохраняем (images.ts), ставим посередине
+  // экрана — не шире и не выше доли видимой части листа
+  const addPhoto = async (file: File) => {
+    const id = newBlockId();
+    let ratio: number;
+    try {
+      ({ ratio } = await importImage(file, id));
+    } catch {
+      alert('Не получилось открыть это фото');
+      return;
+    }
+    const v = canvas.current!.visibleRect();
+    const width = Math.round(Math.min(v.w * PHOTO_SHARE.w, (v.h * PHOTO_SHARE.h) / ratio));
+    const c = viewCenter();
+    const pos = place(width, c.x - width / 2, c.y - (width * ratio) / 2);
+    addBlock({ id: newBlockId(), kind: 'image', image: id, width, ratio, ...pos, text: '' });
   };
 
   // Изменить надпись открытого разворота. Пока её тащат пальцами — без записи в
@@ -263,7 +341,7 @@ export function Notebook() {
   // покажет клавиатуру
   const edit = (id: string) => {
     const el = blockElement(id);
-    if (!el) return;
+    if (!(el instanceof HTMLTextAreaElement)) return;
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   };
@@ -291,6 +369,9 @@ export function Notebook() {
     if (!hitBlock(el, toWorld(screen), GRAB_PAD / camera.current.scale)) return null;
     const w = el.offsetWidth;
     const h = el.offsetHeight;
+    // Поля вокруг текста: от (x, y) блока до угла его рамки (у фото — 0)
+    const padX = b.x - el.offsetLeft;
+    const padY = b.y - el.offsetTop;
     // Надпись и пальцы (мир), когда жест начался или пальцев стало больше/меньше
     let base: { pts: Point[]; block: Block } | null = null;
     const begin = (pts: Point[]) => {
@@ -320,11 +401,11 @@ export function Notebook() {
         // Середина надписи идёт за пальцами — повёрнутая и растянутая вокруг них
         const k = scale / s0;
         const t = ((rotate - r0) * Math.PI) / 180;
-        const dx = b0.x - BLEED_X + w / 2 - from.x;
-        const dy = b0.y - BLEED_Y + h / 2 - from.y;
+        const dx = b0.x - padX + w / 2 - from.x;
+        const dy = b0.y - padY + h / 2 - from.y;
         const cx = to.x + k * (dx * Math.cos(t) - dy * Math.sin(t));
         const cy = to.y + k * (dx * Math.sin(t) + dy * Math.cos(t));
-        const pos = place(w - 2 * BLEED_X, cx - w / 2 + BLEED_X, cy - h / 2 + BLEED_Y);
+        const pos = place(w - 2 * padX, cx - w / 2 + padX, cy - h / 2 + padY);
         patchBlock(b.id, { ...pos, rotate: rotate || undefined, scale: scale !== 1 ? scale : undefined }, false);
       },
       end: saveNow
@@ -411,7 +492,7 @@ export function Notebook() {
   // не в счёт: лист растёт только от того, что написал человек
   useLayoutEffect(() => {
     let r: Rect | null = null;
-    for (const el of document.querySelectorAll<HTMLElement>('.canvas-world > .page-side .text-block')) {
+    for (const el of document.querySelectorAll<HTMLElement>('.canvas-world > .page-side :is(.text-block, .item-image)')) {
       const b = blockRect(el);
       r = r
         ? { x: Math.min(r.x, b.x), y: Math.min(r.y, b.y), w: Math.max(r.x + r.w, b.x + b.w) - Math.min(r.x, b.x), h: Math.max(r.y + r.h, b.y + b.h) - Math.min(r.y, b.y) }
@@ -535,22 +616,26 @@ export function Notebook() {
             надпись, перенесённая через корешок, оставалась тем же полем ввода */}
         {!flip && (
           <div className="page-side page-texts">
-            {visibleBlocks.map(b => (
-              <TextBlock
-                key={b.id}
-                block={b}
-                width={maxWidthOf(b)}
-                editing={focused === b.id}
-                onText={setText}
-                onBlur={dropIfEmpty}
-                onFocus={(id, el) => {
-                  setSelected(id);
-                  setFocused(id);
-                  setTimeout(() => keepVisible(el), 350);
-                }}
-                onInput={el => requestAnimationFrame(() => keepVisible(el))}
-              />
-            ))}
+            {visibleBlocks.map(b =>
+              b.kind === 'image' ? (
+                <ImageItem key={b.id} block={b} />
+              ) : (
+                <TextBlock
+                  key={b.id}
+                  block={b}
+                  width={maxWidthOf(b)}
+                  editing={focused === b.id}
+                  onText={setText}
+                  onBlur={dropIfEmpty}
+                  onFocus={(id, el) => {
+                    setSelected(id);
+                    setFocused(id);
+                    setTimeout(() => keepVisible(el), 350);
+                  }}
+                  onInput={el => requestAnimationFrame(() => keepVisible(el))}
+                />
+              )
+            )}
           </div>
         )}
 
@@ -576,26 +661,43 @@ export function Notebook() {
       {selectedBlock && (
         <>
           <Selection ref={selection} block={selectedBlock} camera={() => camera.current} />
-          <TextToolbar
-            block={selectedBlock}
-            keyboard={keyboard}
-            onColor={(color, final) => restyle(selectedBlock.id, { color }, final)}
-            onFont={font => restyle(selectedBlock.id, { font })}
-            onEffect={effect => patchBlock(selectedBlock.id, { effect: effect === 'none' ? undefined : effect })}
-            onMarker={marker => patchBlock(selectedBlock.id, { marker: marker === 'none' ? undefined : marker })}
-            onDelete={() => {
-              removeBlock(selectedBlock.id);
-              deselect();
-            }}
-            onDone={deselect}
-            onHeight={setToolbarHeight}
-          />
+          {selectedBlock.kind === 'image' ? (
+            <ImageToolbar
+              block={selectedBlock}
+              onPatch={patch => patchBlock(selectedBlock.id, patch)}
+              onLayer={dir => reorder(selectedBlock.id, dir)}
+              onDelete={() => {
+                removeBlock(selectedBlock.id);
+                deselect();
+              }}
+              onDone={deselect}
+              onHeight={setToolbarHeight}
+            />
+          ) : (
+            <TextToolbar
+              block={selectedBlock}
+              keyboard={keyboard}
+              onColor={(color, final) => restyle(selectedBlock.id, { color }, final)}
+              onFont={font => restyle(selectedBlock.id, { font })}
+              onEffect={effect => patchBlock(selectedBlock.id, { effect: effect === 'none' ? undefined : effect })}
+              onMarker={marker => patchBlock(selectedBlock.id, { marker: marker === 'none' ? undefined : marker })}
+              onSticker={patch => patchBlock(selectedBlock.id, patch)}
+              onLayer={dir => reorder(selectedBlock.id, dir)}
+              onDelete={() => {
+                removeBlock(selectedBlock.id);
+                deselect();
+              }}
+              onDone={deselect}
+              onHeight={setToolbarHeight}
+            />
+          )}
         </>
       )}
 
       {/* Пока надпись выбрана, внизу — её панель: стрелки и шестерёнку прячем */}
       {!turning && !selectedBlock && (
         <>
+          <AddMenu onPhoto={file => void addPhoto(file)} onSticker={addSticker} />
           <Settings />
           {page > (single ? 1 : 2) && (
             <button type="button" className="page-arrow page-arrow-prev" aria-label="Назад" onClick={() => void go('prev')}>
@@ -645,13 +747,13 @@ function PageSide({ spread, side, blocks, created, showDate }: PageSideProps) {
           <h1>Мои заметки</h1>
           <p>Двойное касание по бумаге — написать в этом месте.</p>
           <p>Коснитесь надписи — её можно двигать, поворачивать, менять цвет и шрифт.</p>
-          <p>Пишете у края — лист становится больше. Стрелки внизу — перелистнуть.</p>
+          <p>«+» внизу — фото и стикеры. Стрелки — перелистнуть.</p>
         </div>
       )}
       {blocks
         .filter(b => (side === 'left' ? b.x < 0 : b.x >= 0))
         .map(b => (
-          <TextBlock key={b.id} block={b} width={maxWidthOf(b)} face />
+          b.kind === 'image' ? <ImageItem key={b.id} block={b} /> : <TextBlock key={b.id} block={b} width={maxWidthOf(b)} face />
         ))}
     </div>
   );

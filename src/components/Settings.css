@@ -1,11 +1,12 @@
-/* Шестерёнка — внизу посередине, между стрелками, и такая же светлая, как
-   они (Notebook.css). Вверху она закрыла бы номер страницы и дату */
+/* Шестерёнка — внизу посередине, между стрелками (справа от «+»,
+   AddMenu.css), и такая же светлая, как они (Notebook.css). Вверху она
+   закрыла бы номер страницы и дату */
 .settings-button {
   position: fixed;
   left: 50%;
   bottom: calc(20px + var(--safe-bottom));
   z-index: 7;
-  transform: translateX(-50%);
+  transform: translateX(6px);
   display: grid;
   place-items: center;
   width: 40px;

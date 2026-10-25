@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react';
 import type { Block } from '../notes';
-import { effectOf, fontClass, inkColor, markerOf } from '../textStyle';
+import { effectOf, fontClass, inkColor, markerOf, stickerFill, stickerOf } from '../textStyle';
 import './TextBlock.css';
 
 // Поля вокруг текста (px мира): завитки рукописных букв выступают за
@@ -8,8 +8,12 @@ import './TextBlock.css';
 // назад (TextBlock.css), так что сам текст стоит ровно в (x, y)
 export const BLEED_X = 12;
 export const BLEED_Y = 6;
-// Пустая надпись всё равно шириной с короткое слово — есть куда поставить курсор
+// У стикера поля шире — это сам стикер вокруг текста (TextBlock.css: .is-sticker)
+const STICKER_PAD_X = 36;
+// Пустая надпись всё равно шириной с короткое слово — есть куда поставить
+// курсор; стикер — не меньше записки
 const MIN_WIDTH = 140;
+const STICKER_MIN_WIDTH = 230;
 // Запас под курсор в конце строки
 const CARET = 4;
 
@@ -51,22 +55,25 @@ type Props = {
 // блока; поворачивается и растёт вокруг своей середины. Маркер и эффекты
 // с тенями (свечение, тень, объём) рисует слой под полем ввода (.text-decor):
 // те же буквы, только прозрачные, — поле ввода обрезало бы тени по своему
-// краю, а маркер должен лежать под буквами построчно.
+// краю, а маркер должен лежать под буквами построчно. У стикера в том же
+// слое, под всем, — его форма (.sticker-shape), а поля вокруг текста шире.
 export function TextBlock({ block, width, face = false, editing = false, onText, onBlur, onFocus, onInput }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const decor = useRef<HTMLDivElement>(null);
-  const className = `text-block ${fontClass(block.font)}`;
-  const maxWidth = width + 2 * BLEED_X;
+  const sticker = block.kind === 'sticker' ? stickerOf(block.sticker) : null;
+  const className = `text-block ${fontClass(block.font)}${sticker ? ` is-sticker sticker-${sticker}` : ''}`;
+  const maxWidth = width + 2 * (sticker ? STICKER_PAD_X : BLEED_X);
+  const minWidth = sticker ? STICKER_MIN_WIDTH : MIN_WIDTH;
   const effect = effectOf(block.effect);
   const marker = markerOf(block.marker);
   const effectClass = effect === 'none' ? '' : ` effect-${effect}`;
-  // Контур — у самих букв; остальные эффекты — в слое под ними
-  const hasDecor = marker !== 'none' || (effect !== 'none' && effect !== 'outline');
+  // Контур — у самих букв; остальные эффекты и форма стикера — в слое под ними
+  const hasDecor = sticker !== null || marker !== 'none' || (effect !== 'none' && effect !== 'outline');
 
   const fit = () => {
     const el = ref.current;
     if (!el) return;
-    el.style.width = `${Math.min(maxWidth, Math.max(MIN_WIDTH, textWidth(el.value, className, maxWidth) + CARET))}px`;
+    el.style.width = `${Math.min(maxWidth, Math.max(minWidth, textWidth(el.value, className, maxWidth) + CARET))}px`;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
     if (decor.current) {
@@ -75,7 +82,7 @@ export function TextBlock({ block, width, face = false, editing = false, onText,
     }
   };
 
-  useLayoutEffect(fit, [block.text, block.font, width, hasDecor]);
+  useLayoutEffect(fit, [block.text, block.font, width, hasDecor, sticker]);
 
   // Размер, посчитанный до загрузки шрифта, пересчитываем: со шрифтом строки
   // переносятся иначе, и низ текста обрезался бы
@@ -100,13 +107,21 @@ export function TextBlock({ block, width, face = false, editing = false, onText,
   } as CSSProperties;
   // Текст с маркером: маркер — фон строчного span, по строкам
   const marked = (text: string) => (marker === 'none' ? text : <span className={`mark-${marker}`}>{text}</span>);
+  // Форма стикера — под текстом, во весь блок
+  const shape = sticker && (
+    <span
+      className={`sticker-shape shape-${sticker}`}
+      style={{ '--fill': stickerFill(block.sticker, block.fill) } as CSSProperties}
+    />
+  );
   // Поворот и размер — ещё и в атрибутах: по ним Notebook меряет, сколько
   // места надпись занимает на листе
   const data = { 'data-rotate': rotate || undefined, 'data-scale': scale !== 1 ? scale : undefined };
 
   if (face) {
     return (
-      <div className={`${className}${effectClass} text-face`} style={{ ...style, maxWidth }} {...data}>
+      <div className={`${className}${effectClass} text-face`} style={{ ...style, maxWidth, minWidth }} {...data}>
+        {shape}
         {marked(block.text)}
       </div>
     );
@@ -121,6 +136,7 @@ export function TextBlock({ block, width, face = false, editing = false, onText,
           style={style}
           aria-hidden="true"
         >
+          {shape}
           {marked(block.text)}
         </div>
       )}

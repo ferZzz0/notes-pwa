@@ -103,3 +103,50 @@ export function wheelPosition(color?: string): { h: number; r: number } {
   }
   return { h, r: Math.min(1, max + min) };
 }
+
+// Готовые стикеры, на которых можно писать (TextBlock.css: .shape-*). У
+// каждого свой цвет по умолчанию; цвет можно сменить (STICKER_FILLS или
+// круговая палитра), а надпись на стикере настраивается как любая другая
+export const STICKERS = [
+  { id: 'note', label: 'Записка', fill: '#ffe45c' },
+  { id: 'bubble', label: 'Реплика', fill: '#ffffff' },
+  { id: 'cloud', label: 'Облачко', fill: '#dcecff' },
+  { id: 'tag', label: 'Бирка', fill: '#f2d39b' },
+  { id: 'ribbon', label: 'Лента', fill: '#e8566f' },
+  { id: 'badge', label: 'Значок', fill: '#7fd1ae' },
+  { id: 'tape', label: 'Скотч', fill: '#b9a7ef' }
+] as const;
+
+export const STICKER_FILLS = ['#ffe45c', '#ffb3c7', '#a8e6a1', '#a8d8ff', '#ffc58a', '#d4b8ff', '#ffffff', '#e3c79a', '#e8566f', '#3b4a8c'];
+
+// Рамки фото (ImageItem.css: .frame-*) и фильтры (CSS filter)
+export const FRAMES = [
+  { id: 'none', label: 'Без рамки' },
+  { id: 'white', label: 'Белая рамка' },
+  { id: 'polaroid', label: 'Полароид' },
+  { id: 'tape', label: 'На скотче' },
+  { id: 'shadow', label: 'С тенью' },
+  { id: 'round', label: 'Скруглённая' },
+  { id: 'circle', label: 'Круг' }
+] as const;
+
+export const FILTERS = [
+  { id: 'none', label: 'Без фильтра', css: 'none' },
+  { id: 'mono', label: 'Чёрно-белый', css: 'grayscale(1)' },
+  { id: 'sepia', label: 'Сепия', css: 'sepia(0.85)' },
+  { id: 'vintage', label: 'Винтаж', css: 'sepia(0.35) contrast(1.1) saturate(0.8) brightness(1.05)' },
+  { id: 'vivid', label: 'Ярче', css: 'saturate(1.5) contrast(1.08)' },
+  { id: 'fade', label: 'Блёклый', css: 'saturate(0.6) brightness(1.1) contrast(0.9)' }
+] as const;
+
+export type StickerId = (typeof STICKERS)[number]['id'];
+export type FrameId = (typeof FRAMES)[number]['id'];
+export type FilterId = (typeof FILTERS)[number]['id'];
+
+export const stickerOf = (id?: string): StickerId => STICKERS.find(s => s.id === id)?.id ?? 'note';
+export const frameOf = (id?: string): FrameId => FRAMES.find(f => f.id === id)?.id ?? 'none';
+export const filterOf = (id?: string): FilterId => FILTERS.find(f => f.id === id)?.id ?? 'none';
+// Цвет стикера: свой или по умолчанию для этой формы
+export const stickerFill = (sticker?: string, fill?: string): string =>
+  fill && HEX.test(fill) ? fill : STICKERS.find(s => s.id === stickerOf(sticker))!.fill;
+export const filterCss = (id?: string): string => FILTERS.find(f => f.id === filterOf(id))!.css;

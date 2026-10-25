@@ -6,13 +6,17 @@
 // Храним только развороты с текстом; у установленного на iPhone приложения
 // память своя, отдельная от Safari.
 
-import type { EffectId, FontId, MarkerId } from './textStyle';
+import type { EffectId, FilterId, FontId, FrameId, MarkerId, StickerId } from './textStyle';
 
 export type Block = {
   id: string;
-  // Левый верхний угол блока в координатах мира (px; верх листа — y = 0)
+  // Что это: надпись (kind нет), стикер с надписью или фото
+  kind?: 'sticker' | 'image';
+  // Левый верхний угол в координатах мира (px; верх листа — y = 0): у
+  // надписи и стикера — начало текста, у фото — угол рамки
   x: number;
   y: number;
+  // Текст надписи или стикера (у фото — пусто)
   text: string;
   // Оформление; чего нет — то по умолчанию: синие чернила, рукописный
   // шрифт, без поворота, обычный размер. Цвет — #rrggbb (в старых записях —
@@ -22,10 +26,25 @@ export type Block = {
   // Эффект букв (свечение, тень…) и маркер на тексте; нет — без них
   effect?: EffectId;
   marker?: MarkerId;
-  // Поворот вокруг середины надписи (градусы) и размер (1 — обычный)
+  // Поворот вокруг середины (градусы) и размер (1 — обычный)
   rotate?: number;
   scale?: number;
+  // Стикер: форма и цвет (#rrggbb; нет — цвет формы по умолчанию)
+  sticker?: StickerId;
+  fill?: string;
+  // Фото: картинка в IndexedDB (images.ts), ширина (px мира), пропорции
+  // (высота / ширина), рамка, фильтр, отражено ли по горизонтали
+  image?: string;
+  width?: number;
+  ratio?: number;
+  frame?: FrameId;
+  filter?: FilterId;
+  flip?: boolean;
 };
+
+// Пустая надпись (без текста) — её убирают с листа; стикер и фото без текста
+// остаются
+export const isBlank = (b: Block) => !b.kind && !b.text;
 
 // Цвет и шрифт, выбранные последними, — с ними начинается новая надпись
 export type TextStyle = { color?: string; font?: FontId };
@@ -146,7 +165,7 @@ export function loadSpreads(): Spreads {
   const spreads = read<Spreads>(SPREADS_KEY, {});
   migrate(spreads);
   // Пустые блоки могли остаться, если приложение закрыли, ничего не написав
-  for (const s of Object.values(spreads)) s.blocks = s.blocks.filter(b => b.text);
+  for (const s of Object.values(spreads)) s.blocks = s.blocks.filter(b => !isBlank(b));
   return spreads;
 }
 

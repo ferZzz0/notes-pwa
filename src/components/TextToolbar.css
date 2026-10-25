@@ -228,3 +228,138 @@
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
   pointer-events: none;
 }
+
+/* Стикер: формы, цвета, слой */
+.toolbar-sticker {
+  width: min(320px, calc(100vw - 24px));
+  padding: 10px;
+}
+
+.toolbar-sticker-shapes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.toolbar-sticker-shapes button {
+  display: grid;
+  place-items: center;
+  padding: 12px 0 14px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.toolbar-sticker-shapes .sticker-preview {
+  width: 52px;
+  height: 34px;
+}
+
+.toolbar-sticker-shapes button.is-active,
+.toolbar-layer button:active {
+  background: rgb(36 57 140 / 0.12);
+}
+
+.toolbar-sticker-fills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px 0 10px;
+}
+
+.toolbar-sticker-fills button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 0.15);
+  border-radius: 50%;
+}
+
+.toolbar-sticker-fills button.is-active {
+  box-shadow:
+    0 0 0 2px var(--paper),
+    0 0 0 4px var(--ink);
+}
+
+/* Наверх / вниз среди всего на листе */
+.toolbar-layer {
+  display: flex;
+  gap: 6px;
+}
+
+.toolbar-layer button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border: none;
+  border-radius: 10px;
+  background: var(--border);
+  color: var(--text);
+  font: 600 14px/1.2 var(--ui-font);
+}
+
+.toolbar-layer svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Образцы рамок и фильтров в списках панели фото (ImageToolbar) */
+.toolbar-frame-preview {
+  display: block;
+  position: relative;
+  width: 40px;
+  flex: none;
+}
+
+.toolbar-frame-preview span {
+  display: block;
+  aspect-ratio: 4 / 3;
+  background: linear-gradient(160deg, #9cc3e6, #f2c98a);
+}
+
+.toolbar-frame-preview.frame-white {
+  padding: 3px;
+}
+
+.toolbar-frame-preview.frame-polaroid {
+  padding: 3px 3px 10px;
+}
+
+.toolbar-frame-preview.frame-tape::before,
+.toolbar-frame-preview.frame-tape::after {
+  top: -4px;
+  width: 16px;
+  height: 7px;
+}
+
+.toolbar-frame-preview.frame-tape::before {
+  left: -5px;
+}
+
+.toolbar-frame-preview.frame-tape::after {
+  right: -5px;
+}
+
+.toolbar-frame-preview.frame-round span {
+  border-radius: 7px;
+}
+
+.toolbar-frame-preview.frame-circle span {
+  border-radius: 50%;
+}
+
+.toolbar-filter-preview {
+  width: 44px;
+  height: 33px;
+  flex: none;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.toolbar-menu > .toolbar-layer {
+  min-width: 220px;
+}

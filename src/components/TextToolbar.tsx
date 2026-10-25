@@ -4,16 +4,21 @@ import {
   EFFECTS,
   FONTS,
   MARKERS,
+  STICKER_FILLS,
+  STICKERS,
   effectOf,
   fontOf,
   inkColor,
   markerOf,
+  stickerFill,
+  stickerOf,
   wheelColor,
   wheelPosition,
   type EffectId,
   type FontId,
   type MarkerId
 } from '../textStyle';
+import { StickerPreview } from './AddMenu';
 import './TextToolbar.css';
 
 type Props = {
@@ -25,6 +30,9 @@ type Props = {
   onFont: (font: FontId) => void;
   onEffect: (effect: EffectId) => void;
   onMarker: (marker: MarkerId) => void;
+  // Стикер: форма и цвет; слой — выше всех или ниже всех на листе
+  onSticker: (patch: Partial<Block>) => void;
+  onLayer: (dir: 'up' | 'down') => void;
   onDelete: () => void;
   onDone: () => void;
   // Высота панели — чтобы лист можно было поднять над ней
@@ -32,29 +40,21 @@ type Props = {
 };
 
 // Что открыто над панелью
-type Menu = 'color' | 'font' | 'effect' | 'marker' | 'delete' | null;
+type Menu = 'color' | 'font' | 'effect' | 'marker' | 'sticker' | 'delete' | null;
 
 // Нажатие на панель не забирает фокус у поля ввода — клавиатура остаётся
-const keepFocus = (e: MouseEvent) => e.preventDefault();
+export const keepFocus = (e: MouseEvent) => e.preventDefault();
 
 // Над панелью и под верхом экрана — столько места оставляем
 const MENU_MARGIN = 96;
 const WHEEL_SIZE = 180;
 
-// Панель выбранной надписи внизу экрана (а при открытой клавиатуре — над
-// ней): цвет (круговая палитра), шрифт и эффект (выпадающие списки), маркер
-// (готовые варианты; только у надписи с текстом), удалить (с
-// подтверждением), готово. Списки открываются над панелью, по одному.
-export function TextToolbar({ block, keyboard, onColor, onFont, onEffect, onMarker, onDelete, onDone, onHeight }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [menu, setMenu] = useState<Menu>(null);
-  const font = fontOf(block.font);
-  const effect = effectOf(block.effect);
-  const marker = markerOf(block.marker);
-  const color = inkColor(block.color);
-  // Сколько места над панелью — с открытой клавиатурой его мало
-  const room = Math.max(120, window.innerHeight - keyboard - MENU_MARGIN);
+// Сколько места над панелью — с открытой клавиатурой его мало
+export const menuRoom = (keyboard: number) => Math.max(120, window.innerHeight - keyboard - MENU_MARGIN);
 
+// Панель сообщает свою высоту — чтобы лист можно было поднять над ней
+export function useToolbarHeight(onHeight: (h: number) => void) {
+  const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = ref.current!;
     const report = () => onHeight(el.offsetHeight);
@@ -63,6 +63,62 @@ export function TextToolbar({ block, keyboard, onColor, onFont, onEffect, onMark
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+  return ref;
+}
+
+// Подтверждение удаления над панелью
+export function ConfirmDelete({ what, onDelete, onCancel }: { what: string; onDelete: () => void; onCancel: () => void }) {
+  return (
+    <div className="toolbar-menu toolbar-confirm" role="alertdialog" aria-label={`Удалить ${what}?`}>
+      <p>Удалить {what}?</p>
+      <div className="toolbar-confirm-actions">
+        <button type="button" className="toolbar-confirm-delete" onClick={onDelete}>
+          Удалить
+        </button>
+        <button type="button" onClick={onCancel}>
+          Отмена
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Наверх / вниз среди всего на листе
+export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => void }) {
+  return (
+    <div className="toolbar-layer">
+      <button type="button" onClick={() => onLayer('up')}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 20V8M6.5 13.5L12 8l5.5 5.5M5 4h14" />
+        </svg>
+        Наверх
+      </button>
+      <button type="button" onClick={() => onLayer('down')}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 4v12M6.5 10.5L12 16l5.5-5.5M5 20h14" />
+        </svg>
+        Вниз
+      </button>
+    </div>
+  );
+}
+
+// Панель выбранной надписи или стикера внизу экрана (а при открытой
+// клавиатуре — над ней): цвет текста (круговая палитра), шрифт и эффект
+// (выпадающие списки), маркер (готовые варианты; только у надписи с
+// текстом), у стикера — его форма, цвет и слой, удалить (с подтверждением),
+// готово. Списки открываются над панелью, по одному.
+export function TextToolbar(props: Props) {
+  const { block, keyboard, onColor, onFont, onEffect, onMarker, onSticker, onLayer, onDelete, onDone, onHeight } = props;
+  const ref = useToolbarHeight(onHeight);
+  const [menu, setMenu] = useState<Menu>(null);
+  const font = fontOf(block.font);
+  const effect = effectOf(block.effect);
+  const marker = markerOf(block.marker);
+  const color = inkColor(block.color);
+  const isSticker = block.kind === 'sticker';
+  const fill = stickerFill(block.sticker, block.fill);
+  const room = menuRoom(keyboard);
 
   const toggle = (m: Menu) => setMenu(menu === m ? null : m);
   // Кнопка, открывающая список
@@ -159,18 +215,40 @@ export function TextToolbar({ block, keyboard, onColor, onFont, onEffect, onMark
         </ul>
       )}
 
-      {menu === 'delete' && (
-        <div className="toolbar-menu toolbar-confirm" role="alertdialog" aria-label="Удалить надпись?">
-          <p>Удалить надпись?</p>
-          <div className="toolbar-confirm-actions">
-            <button type="button" className="toolbar-confirm-delete" onClick={onDelete}>
-              Удалить
-            </button>
-            <button type="button" onClick={() => setMenu(null)}>
-              Отмена
-            </button>
+      {menu === 'sticker' && (
+        <div className="toolbar-menu toolbar-sticker" style={{ maxHeight: room }} role="dialog" aria-label="Стикер">
+          <div className="toolbar-sticker-shapes">
+            {STICKERS.map(st => (
+              <button
+                key={st.id}
+                type="button"
+                aria-label={st.label}
+                aria-pressed={st.id === stickerOf(block.sticker)}
+                className={st.id === stickerOf(block.sticker) ? 'is-active' : undefined}
+                onClick={() => onSticker({ sticker: st.id, fill: block.fill })}
+              >
+                <StickerPreview sticker={st.id} fill={fill} />
+              </button>
+            ))}
           </div>
+          <div className="toolbar-sticker-fills">
+            {STICKER_FILLS.map(c => (
+              <button
+                key={c}
+                type="button"
+                aria-label={`Цвет стикера ${c}`}
+                className={c === fill ? 'is-active' : undefined}
+                style={{ background: c }}
+                onClick={() => onSticker({ fill: c })}
+              />
+            ))}
+          </div>
+          <LayerButtons onLayer={onLayer} />
         </div>
+      )}
+
+      {menu === 'delete' && (
+        <ConfirmDelete what={isSticker ? 'стикер' : 'надпись'} onDelete={onDelete} onCancel={() => setMenu(null)} />
       )}
 
       {opener('color', 'Цвет', <span className="text-toolbar-swatch" style={{ '--color': color } as CSSProperties} />, 'text-toolbar-color')}
@@ -198,9 +276,17 @@ export function TextToolbar({ block, keyboard, onColor, onFont, onEffect, onMark
             <path d="M14.5 4.5l5 5-8 8-4-1-1-4zM6.5 12.5l5 5M4 20.5h7" />
           </svg>
         )}
+      {isSticker &&
+        opener(
+          'sticker',
+          'Стикер',
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4.5 4.5h15v10l-5 5h-10zM19.5 14.5h-5v5" />
+          </svg>
+        )}
       {opener(
         'delete',
-        'Удалить надпись',
+        isSticker ? 'Удалить стикер' : 'Удалить надпись',
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5" />
         </svg>

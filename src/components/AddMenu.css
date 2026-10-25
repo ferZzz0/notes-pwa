@@ -1,0 +1,144 @@
+/* «+» — внизу посередине, слева от шестерёнки (Settings.css), такой же светлый */
+.add-button {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + var(--safe-bottom));
+  z-index: 7;
+  transform: translateX(calc(-100% - 6px));
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgb(60 40 10 / 0.08);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgb(60 40 10 / 0.12);
+  color: var(--ink-muted);
+}
+
+.add-button svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  transition: transform 0.2s ease-out;
+}
+
+.add-button.is-open svg {
+  transform: rotate(45deg);
+}
+
+/* Поле выбора файла не видно, но открывается по кнопке «Фото» */
+.add-input {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.add-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+}
+
+.add-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(72px + var(--safe-bottom));
+  z-index: 7;
+  width: min(340px, calc(100% - 24px));
+  max-height: calc(100dvh - 100px - var(--safe-bottom) - var(--safe-top));
+  margin: 0 auto;
+  padding: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font: 15px/1.3 var(--ui-font);
+  animation: settings-in 0.18s ease-out;
+}
+
+.add-photo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.add-photo svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
+.add-section {
+  margin: 14px 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.add-stickers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.add-sticker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px 8px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  font-size: 13px;
+}
+
+.add-sticker:active {
+  background: var(--border);
+}
+
+/* Маленький стикер в меню; хвостик реплики и клубы облачка выступают за край */
+.sticker-preview {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 46px;
+  isolation: isolate;
+  font-size: 0;
+}
+
+/* Форма рисуется вдвое больше и уменьшается — чтобы хвостик, вырезы и
+   клубы (они в px) были в тех же пропорциях, что на листе */
+.sticker-preview .sticker-shape {
+  right: auto;
+  bottom: auto;
+  width: 200%;
+  height: 200%;
+  transform: scale(0.5);
+  transform-origin: 0 0;
+}
