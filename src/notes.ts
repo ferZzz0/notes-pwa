@@ -30,6 +30,26 @@ const OLD_SPREAD_KEY = 'notes-pwa:spread';
 const OLD_PAGES_KEY = 'notes-pwa:pages';
 const OLD_DRAFT_KEY = 'notes-pwa:draft';
 
+// Разовая очистка: при первом запуске версии с новым RESET_ID устройство
+// стирает все записи и запоминает это, так что записи, сделанные после,
+// остаются. Нужна, чтобы стереть данные у всех пользователей сразу (их
+// записи есть только на их устройствах). Стереть ещё раз — сменить RESET_ID.
+// 2026-10-25 — по решению автора приложения (тестовые записи).
+const RESET_ID = '2026-10-25';
+const RESET_KEY = 'notes-pwa:reset';
+// Все ключи приложения, включая прежние форматы и убранные настройки
+const ALL_KEYS = [SPREADS_KEY, PAGE_KEY, OLD_SPREAD_KEY, OLD_PAGES_KEY, OLD_DRAFT_KEY, 'notes-pwa:settings'];
+
+export function resetOnce(): void {
+  try {
+    if (localStorage.getItem(RESET_KEY) === RESET_ID) return;
+    for (const key of ALL_KEYS) localStorage.removeItem(key);
+    localStorage.setItem(RESET_KEY, RESET_ID);
+  } catch {
+    // Память недоступна — стирать нечего
+  }
+}
+
 // Сегодня — ГГГГ-ММ-ДД по местному времени (toISOString дал бы UTC,
 // и после полуночи по Москве до трёх часов была бы вчерашняя дата)
 export function localDate(): string {
