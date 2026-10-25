@@ -74,47 +74,118 @@
 
 /* --- Переворот листа ---
    Сцена — у корешка (ширина 0), глубину задаёт perspective из Notebook.tsx.
-   Лист — половина разворота, поворачивается на 180° вокруг корешка; лицо
-   и оборот — две стороны листа спиной друг к другу. */
+   Лист (.flip) — половина разворота из вложенных полосок (.flip-seg):
+   первая, у корешка, поворачивается на 180°, каждая следующая — ещё чуть-чуть
+   относительно предыдущей, поэтому лист изгибается. У полоски лицо и
+   оборот — куски двух страниц спиной друг к другу. */
 .flip-stage {
   position: absolute;
   top: 0;
   left: 0;
   width: 0;
-  perspective-origin: 0 50%;
-  --flip-time: 650ms;
+  perspective-origin: 0 40%;
+  pointer-events: none;
+  --flip-time: 900ms;
 }
 
-.flip {
+.flip,
+.flip-seg {
   position: absolute;
   top: 0;
   height: 100%;
   transform-style: preserve-3d;
-  pointer-events: none;
+}
+
+.flip-next .flip {
+  left: 0;
+}
+
+.flip-prev .flip {
+  right: 0;
+}
+
+.flip-seg {
   animation-duration: var(--flip-time);
-  animation-timing-function: cubic-bezier(0.45, 0.05, 0.3, 1);
   animation-fill-mode: forwards;
 }
 
-.flip-next {
+.flip-next .flip-seg {
   transform-origin: left center;
-  animation-name: flip-next;
 }
 
-.flip-prev {
+.flip-prev .flip-seg {
   transform-origin: right center;
-  animation-name: flip-prev;
 }
 
-@keyframes flip-next {
+/* Полоска у корешка: весь поворот — медленно поднимается, быстрее проходит
+   середину и мягко ложится. Положение полосок — в Notebook.tsx */
+.flip-next .flip > .flip-seg {
+  animation-name: flip-base-next;
+  animation-timing-function: cubic-bezier(0.37, 0, 0.2, 1);
+}
+
+.flip-prev .flip > .flip-seg {
+  animation-name: flip-base-prev;
+  animation-timing-function: cubic-bezier(0.37, 0, 0.2, 1);
+}
+
+/* Следующие полоски — изгиб: сначала внешний край поднимается раньше,
+   ложась — отстаёт, в конце лист снова ровный */
+.flip-next .flip-seg .flip-seg {
+  animation-name: flip-curl-next;
+  animation-timing-function: ease-in-out;
+}
+
+.flip-prev .flip-seg .flip-seg {
+  animation-name: flip-curl-prev;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes flip-base-next {
   to {
     transform: rotateY(-180deg);
   }
 }
 
-@keyframes flip-prev {
+@keyframes flip-base-prev {
   to {
     transform: rotateY(180deg);
+  }
+}
+
+@keyframes flip-curl-next {
+  0% {
+    transform: rotateY(0deg);
+  }
+  25% {
+    transform: rotateY(-9deg);
+  }
+  50% {
+    transform: rotateY(-4deg);
+  }
+  80% {
+    transform: rotateY(6deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}
+
+@keyframes flip-curl-prev {
+  0% {
+    transform: rotateY(0deg);
+  }
+  25% {
+    transform: rotateY(9deg);
+  }
+  50% {
+    transform: rotateY(4deg);
+  }
+  80% {
+    transform: rotateY(-6deg);
+  }
+  100% {
+    transform: rotateY(0deg);
   }
 }
 
@@ -122,12 +193,23 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background-color: var(--paper);
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
 
-/* Тень у сгиба на стороне листа — как у бумаги (Paper.css): 150 px мира */
+.flip-back {
+  transform: rotateY(180deg);
+}
+
+/* Вся страница целиком, сдвинутая так, чтобы в полоску попал её кусок */
+.flip-face-page {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background-color: var(--paper);
+}
+
+/* Тень у сгиба на странице — как у бумаги (Paper.css): 150 px мира */
 .flip-face-right {
   background-image: linear-gradient(to right, var(--fold-shadow), transparent 150px);
 }
@@ -136,28 +218,34 @@
   background-image: linear-gradient(to left, var(--fold-shadow), transparent 150px);
 }
 
-.flip-back {
-  transform: rotateY(180deg);
-}
-
-/* Свет на листе: темнеет, пока встаёт ребром, и светлеет, ложась */
-.flip-face::after {
+/* Свет на листе: лицо темнеет, пока встаёт ребром, оборот светлеет, ложась.
+   Тень — один плавный градиент на всю страницу (а не своя у каждой
+   полоски, иначе лист полосатый): у корешка светлее, к изогнутому
+   внешнему краю темнее */
+.flip-face-page::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgb(0 0 0 / 0.22);
   pointer-events: none;
   animation-duration: var(--flip-time);
-  animation-timing-function: linear;
+  animation-timing-function: ease-in-out;
   animation-fill-mode: forwards;
 }
 
-.flip-front::after {
+.flip-face-right::after {
+  background: linear-gradient(to right, rgb(60 40 10 / 0.08), rgb(60 40 10 / 0.24));
+}
+
+.flip-face-left::after {
+  background: linear-gradient(to left, rgb(60 40 10 / 0.08), rgb(60 40 10 / 0.24));
+}
+
+.flip-front .flip-face-page::after {
   opacity: 0;
   animation-name: flip-shade-front;
 }
 
-.flip-back::after {
+.flip-back .flip-face-page::after {
   opacity: 1;
   animation-name: flip-shade-back;
 }
@@ -178,6 +266,71 @@
   }
 }
 
+/* Тени на страницах под листом: от поднимающегося листа — на той странице,
+   с которой он уходит (сжимается к корешку), и от опускающегося — на той,
+   куда ложится (растёт от корешка). */
+.flip-cast {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  opacity: 0;
+  animation-duration: var(--flip-time);
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: forwards;
+}
+
+.flip-next .flip-cast-under,
+.flip-prev .flip-cast-dest {
+  left: 0;
+  transform-origin: left center;
+  background: linear-gradient(to right, rgb(60 40 10 / 0.28), transparent 75%);
+}
+
+.flip-next .flip-cast-dest,
+.flip-prev .flip-cast-under {
+  right: 0;
+  transform-origin: right center;
+  background: linear-gradient(to left, rgb(60 40 10 / 0.28), transparent 75%);
+}
+
+.flip-cast-under {
+  animation-name: flip-cast-under;
+}
+
+.flip-cast-dest {
+  animation-name: flip-cast-dest;
+}
+
+@keyframes flip-cast-under {
+  0% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+  30% {
+    opacity: 1;
+  }
+  60%,
+  100% {
+    opacity: 0;
+    transform: scaleX(0.15);
+  }
+}
+
+@keyframes flip-cast-dest {
+  0%,
+  45% {
+    opacity: 0;
+    transform: scaleX(0.15);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flip-stage {
     --flip-time: 1ms;
@@ -186,7 +339,9 @@
 
 /* --- Поверх полотна, в координатах экрана --- */
 
-/* Стрелки внизу экрана — перелистнуть */
+/* Стрелки внизу экрана — перелистнуть. Светлые и лёгкие: полупрозрачная
+   бумага с размытием того, что под ней, и бледные чернила — в тёмной теме
+   тоже (бумага там светлая) */
 .page-arrow {
   position: fixed;
   bottom: calc(16px + var(--safe-bottom));
@@ -196,11 +351,13 @@
   width: 48px;
   height: 48px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid rgb(60 40 10 / 0.08);
   border-radius: 50%;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgb(60 40 10 / 0.12);
+  color: var(--ink-muted);
   cursor: pointer;
 }
 

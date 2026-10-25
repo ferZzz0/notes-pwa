@@ -229,17 +229,27 @@ export function Canvas({ ref, home, edges = {}, locked = false, background, onFr
     const toWorld = (p: Point): Point => ({ x: (p.x - cam.x) / cam.scale, y: (p.y - cam.y) / cam.scale });
 
     apiRef.current = {
-      goHome: home => animateTo(homeCamera(home)),
+      goHome: home => {
+        measure();
+        return animateTo(homeCamera(home));
+      },
       visibleRect: () => ({ x: -cam.x / cam.scale, y: -cam.y / cam.scale, w: size.w / cam.scale, h: size.h / cam.scale }),
       panBy: (dx, dy) => void animateTo({ ...cam, x: cam.x + dx, y: cam.y + dy }, 250)
     };
 
-    const resize = () => {
+    // Размер экрана прямо сейчас (а не из последнего ResizeObserver): при
+    // повороте телефона событие ориентации приходит раньше, чем он
+    const measure = () => {
       const prev = size;
       size = { w: viewport.clientWidth, h: viewport.clientHeight };
-      if (size.w === prev.w && size.h === prev.h) return;
       const r = viewport.getBoundingClientRect();
       origin = { x: r.left, y: r.top };
+      return prev;
+    };
+
+    const resize = () => {
+      const prev = measure();
+      if (size.w === prev.w && size.h === prev.h) return;
       if (prev.w === 0) {
         // Первый показ — начало листа, сразу, до первой отрисовки
         set(homeCamera());

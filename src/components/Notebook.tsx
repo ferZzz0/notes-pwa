@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import {
   loadPage,
@@ -12,10 +12,9 @@ import {
   type Block,
   type Spreads
 } from '../notes';
-import { loadSettings, saveSettings, type Settings } from '../settings';
+import { usePortrait } from '../orientation';
 import { Canvas, type CanvasHandle, type Camera, type Edges, type Home, type Point, type Rect, type Size } from './Canvas';
 import { Paper, type PaperDisplay, type PaperHandle } from './Paper';
-import { SettingsButton } from './SettingsButton';
 import { TextBlock } from './TextBlock';
 import './Notebook.css';
 
@@ -29,8 +28,7 @@ type Flip = { dir: FlipDir; from: number; to: number; sheet: Rect };
 // Начало листа. Разворот: корешок посередине, по ширине — две страницы по
 // 850 px мира (как у настоящей тетради, 170 мм). Одна страница: её середина
 // посередине экрана. Край листа — на 64 px ниже верха экрана при любом
-// масштабе: над ним, на столе, помещается шестерёнка настроек. На узком
-// экране масштаб не мельче 0.4 — чтобы текст читался.
+// масштабе. На узком экране масштаб не мельче 0.4 — чтобы текст читался.
 const PAGE_WIDTH = 850;
 const homeOf = (display: PaperDisplay): Home =>
   display === 'both'
@@ -45,6 +43,11 @@ const MIN_TEXT_WIDTH = 200;
 const SPINE_GAP = 24; // текст левой страницы не подходит к корешку ближе
 // Новый текст встаёт так, чтобы точка касания пришлась на первую строку
 const NEW_TEXT_OFFSET = { x: 12, y: 30 };
+// Переворачиваемый лист — из полосок, каждая чуть поворачивается
+// относительно соседней: так лист изгибается, как настоящая бумага.
+// Полоски немного заходят друг на друга, чтобы между ними не светились швы
+const FLIP_STRIPS = 6;
+const FLIP_OVERLAP = 3;
 
 const dateFormat = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long' });
 
@@ -59,27 +62,28 @@ const blurActive = () => {
 
 // Раскрытая тетрадь с бесконечными листами. Разворот s (с 0) — страницы
 // 2s+1 (слева от корешка, x < 0) и 2s+2 (справа); бумага бесконечна вниз и
-// в стороны. В настройках — разворот целиком или одна страница. Двойное
-// касание по бумаге — написать в этом месте. Листают стрелками внизу экрана
-// (или на клавиатуре): на развороте камера летит к началу листа, и половина
-// листа переворачивается вокруг корешка. На одной странице к соседней
-// странице того же разворота камера перелетает через корешок, а к другому
-// развороту — переворот листа и перелёт вслед за ним.
+// в стороны. Вертикально видно одну страницу, горизонтально — разворот.
+// Двойное касание по бумаге — написать в этом месте. Листают стрелками внизу
+// экрана (или на клавиатуре): камера летит к началу листа, и половина листа
+// переворачивается вокруг корешка. На одной странице к соседней странице
+// того же разворота камера перелетает через корешок, а к другому развороту —
+// переворот листа и перелёт вслед за ним.
 export function Notebook() {
   const canvas = useRef<CanvasHandle>(null);
   const paper = useRef<PaperHandle>(null);
   const flipDone = useRef<(() => void) | null>(null);
   const [spreads, setSpreads] = useState(loadSpreads);
-  const [settings, setSettings] = useState(loadSettings);
   // Открытая страница; на развороте — любая из двух его страниц
   const [page, setPage] = useState(loadPage);
+  const portrait = usePortrait();
+  // Вид меняется вслед за ориентацией, но после перелёта (см. эффект ниже)
+  const [single, setSingle] = useState(portrait);
   const [flip, setFlip] = useState<Flip | null>(null);
   const [turning, setTurning] = useState(false);
-  // Во время перехода видно обе страницы, даже в режиме одной
+  // Во время перехода видно обе страницы, и края одной страницы не мешают камере
   const [transit, setTransit] = useState(false);
   const [farFromHome, setFarFromHome] = useState(false);
 
-  const single = settings.pages === 1;
   const spread = spreadOf(page);
   const side = sideOf(page);
   const display: PaperDisplay = single && !transit ? side : 'both';
@@ -155,6 +159,21 @@ export function Notebook() {
     return () => vv.removeEventListener('resize', onResize);
   }, []);
 
+  // Повернули телефон: одна страница ↔ разворот. Ждём кадр, чтобы полотно
+  // узнало новый размер экрана, и летим к началу нового вида
+  useEffect(() => {
+    if (portrait === single) return;
+    const frame = requestAnimationFrame(async () => {
+      flushSync(() => {
+        setTransit(true);
+        setSingle(portrait);
+      });
+      await canvas.current?.goHome();
+      flushSync(() => setTransit(false));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [portrait]);
+
   // Переворот половины листа вокруг корешка; промис — когда лист лёг
   const turnSheet = (dir: FlipDir, from: number, to: number) => {
     const v = canvas.current!.visibleRect();
@@ -209,24 +228,6 @@ export function Notebook() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  // Сменили, сколько листов на экране, — летим к началу нового вида (пока
-  // летим, видно обе страницы и края одной страницы не мешают камере)
-  const changeSettings = async (next: Settings) => {
-    if (turning) return;
-    blurActive();
-    saveSettings(next);
-    flushSync(() => {
-      setSettings(next);
-      setTurning(true);
-      setTransit(true);
-    });
-    await canvas.current?.goHome();
-    flushSync(() => {
-      setTransit(false);
-      setTurning(false);
-    });
-  };
-
   // Кнопка «К началу листа» — когда край листа или середина начала листа
   // далеко за экраном
   const onSettle = (cam: Camera, size: Size) =>
@@ -270,30 +271,18 @@ export function Notebook() {
         {display !== 'left' && pageSide(underRight, 'right')}
 
         {flip && (
-          <div
-            className="flip-stage"
-            style={{ height: flip.sheet.h, perspective: `${Math.max(flip.sheet.w, flip.sheet.h) * 2.5}px` }}
-          >
-            <div
-              className={`flip flip-${flip.dir}`}
-              style={{ left: flip.sheet.x, width: flip.sheet.w }}
-              onAnimationEnd={e => {
-                if (e.target !== e.currentTarget) return;
-                flipDone.current?.();
-                flipDone.current = null;
-              }}
-            >
-              {/* Лицо — половина, которую листаем; оборот — та, что ляжет на
-                  другую сторону. Сдвиг переводит координаты мира в координаты
-                  стороны листа (её левый край — 0) */}
-              <div className={`flip-face flip-front flip-face-${flip.dir === 'next' ? 'right' : 'left'}`}>
-                {flip.dir === 'next' ? pageSide(flip.from, 'right') : pageSide(flip.from, 'left', flip.sheet.w)}
-              </div>
-              <div className={`flip-face flip-back flip-face-${flip.dir === 'next' ? 'left' : 'right'}`}>
-                {flip.dir === 'next' ? pageSide(flip.to, 'left', flip.sheet.w) : pageSide(flip.to, 'right')}
-              </div>
-            </div>
-          </div>
+          <FlipSheet
+            flip={flip}
+            onDone={() => {
+              flipDone.current?.();
+              flipDone.current = null;
+            }}
+            // Лицо листа — половина, которую листаем; оборот — та, что ляжет
+            // на другую сторону. Сдвиг переводит координаты мира в
+            // координаты листа (его левый край — 0)
+            front={flip.dir === 'next' ? pageSide(flip.from, 'right') : pageSide(flip.from, 'left', flip.sheet.w)}
+            back={flip.dir === 'next' ? pageSide(flip.to, 'left', flip.sheet.w) : pageSide(flip.to, 'right')}
+          />
         )}
       </Canvas>
 
@@ -314,8 +303,74 @@ export function Notebook() {
           )}
         </>
       )}
-      <SettingsButton settings={settings} onChange={next => void changeSettings(next)} />
     </>
+  );
+}
+
+type FlipSheetProps = {
+  flip: Flip;
+  front: ReactNode;
+  back: ReactNode;
+  onDone: () => void;
+};
+
+// Переворачиваемый лист. Сцена — у корешка, с перспективой. Лист собран из
+// полосок, вложенных друг в друга: первая (у корешка) поворачивается на 180°,
+// каждая следующая — ещё чуть-чуть относительно предыдущей. Поэтому внешний
+// край листа поднимается первым, а ложась, немного отстаёт — лист изгибается.
+// У каждой полоски лицо и оборот — свои куски тех же страниц. На страницах
+// под листом — тени: от поднимающегося листа и от опускающегося.
+function FlipSheet({ flip, front, back, onDone }: FlipSheetProps) {
+  const { dir, sheet } = flip;
+  const strip = sheet.w / FLIP_STRIPS;
+
+  // Полоска i: шаг — strip, ширина — чуть больше (перекрытие); кусок
+  // страницы в ней задаётся сдвигом от края, поэтому перекрытие его не сбивает
+  const segment = (i: number): ReactNode => (
+    <div
+      className="flip-seg"
+      style={{ width: strip + FLIP_OVERLAP, [dir === 'next' ? 'left' : 'right']: i === 0 ? 0 : strip } as CSSProperties}
+      onAnimationEnd={
+        i === 0
+          ? e => {
+              if (e.target === e.currentTarget) onDone();
+            }
+          : undefined
+      }
+    >
+      {/* Кусок страницы: вся страница, сдвинутая так, чтобы в полоску попала
+          её часть. У оборота куски идут в обратном порядке */}
+      <div className="flip-face flip-front">
+        <div
+          className={`flip-face-page flip-face-${dir === 'next' ? 'right' : 'left'}`}
+          style={{ width: sheet.w, [dir === 'next' ? 'left' : 'right']: -i * strip }}
+        >
+          {front}
+        </div>
+      </div>
+      <div className="flip-face flip-back">
+        <div
+          className={`flip-face-page flip-face-${dir === 'next' ? 'left' : 'right'}`}
+          style={{ width: sheet.w, [dir === 'next' ? 'right' : 'left']: -i * strip }}
+        >
+          {back}
+        </div>
+      </div>
+      {i + 1 < FLIP_STRIPS && segment(i + 1)}
+    </div>
+  );
+
+  return (
+    <div
+      className={`flip-stage flip-${dir}`}
+      style={{ height: sheet.h, perspective: `${Math.max(sheet.w, sheet.h) * 2}px` }}
+    >
+      <div className="flip-cast flip-cast-under" style={{ width: sheet.w }} />
+      <div className="flip-cast flip-cast-dest" style={{ width: sheet.w }} />
+      <div className="flip" style={{ width: sheet.w }}>
+        {segment(0)}
+      </div>
+    </div>
   );
 }
 
@@ -360,7 +415,7 @@ function PageSide({ spread, side, blocks, created, showDate, face, offsetX, onTe
           <h1>Мои заметки</h1>
           <p>Двойное касание по бумаге — написать в этом месте.</p>
           <p>Лист бесконечный: двигайте его пальцем во все стороны, приближайте двумя пальцами.</p>
-          <p>Стрелки внизу экрана — перелистнуть. Шестерёнка — настройки.</p>
+          <p>Стрелки внизу экрана — перелистнуть. Вертикально видно одну страницу, горизонтально — разворот.</p>
         </div>
       )}
       {blocks
