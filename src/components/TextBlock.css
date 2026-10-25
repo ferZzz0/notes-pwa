@@ -3,7 +3,6 @@
    другим. Размеры — в px мира полотна. */
 .text-block {
   position: absolute;
-  width: 640px;
   min-height: 52px;
   margin: 0;
   padding: 0;

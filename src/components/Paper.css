@@ -12,16 +12,16 @@
 .paper-spine {
   position: absolute;
   top: 0;
+  left: 0;
   will-change: transform;
 }
 
 .paper-sheet {
-  left: 0;
-  width: 100%;
+  width: 200%;
   height: 200%;
   background: var(--paper);
-  /* Тень верхнего края листа на столе */
-  box-shadow: 0 -3px 10px -2px rgb(0 0 0 / 0.25);
+  /* Тень края листа на столе — сверху, а для одной страницы и у корешка */
+  box-shadow: 0 0 10px -2px rgb(0 0 0 / 0.25);
 }
 
 /* Тень у сгиба: 150 px мира по обе стороны корешка; ширину задаёт масштаб
@@ -34,9 +34,24 @@
   background: linear-gradient(to right, transparent, var(--fold-shadow) 50%, transparent);
 }
 
+/* Одна страница — тень только на её стороне */
+.paper-left .paper-fold {
+  background: linear-gradient(to right, transparent, var(--fold-shadow) 50%, transparent 50%);
+}
+
+.paper-right .paper-fold {
+  background: linear-gradient(to right, transparent 50%, var(--fold-shadow) 50%, transparent);
+}
+
 .paper-spine {
   left: -1px;
   width: 2px;
   height: 100%;
   background: var(--fold-line);
+}
+
+/* У одной страницы вместо корешка — её край (тень листа на столе) */
+.paper-left .paper-spine,
+.paper-right .paper-spine {
+  display: none;
 }

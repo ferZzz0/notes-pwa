@@ -28,12 +28,20 @@
   left: 40px;
 }
 
-/* Дата, когда на развороте начали писать (на пустом — сегодня, бледно) */
+/* Дата, когда на развороте начали писать (на пустом — сегодня, бледно):
+   на правой странице, а если видна одна левая — на ней, тоже у корешка */
 .page-date {
-  left: 120px;
   font-size: 36px;
   font-weight: 600;
   color: var(--ink);
+}
+
+.page-date-right {
+  left: 120px;
+}
+
+.page-date-left {
+  right: 120px;
 }
 
 .page-date-empty {
@@ -62,26 +70,6 @@
 
 .title-note p {
   margin: 0 0 20px;
-}
-
-/* Скрепки на корешке у верха листа */
-.staple {
-  position: absolute;
-  left: -4px;
-  width: 8px;
-  height: 72px;
-  border-radius: 4px;
-  background: linear-gradient(to right, #8d949c, #e9edf1 45%, #a1a8b0);
-  box-shadow: 0 2px 2px rgb(0 0 0 / 0.25);
-  pointer-events: none;
-}
-
-.staple-top {
-  top: 180px;
-}
-
-.staple-bottom {
-  top: 560px;
 }
 
 /* --- Переворот листа ---
@@ -198,57 +186,44 @@
 
 /* --- Поверх полотна, в координатах экрана --- */
 
-/* Загнутый уголок листа в нижнем углу экрана — перелистнуть. Кнопка крупнее
-   рисунка, чтобы в неё легко попасть пальцем */
-.flip-corner {
+/* Стрелки внизу экрана — перелистнуть */
+.page-arrow {
   position: fixed;
-  bottom: var(--safe-bottom);
+  bottom: calc(16px + var(--safe-bottom));
   z-index: 5;
-  width: 72px;
-  height: 72px;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
   padding: 0;
-  border: none;
-  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--ink);
   cursor: pointer;
 }
 
-.flip-corner-next {
-  right: var(--safe-right);
+.page-arrow-next {
+  right: calc(16px + var(--safe-right));
 }
 
-.flip-corner-prev {
-  left: var(--safe-left);
+.page-arrow-prev {
+  left: calc(16px + var(--safe-left));
 }
 
-/* По диагонали — сгиб: снаружи видна страница под листом, внутри —
-   загнутый кусок листа (его оборот) с тенью */
-.flip-corner::before {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  width: 44px;
-  height: 44px;
-  filter: drop-shadow(0 0 4px rgb(0 0 0 / 0.2));
-  transition:
-    width 0.2s ease-out,
-    height 0.2s ease-out;
+.page-arrow svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.flip-corner-next::before {
-  right: 0;
-  background: linear-gradient(to top left, var(--paper-under) 50%, var(--paper-flap) 50%);
-}
-
-.flip-corner-prev::before {
-  left: 0;
-  background: linear-gradient(to top right, var(--paper-under) 50%, var(--paper-flap) 50%);
-}
-
-@media (hover: hover) {
-  .flip-corner:hover::before {
-    width: 56px;
-    height: 56px;
-  }
+.page-arrow:active {
+  transform: scale(0.94);
 }
 
 .home-button {

@@ -4,6 +4,8 @@ import './TextBlock.css';
 
 type Props = {
   block: Block;
+  // Ширина в px мира (у левой страницы — чтобы текст не заходил за корешок)
+  width: number;
   // Текст «картинкой» (на листе, который переворачивается): без поля ввода
   face?: boolean;
   onText?: (id: string, text: string) => void;
@@ -13,8 +15,8 @@ type Props = {
 };
 
 // Текст в любом месте бесконечного листа — рукописью, без рамок. Поле
-// растёт вниз вместе с текстом; ширина постоянная, строки переносятся.
-export function TextBlock({ block, face = false, onText, onBlur, onFocus, onInput }: Props) {
+// растёт вниз вместе с текстом; строки переносятся по ширине width.
+export function TextBlock({ block, width, face = false, onText, onBlur, onFocus, onInput }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useLayoutEffect(() => {
@@ -22,9 +24,9 @@ export function TextBlock({ block, face = false, onText, onBlur, onFocus, onInpu
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
-  }, [block.text]);
+  }, [block.text, width]);
 
-  const style = { left: block.x, top: block.y };
+  const style = { left: block.x, top: block.y, width };
 
   if (face) {
     return (

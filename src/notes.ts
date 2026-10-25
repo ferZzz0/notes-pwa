@@ -22,7 +22,8 @@ export type Spread = {
 export type Spreads = Record<number, Spread>;
 
 const SPREADS_KEY = 'notes-pwa:spreads';
-const SPREAD_KEY = 'notes-pwa:spread';
+const PAGE_KEY = 'notes-pwa:page';
+const OLD_SPREAD_KEY = 'notes-pwa:spread';
 // Прежние форматы: текст на каждую страницу целиком, а ещё раньше — одна
 // заметка (она была справа на первом развороте, то есть страница 2)
 const OLD_PAGES_KEY = 'notes-pwa:pages';
@@ -105,12 +106,19 @@ export function saveSpreads(spreads: Spreads): void {
   write(SPREADS_KEY, spreads);
 }
 
-// Открытый разворот — чтобы после перезапуска вернуться туда же
-export function loadSpread(): number {
-  const n = read<number>(SPREAD_KEY, 0);
-  return Number.isInteger(n) && n >= 0 ? n : 0;
+// Открытая страница (с 1) — чтобы после перезапуска вернуться туда же.
+// Раньше хранили открытый разворот: разворот s — это страница 2s+1.
+export function loadPage(): number {
+  const page = read<number | null>(PAGE_KEY, null);
+  if (Number.isInteger(page) && page! >= 1) return page!;
+  const spread = read<number>(OLD_SPREAD_KEY, 0);
+  return Number.isInteger(spread) && spread >= 0 ? 2 * spread + 1 : 1;
 }
 
-export function saveSpread(n: number): void {
-  write(SPREAD_KEY, n);
+export function savePage(n: number): void {
+  write(PAGE_KEY, n);
 }
+
+// Разворот и сторона страницы n (с 1): нечётные — слева, чётные — справа
+export const spreadOf = (n: number) => Math.floor((n - 1) / 2);
+export const sideOf = (n: number): 'left' | 'right' => (n % 2 === 1 ? 'left' : 'right');

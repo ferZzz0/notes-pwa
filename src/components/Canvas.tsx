@@ -7,9 +7,17 @@ export type Point = { x: number; y: number };
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Size = { w: number; h: number };
 
+// Стартовый вид: точка мира (x, y) — посередине по горизонтали и на top
+// экранных px ниже верха экрана (под вырезом камеры); по ширине помещается
+// width px мира, но масштаб не мельче minScale
+export type Home = { x: number; y: number; top: number; width: number; minScale: number };
+// Края мира (координаты мира): дальше доли MAX_EDGE_GAP экрана внутрь
+// экрана их не затащить. Без края — в ту сторону мир бесконечен
+export type Edges = { top?: number; left?: number; right?: number };
+
 export type CanvasHandle = {
-  // Плавно вернуться к стартовому виду; промис — когда долетели
-  goHome: () => Promise<void>;
+  // Плавно перелететь к стартовому виду (или к указанному); промис — когда долетели
+  goHome: (home?: Home) => Promise<void>;
   // Какая часть мира сейчас на экране
   visibleRect: () => Rect;
   // Плавно сдвинуть камеру на (dx, dy) экранных px
@@ -18,9 +26,8 @@ export type CanvasHandle = {
 
 type Props = {
   ref?: Ref<CanvasHandle>;
-  // Стартовый вид: точка мира (x, y) — середина верхнего края кадра; по
-  // ширине помещается width px мира, но масштаб не мельче minScale
-  home: { x: number; y: number; width: number; minScale: number };
+  home: Home;
+  edges?: Edges;
   // Пока true, жесты не двигают камеру (например, во время переворота листа)
   locked?: boolean;
   // Рисуется под миром, в координатах экрана (например, бумага)
@@ -37,8 +44,8 @@ type Props = {
 const FIT_PADDING = 16; // отступ от краёв экрана для стартового вида
 const MIN_SCALE = 0.12;
 const MAX_SCALE = 2.5; // до 2.5 экранных px на px мира
-// Верх мира (y = 0, верхний край листа) нельзя опустить ниже этой доли экрана
-const MAX_TOP_GAP = 0.4;
+// Край мира нельзя затащить внутрь экрана дальше этой доли экрана
+const MAX_EDGE_GAP = 0.4;
 const TAP_SLOP = 8; // сдвиг пальца, после которого это уже не тап, а перелёт
 const DOUBLE_TAP_MS = 300;
 const FRICTION = 0.94; // инерция: доля скорости, остающаяся за 16 мс
@@ -56,23 +63,23 @@ const isInteractive = (t: EventTarget | null) => matches(t, 'textarea, input, bu
 
 // Бесконечное полотно, над которым «летают»: одним пальцем (или мышью)
 // мир двигается, после броска скользит по инерции; щипок, Ctrl/⌘ + колесо
-// или щипок на тачпаде — масштаб. Мир ограничен только сверху (y = 0).
+// или щипок на тачпаде — масштаб. Мир ограничен только краями из edges.
 // Все жесты обрабатываем сами (touch-action: none), а камеру пишем прямо в
 // стиль — без перерисовки React на каждом кадре. Элементы с [data-no-pan]
 // полотно не трогает: нажатие на них — их собственное.
-export function Canvas({ ref, home, locked = false, background, onFrame, onSettle, onDoubleTap, children }: Props) {
+export function Canvas({ ref, home, edges = {}, locked = false, background, onFrame, onSettle, onDoubleTap, children }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const insetsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<CanvasHandle | null>(null);
   // Свежие пропсы для обработчиков, подписанных один раз
-  const props = useRef({ home, locked, onFrame, onSettle, onDoubleTap });
-  props.current = { home, locked, onFrame, onSettle, onDoubleTap };
+  const props = useRef({ home, edges, locked, onFrame, onSettle, onDoubleTap });
+  props.current = { home, edges, locked, onFrame, onSettle, onDoubleTap };
 
   useImperativeHandle(
     ref,
     () => ({
-      goHome: () => apiRef.current?.goHome() ?? Promise.resolve(),
+      goHome: h => apiRef.current?.goHome(h) ?? Promise.resolve(),
       visibleRect: () => apiRef.current!.visibleRect(),
       panBy: (dx, dy) => apiRef.current?.panBy(dx, dy)
     }),
@@ -141,20 +148,24 @@ export function Canvas({ ref, home, locked = false, background, onFrame, onSettl
       };
     };
 
-    const homeCamera = (): Camera => {
-      const { x, y, width, minScale } = props.current.home;
+    const homeCamera = (home = props.current.home): Camera => {
+      const { x, y, top, width, minScale } = home;
       const i = insets();
       const aw = size.w - i.left - i.right - 2 * FIT_PADDING;
       const scale = clamp(aw / width, minScale, MAX_SCALE);
-      return { scale, x: size.w / 2 - x * scale, y: i.top + FIT_PADDING - y * scale };
+      return { scale, x: size.w / 2 - x * scale, y: i.top + top - y * scale };
     };
 
     const clampScale = (s: number) => clamp(s, MIN_SCALE, MAX_SCALE);
 
-    // Над верхним краем мира — не дальше MAX_TOP_GAP экрана; вниз и в
-    // стороны мир бесконечен
+    // Края мира (edges) — не дальше MAX_EDGE_GAP экрана внутрь экрана
     const set = (c: Camera) => {
-      cam = { scale: c.scale, x: c.x, y: Math.min(c.y, size.h * MAX_TOP_GAP) };
+      const { top, left, right } = props.current.edges;
+      let { x, y } = c;
+      if (top !== undefined) y = Math.min(y, size.h * MAX_EDGE_GAP - top * c.scale);
+      if (left !== undefined) x = Math.min(x, size.w * MAX_EDGE_GAP - left * c.scale);
+      if (right !== undefined) x = Math.max(x, size.w * (1 - MAX_EDGE_GAP) - right * c.scale);
+      cam = { scale: c.scale, x, y };
       apply();
     };
 
@@ -218,7 +229,7 @@ export function Canvas({ ref, home, locked = false, background, onFrame, onSettl
     const toWorld = (p: Point): Point => ({ x: (p.x - cam.x) / cam.scale, y: (p.y - cam.y) / cam.scale });
 
     apiRef.current = {
-      goHome: () => animateTo(homeCamera()),
+      goHome: home => animateTo(homeCamera(home)),
       visibleRect: () => ({ x: -cam.x / cam.scale, y: -cam.y / cam.scale, w: size.w / cam.scale, h: size.h / cam.scale }),
       panBy: (dx, dy) => void animateTo({ ...cam, x: cam.x + dx, y: cam.y + dy }, 250)
     };
