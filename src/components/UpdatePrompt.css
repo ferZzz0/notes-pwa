@@ -1,8 +1,6 @@
 .update-prompt {
   position: fixed;
   left: 50%;
-  /* fixed внутри повёрнутого .app-root отсчитывается от него самого,
-     поэтому плашка поворачивается вместе с приложением */
   bottom: calc(16px + var(--safe-bottom));
   transform: translateX(-50%);
   width: max-content;

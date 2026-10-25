@@ -28,10 +28,8 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        // Только горизонтально. Работает в установленном приложении на
-        // Android; iOS ключ игнорирует — там в вертикали приложение само
-        // рисуется повёрнутым на 90° (.app-root в App.css).
-        orientation: 'landscape',
+        // Ориентацию не фиксируем: вертикально — режим чтения,
+        // горизонтально — режим письма (src/orientation.ts)
         background_color: '#fffdf6',
         theme_color: '#fffdf6',
         icons: [
