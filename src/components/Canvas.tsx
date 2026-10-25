@@ -69,8 +69,9 @@ type Props = {
   // правый клик — точка мира и точка экрана (px полотна); тапа после него нет
   onLongPress?: (world: Point, screen: Point, touch: boolean) => void;
   // Смахнули лист вбок там, где он дальше не едет (лист по экрану или
-  // камера упёрлась в его край): палец влево — 'next', вправо — 'prev'
-  onSwipe?: (dir: 'next' | 'prev') => void;
+  // камера упёрлась в его край): палец влево — 'next', вправо — 'prev';
+  // start — где палец лёг (px полотна), width — ширина полотна
+  onSwipe?: (dir: 'next' | 'prev', start: Point, width: number) => void;
   children: ReactNode;
 };
 
@@ -250,6 +251,25 @@ export function Canvas({
         if (!fixed.right) x1 += w * steps(x1, content.x + content.w, w);
         if (!fixed.top) y0 -= hh * steps(-y0, -content.y, hh);
         y1 += hh * steps(y1, content.y + content.h, hh);
+        // Лист — всегда той же формы, что экран (просьба автора): вырос вбок
+        // — дорастает вниз на столько же экранов, и наоборот. Иначе
+        // отдалить его не давала бы короткая сторона. Вбок — поровну в
+        // свободные стороны (у разворота — в обе, корешок посередине)
+        const n = Math.max(Math.round((x1 - x0) / w), Math.round((y1 - y0) / hh));
+        const moreX = n * w - (x1 - x0);
+        if (moreX > 0) {
+          const share = fixed.left || fixed.right ? 1 : 0.5;
+          if (!fixed.left) x0 -= moreX * share;
+          if (!fixed.right) x1 += moreX * share;
+        }
+        const moreY = n * hh - (y1 - y0);
+        if (moreY > 0) {
+          if (fixed.top) y1 += moreY;
+          else {
+            y0 -= moreY / 2;
+            y1 += moreY / 2;
+          }
+        }
       }
       y1 += extraBottom / cam.scale;
       return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
@@ -334,7 +354,12 @@ export function Canvas({
         const decay = FRICTION ** (dt / 16);
         vx *= decay;
         vy *= decay;
+        const before = cam;
         set({ ...cam, x: cam.x + vx * dt, y: cam.y + vy * dt });
+        // Упёрлись в край листа по оси — по ней скорость гасим сразу: иначе
+        // «полёт» на месте шёл бы ещё секунду (и кадры — onFrame — тоже)
+        if (cam.x === before.x) vx = 0;
+        if (cam.y === before.y) vy = 0;
         frame = Math.hypot(vx, vy) > MIN_SPEED ? requestAnimationFrame(step) : 0;
       };
       frame = requestAnimationFrame(step);
@@ -549,7 +574,7 @@ export function Canvas({
           Math.abs(cam.x - downCamX) < Math.abs(dx) * SWIPE_SLIP &&
           props.current.onSwipe
         ) {
-          props.current.onSwipe(dx < 0 ? 'next' : 'prev');
+          props.current.onSwipe(dx < 0 ? 'next' : 'prev', downAt, size.w);
           return;
         }
         // Бросок: скорость по движению за последние 100 мс

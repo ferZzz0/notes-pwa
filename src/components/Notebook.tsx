@@ -89,6 +89,9 @@ const SNAP_SCALE = 0.06;
 const TURN_MS = { spread: 340, single: 850 };
 // Перелёт к началу листа перед перелистыванием (если лист приближен)
 const TURN_HOME_MS = 200;
+// Смахивание листает, если начато в этой доле экрана у края, к которому
+// листаем (просьба автора: «с 1/3 экрана, ближней к странице»)
+const TURN_EDGE = 1 / 3;
 // Перед тем как открыть клавиатуру, строку с курсором поднимаем не ниже этой
 // доли экрана, а лист удлиняем на столько (клавиатура iPhone с полосой над
 // ней — до половины экрана и больше в горизонтали)
@@ -96,6 +99,8 @@ const CARET_ZONE = 0.3;
 const KEYBOARD_GUESS = 0.6;
 // Столько держим этот запас — пока клавиатура открывается
 const TYPING_RESERVE_MS = 1000;
+// Камера не двигалась столько (мс) — курсор в надписи ставим на место
+const CARET_SETTLE_MS = 120;
 // Новое фото — не шире этой доли видимой части листа и не выше этой
 const PHOTO_SHARE = { w: 0.55, h: 0.6 };
 // Примерный размер нового стикера (мир) — чтобы поставить его посередине экрана
@@ -109,6 +114,8 @@ const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform 
 // iPhone: столько ждём после долгого нажатия системное меню (поле под
 // бумагой получает фокус); не дождались — показываем свой пузырёк
 const NATIVE_MENU_WAIT = 600;
+// Высота строки (и курсора) в этом поле, px экрана (Notebook.css: .paste-layer)
+const PASTE_CARET = 20;
 // «Отменить»: столько последних действий помним; набор в одной надписи с
 // паузами короче MERGE_MS — одно действие
 const HISTORY_SIZE = 100;
@@ -414,6 +421,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // ничего и не написали, — сразу; а ту, где был текст, стёрли целиком —
   // только после подтверждения (отмена возвращает текст)
   const dropIfEmpty = (id: string) => {
+    document.body.classList.remove('caret-moving');
     setFocused(f => (f === id ? null : f));
     setTyping(false);
     const b = spreads[spread]?.blocks.find(x => x.id === id);
@@ -830,6 +838,33 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     if (range) setRange(el, range);
   };
 
+  // Лист двигают, пока печатают: iOS рисует курсор поверх страницы сам и
+  // оставляет его там, где был текст, — курсор «улетал». Пока камера
+  // движется, курсор прячем (caret-moving на body: класс самой надписи
+  // React перезаписал бы), а когда замерла — то же выделение заново, и
+  // курсор встаёт к тексту. Надпись за экраном — курсор так и прячем, иначе
+  // iOS сама прокрутила бы к нему экран
+  const caretTimer = useRef(0);
+  const followCaret = () => {
+    if (!isEditor(document.activeElement)) return;
+    document.body.classList.add('caret-moving');
+    clearTimeout(caretTimer.current);
+    caretTimer.current = window.setTimeout(() => {
+      const el = document.activeElement;
+      if (!isEditor(el)) {
+        document.body.classList.remove('caret-moving');
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const top = vv?.offsetTop ?? 0;
+      const bottom = top + (vv?.height ?? window.innerHeight);
+      if (r.bottom < top || r.top > bottom || r.right < 0 || r.left > window.innerWidth) return;
+      document.body.classList.remove('caret-moving');
+      redrawCaret(el);
+    }, CARET_SETTLE_MS);
+  };
+
   // Высота открытой клавиатуры (экранные px): на неё лист временно
   // удлиняется снизу, чтобы строку можно было поднять над клавиатурой
   const [keyboard, setKeyboard] = useState(0);
@@ -1023,6 +1058,12 @@ export function Notebook({ source, onMenu, onDay }: Props) {
                 onPointerDown={e => {
                   const c = camera.current;
                   pastePoint.current = { x: (e.clientX - c.x) / c.scale, y: (e.clientY - c.y) / c.scale };
+                  // Курсор пустого поля — в его начале, а системное меню
+                  // встаёт над курсором: начало поля (отступы) — под палец,
+                  // иначе «Вставить» всегда появлялась в левом верхнем углу
+                  const el = e.currentTarget;
+                  el.style.paddingLeft = `${Math.round(e.clientX)}px`;
+                  el.style.paddingTop = `${Math.max(0, Math.round(e.clientY - PASTE_CARET / 2))}px`;
                 }}
                 onInput={e => {
                   e.currentTarget.textContent = '';
@@ -1032,17 +1073,22 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           </>
         }
         onFrame={(cam, size) => {
+          const moved = cam.x !== camera.current.x || cam.y !== camera.current.y || cam.scale !== camera.current.scale;
           camera.current = cam;
           paper.current?.update(cam, size);
           selection.current?.update();
+          if (moved) followCaret();
         }}
         onTap={onTap}
         onDoubleTap={onDoubleTap}
         onLongPress={onLongPress}
-        // Смахнули лист вбок — перелистнуть (стрелок нет — просьба автора);
-        // пока что-то выбрано, смахивание не листает
-        onSwipe={dir => {
-          if (!turning && !selectedBlock && !pasteMenu) turn(dir);
+        // Смахнули лист вбок — перелистнуть (стрелок нет — просьба автора),
+        // если начали с той трети экрана, что ближе к странице, куда
+        // листаем: дальше — с правой, назад — с левой (как берутся за край
+        // страницы). Пока что-то выбрано, смахивание не листает
+        onSwipe={(dir, start, width) => {
+          const fromEdge = dir === 'next' ? start.x > width * (1 - TURN_EDGE) : start.x < width * TURN_EDGE;
+          if (fromEdge && !turning && !selectedBlock && !pasteMenu) turn(dir);
         }}
         grab={grab}
       >

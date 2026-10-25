@@ -36,6 +36,12 @@
   pointer-events: auto;
 }
 
+/* Лист двигается под надписью, в которой печатают: курсор спрятан, пока
+   камера не замрёт (Notebook: followCaret) */
+.caret-moving .text-block {
+  caret-color: transparent;
+}
+
 /* Слой под стикером с текстом — его форма, того же размера, что и блок */
 .text-block.text-decor {
   -webkit-user-select: none;

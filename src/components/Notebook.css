@@ -65,6 +65,12 @@
 .paste-layer {
   position: absolute;
   inset: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  /* Строка — PASTE_CARET в Notebook.tsx; её начало (отступы) ставится под
+     палец — там курсор и системное меню */
+  font: 16px/20px var(--ui-font);
+  white-space: nowrap;
   outline: none;
   color: transparent;
   caret-color: transparent;
