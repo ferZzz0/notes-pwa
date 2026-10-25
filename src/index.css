@@ -12,6 +12,10 @@
      всегда синие: цвет приложения получают только новые надписи */
   --ink-default: #24398c;
   --fold-line: rgb(70 50 20 / 0.18);
+  /* Номер, дата и шестерёнка на странице — в цвет приложения, и не
+     меняются вместе с плашками (data-surface ниже) */
+  --page-ink: var(--brand);
+  --page-ink-muted: color-mix(in srgb, var(--brand) 55%, transparent);
 
   /* Интерфейс поверх тетради: плашки, кнопки */
   --surface: #ffffff;
@@ -21,10 +25,21 @@
   --accent: #f28a2e;
   --accent-text: #ffffff;
   --shadow: 0 8px 24px rgb(60 40 10 / 0.12);
+  /* Полупрозрачные кнопки и панель надписи над листом */
+  --chrome: var(--paper);
+  /* Главная кнопка (Готово, Фото, сегодня в календаре) — светлая, в цвет
+     приложения: тёмных плашек нет нигде (просьба автора) */
+  --primary-soft: color-mix(in srgb, var(--ink) 14%, var(--surface));
+  --primary-line: color-mix(in srgb, var(--ink) 38%, transparent);
+  /* Удалить, стереть — светло-красная */
+  --danger: #b3261e;
+  --danger-soft: #fbe4e1;
+  --danger-line: rgb(179 38 30 / 0.35);
   /* Шрифт интерфейса (плашки, подсказки); на страницах — рукописный */
   --ui-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-  color-scheme: light dark;
+  /* Бумага и плашки всегда светлые — и поля, списки браузера тоже */
+  color-scheme: light;
   font-family: var(--ui-font);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -33,7 +48,9 @@
   text-size-adjust: 100%;
 }
 
-/* Ночью бумага приглушается, чтобы не слепить */
+/* Ночью бумага приглушается, чтобы не слепить; плашки и меню остаются
+   светлыми (просьба автора: тёмного нигде нет) — чуть светлее бумаги и с
+   оттенком цвета приложения */
 @media (prefers-color-scheme: dark) {
   :root {
     --paper: #e4ddcd;
@@ -41,15 +58,32 @@
     --ink-muted: color-mix(in srgb, var(--ink) 60%, transparent);
     --ink-default: #1c2c70;
     --fold-line: rgb(0 0 0 / 0.25);
+    --page-ink: color-mix(in srgb, var(--brand) 78%, #000);
+    --page-ink-muted: color-mix(in srgb, var(--page-ink) 60%, transparent);
 
-    --surface: #26231f;
-    --text: #f3eee7;
-    --muted: #a39889;
-    --border: #3a352f;
-    --accent: #ffa94d;
-    --accent-text: #2b1a05;
-    --shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+    --surface: color-mix(in srgb, var(--brand) 5%, #f7f3ea);
+    --text: #2b2621;
+    --muted: #776c5f;
+    --border: color-mix(in srgb, var(--brand) 12%, #d6ccbb);
+    --shadow: 0 8px 24px rgb(40 30 10 / 0.25);
   }
+}
+
+/* Открыт тёмный лист (свой цвет в настройках листа) — плашки, меню и
+   кнопки тёмные, а чернила интерфейса светлее (просьба автора: плашки — по
+   цвету листа). Ставит Notebook */
+:root[data-surface='dark'] {
+  --surface: color-mix(in srgb, var(--brand) 10%, #24211d);
+  --text: #f3eee7;
+  --muted: #b3a898;
+  --border: color-mix(in srgb, var(--brand) 18%, #3d3832);
+  --shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  --chrome: var(--surface);
+  --ink: color-mix(in srgb, var(--brand) 45%, #fff);
+  --ink-muted: color-mix(in srgb, var(--ink) 65%, transparent);
+  --danger: #ff9b92;
+  --danger-soft: #4a2420;
+  --danger-line: rgb(255 155 146 / 0.4);
 }
 
 *,

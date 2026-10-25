@@ -698,8 +698,10 @@ export function Canvas({
     // Касание по бумаге — только наше: без этого iOS на долгом нажатии
     // включает свои лупу и меню и обрывает касание (touchcancel), и
     // отпускания пальца — где можно читать буфер обмена — уже не бывает.
-    // В надписи, где печатают, касания свои (курсор, выделение, лупа)
+    // В надписи, где печатают, касания свои (курсор, выделение, лупа); у
+    // [data-no-pan] (кнопка на листе) — тоже: иначе не будет click
     const onTouchStart = (e: TouchEvent) => {
+      if (matches(e.target, '[data-no-pan]')) return;
       const t = e.changedTouches[0];
       if (t && props.current.nativeTouch?.(e.target, t.clientX, t.clientY)) return;
       if (!isEditable(e.target)) e.preventDefault();

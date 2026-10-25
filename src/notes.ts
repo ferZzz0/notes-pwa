@@ -66,11 +66,20 @@ export const isBlank = (b: Block) => !b.kind && !b.text.trim();
 // Цвет и шрифт, выбранные последними, — с ними начинается новая надпись
 export type TextStyle = { color?: string; font?: FontId };
 
+// Оформление страницы (настройки листа): цвет бумаги и цвет её номера и
+// даты (#rrggbb); нет — как у приложения
+export type PageLook = { paper?: string; labels?: string };
+
 export type Spread = {
   // Когда на развороте впервые написали — ГГГГ-ММ-ДД по местному времени
   created?: string;
   blocks: Block[];
+  // Оформление левой и правой страниц
+  looks?: { left?: PageLook; right?: PageLook };
 };
+
+// Есть ли у разворота что хранить: что-то на листе или своё оформление
+export const isKept = (s: Spread) => s.blocks.some(b => !isBlank(b)) || !!(s.looks?.left || s.looks?.right);
 
 export type Spreads = Record<number, Spread>;
 
@@ -284,7 +293,7 @@ export function saveSpreads(source: Source, spreads: Spreads): void {
   }
   const days = readDays();
   const day = spreads[0];
-  if (day && day.blocks.some(b => !isBlank(b))) days[source.date] = day;
+  if (day && isKept(day)) days[source.date] = day;
   else delete days[source.date];
   write(DAYS_KEY, days);
 }

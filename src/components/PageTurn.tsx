@@ -1,6 +1,9 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { Point, Rect } from './Canvas';
 import './PageTurn.css';
+
+// Свой цвет бумаги — через --paper (у оборота он ещё и затемнён, PageTurn.css)
+const paperVar = (color?: string) => (color ? ({ '--paper': color } as CSSProperties) : undefined);
 
 type Props = {
   dir: 'next' | 'prev';
@@ -15,6 +18,9 @@ type Props = {
   // Толщина линии корешка (px мира): бумага листа её не закрывает, и линия
   // между страницами не становится тоньше, пока лист перелистывается
   spine: number;
+  // Свой цвет бумаги у лица и оборота (настройки листа); нет — как у приложения
+  frontPaper?: string;
+  backPaper?: string;
   onDone: () => void;
 };
 
@@ -50,7 +56,7 @@ function placeStrip(el: HTMLElement, m: Point, d: Point, half: number, length: n
 // обратный поворот, так что содержимое стоит на своём месте и только
 // обрезано по сгибу. Лицо (несогнутая часть) и тень на открывшейся странице —
 // в таких окнах внутри листа; загиб — в окне по эту сторону сгиба.
-export function PageTurn({ dir, sheet, front, back, duration, spine, onDone }: Props) {
+export function PageTurn({ dir, sheet, front, back, duration, spine, frontPaper, backPaper, onDone }: Props) {
   const frontWin = useRef<HTMLDivElement>(null);
   const frontInner = useRef<HTMLDivElement>(null);
   const castWin = useRef<HTMLDivElement>(null);
@@ -144,7 +150,7 @@ export function PageTurn({ dir, sheet, front, back, duration, spine, onDone }: P
       <div className="page-turn-sheet" style={{ left: X0, width: W, height: H }}>
         <div ref={frontWin} className="page-turn-window" style={winSize}>
           <div ref={frontInner} className="page-turn-inner">
-            <div className="page-turn-paper" style={{ left: s === 1 ? spine / 2 : 0, width: pageW, height: H }} />
+            <div className="page-turn-paper" style={{ left: s === 1 ? spine / 2 : 0, width: pageW, height: H, ...paperVar(frontPaper) }} />
             {/* Страница — в координатах мира, а мы внутри листа (сдвиг X0) */}
             <div className="page-turn-content" style={{ left: -X0 }}>
               {front}
@@ -157,7 +163,7 @@ export function PageTurn({ dir, sheet, front, back, duration, spine, onDone }: P
       <div ref={flapWin} className="page-turn-window" style={winSize}>
         <div ref={flapInner} className="page-turn-inner">
           <div ref={flapPage} className="page-turn-flap">
-            <div className="page-turn-back" style={{ left: backX, width: pageW, height: H }}>
+            <div className="page-turn-back" style={{ left: backX, width: pageW, height: H, ...paperVar(backPaper) }}>
               <div className="page-turn-content" style={{ left: -backX }}>
                 {back}
               </div>

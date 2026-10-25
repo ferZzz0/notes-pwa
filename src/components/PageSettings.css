@@ -1,0 +1,208 @@
+/* Настройки листа — панель внизу посередине (как настройки), поверх листа */
+.page-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+}
+
+.page-settings-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(12px + var(--safe-bottom));
+  z-index: 9;
+  width: min(340px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom));
+  margin: 0 auto;
+  padding: 12px 14px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font: 15px/1.35 var(--ui-font);
+  animation: settings-in 0.18s ease-out;
+}
+
+.page-settings-title {
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+
+/* Что красим: бумагу или номер и дату */
+.page-settings-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.page-settings-tabs button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: 600 13px/1.2 var(--ui-font);
+}
+
+.page-settings-tabs button.is-active {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.page-settings-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.2);
+}
+
+.page-settings-color {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.page-settings-color .color-wheel {
+  flex: none;
+}
+
+.page-settings-reset,
+.page-settings-copy button,
+.page-settings-actions button,
+.page-settings-confirm button {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: 600 13px/1.2 var(--ui-font);
+}
+
+.page-settings-reset:disabled {
+  opacity: 0.45;
+}
+
+/* Оформление как у другого листа */
+.page-settings-copy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.page-settings-copy select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: 15px/1.2 var(--ui-font);
+}
+
+.page-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.page-settings-danger-outline {
+  border-color: var(--danger-line) !important;
+  color: var(--danger) !important;
+}
+
+.page-settings-confirm {
+  margin-top: 12px;
+}
+
+.page-settings-confirm p {
+  margin: 0 0 8px;
+}
+
+.page-settings-confirm div {
+  display: flex;
+  gap: 8px;
+}
+
+.page-settings-confirm .page-settings-danger {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Экспорт картинкой: кнопка, потом превью и «Сохранить» */
+.page-settings-export {
+  margin-top: 12px;
+}
+
+.page-settings-export > button,
+.page-settings-export div button {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: 600 13px/1.2 var(--ui-font);
+}
+
+.page-settings-export > button:disabled {
+  opacity: 0.6;
+}
+
+.page-settings-export img {
+  display: block;
+  max-width: 100%;
+  max-height: 200px;
+  margin: 0 auto 8px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgb(40 30 10 / 0.2);
+}
+
+.page-settings-export div {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.page-settings-export .page-settings-primary {
+  border-color: var(--primary-line);
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+
+/* Рядом с палитрой: светлые или тёмные цвета на ней, «Как у приложения» */
+.page-settings-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.page-settings-base {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.page-settings-base button {
+  flex: 1;
+  padding: 7px 6px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: 600 12px/1.2 var(--ui-font);
+}
+
+.page-settings-base button.is-active {
+  background: var(--primary-soft);
+  color: var(--ink);
+}

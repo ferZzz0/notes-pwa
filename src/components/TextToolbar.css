@@ -15,7 +15,7 @@
   padding: 6px 8px;
   border: 1px solid rgb(60 40 10 / 0.08);
   border-radius: 18px;
-  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  background: color-mix(in srgb, var(--chrome) 86%, transparent);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   box-shadow: 0 4px 16px rgb(60 40 10 / 0.16);
@@ -58,7 +58,7 @@
 
 /* Замок закрыт — кнопка подкрашена основным цветом */
 .toolbar-history .round-button.is-locked {
-  background: color-mix(in srgb, var(--ink) 16%, var(--paper));
+  background: color-mix(in srgb, var(--ink) 16%, var(--chrome));
   color: var(--ink);
 }
 
@@ -104,7 +104,7 @@
   height: 30px;
   border-radius: 50%;
   background:
-    radial-gradient(closest-side, var(--color) 0 66%, var(--paper) 66% 80%, transparent 80%),
+    radial-gradient(closest-side, var(--color) 0 66%, var(--chrome) 66% 80%, transparent 80%),
     conic-gradient(from 90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
 }
 
@@ -125,8 +125,9 @@
 }
 
 .text-toolbar > .text-toolbar-done {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1.5px var(--primary-line);
+  color: var(--ink);
 }
 
 /* Выпадающий список над панелью — по середине; если места мало (открыта
@@ -145,7 +146,7 @@
   overscroll-behavior: contain;
   border: 1px solid rgb(60 40 10 / 0.08);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  background: color-mix(in srgb, var(--chrome) 94%, transparent);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   box-shadow: 0 4px 16px rgb(60 40 10 / 0.16);
@@ -240,8 +241,9 @@
 }
 
 .toolbar-confirm-actions .toolbar-confirm-delete {
-  background: #d64545;
-  color: #fff;
+  background: var(--danger-soft);
+  box-shadow: inset 0 0 0 1.5px var(--danger-line);
+  color: var(--danger);
 }
 
 /* Круговая палитра — над панелью, у её левого края (над кнопкой цвета) */
@@ -252,7 +254,7 @@
   padding: 10px;
   border: 1px solid rgb(60 40 10 / 0.08);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  background: color-mix(in srgb, var(--chrome) 92%, transparent);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   box-shadow: 0 4px 16px rgb(60 40 10 / 0.16);

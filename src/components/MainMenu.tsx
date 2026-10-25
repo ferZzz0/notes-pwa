@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
-import { COVER_COLORS, type NotebookInfo } from '../notes';
+import type { NotebookInfo } from '../notes';
 import { Calendar } from './Calendar';
 import { ConfirmDialog } from './ConfirmDialog';
 import { AppSettings } from './AppSettings';
 import { Settings } from './Settings';
+import { ColorWheel } from './TextToolbar';
 import './MainMenu.css';
 
 type Props = {
@@ -27,15 +28,18 @@ const fitName = (el: HTMLTextAreaElement) => {
 };
 
 // Поле имени дневника получает фокус прямо в нажатии — иначе iOS не покажет
-// клавиатуру
+// клавиатуру. Курсор — в конце названия, без выделения (просьба автора)
 const focusName = (id: string) => {
   const input = document.getElementById(`diary-name-${id}`);
   if (input instanceof HTMLTextAreaElement) {
     fitName(input);
     input.focus();
-    input.select();
+    input.setSelectionRange(input.value.length, input.value.length);
   }
 };
+
+// Размер палитры цвета обложки (px)
+const COVER_WHEEL_SIZE = 200;
 
 // Главное меню: дневники (обложки с именами; новый, переименовать,
 // удалить) и календарь — касание по дню открывает лист этого дня.
@@ -44,6 +48,9 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecol
   // Дневник, который сейчас называют, и тот, который хотят удалить
   const [editing, setEditing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<NotebookInfo | null>(null);
+  // Дневник, которому выбирают цвет обложки (палитра поверх меню)
+  const [coloring, setColoring] = useState<string | null>(null);
+  const colored = notebooks.find(n => n.id === coloring);
   // Всё меню помещается на экране — вверх-вниз оно не двигается (просьба
   // автора: иначе его можно было потянуть и оно «пружинило»)
   const menu = useRef<HTMLDivElement>(null);
@@ -103,22 +110,21 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecol
                       }}
                       onBlur={e => finish(n, e.currentTarget.value)}
                     />
-                    {/* Цвет обложки (просьба автора); нажатие не закрывает поле названия */}
-                    <div className="diary-colors" role="radiogroup" aria-label="Цвет обложки">
-                      {COVER_COLORS.map(c => (
-                        <button
-                          key={c}
-                          type="button"
-                          role="radio"
-                          aria-checked={c === n.color}
-                          aria-label={`Цвет ${c}`}
-                          className={c === n.color ? 'is-active' : undefined}
-                          style={{ background: c }}
-                          onMouseDown={e => e.preventDefault()}
-                          onClick={() => onRecolor(n.id, c)}
-                        />
-                      ))}
-                    </div>
+                    {/* Цвет обложки — на круговой палитре (просьба автора):
+                        название готово, палитра — поверх меню */}
+                    <button
+                      type="button"
+                      className="diary-color"
+                      aria-label="Цвет обложки"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => {
+                        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+                        setEditing(null);
+                        setColoring(n.id);
+                      }}
+                    >
+                      <span style={{ background: n.color }} />
+                    </button>
                     {notebooks.length > 1 && (
                       <button
                         type="button"
@@ -174,6 +180,21 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecol
       <div className="bottom-center">
         <Settings />
       </div>
+
+      {colored && (
+        <>
+          <div className="diary-color-backdrop" onClick={() => setColoring(null)} />
+          <div className="diary-color-panel" role="dialog" aria-label="Цвет обложки">
+            <div className="diary-color-preview" style={{ '--cover': colored.color } as CSSProperties}>
+              <span className="diary-label">{colored.name}</span>
+            </div>
+            <ColorWheel color={colored.color} size={COVER_WHEEL_SIZE} label="Цвет обложки" onPick={c => onRecolor(colored.id, c)} />
+            <button type="button" className="diary-color-done" onClick={() => setColoring(null)}>
+              Готово
+            </button>
+          </div>
+        </>
+      )}
 
       {deleting && (
         <ConfirmDialog

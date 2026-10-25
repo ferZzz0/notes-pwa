@@ -5,7 +5,7 @@ import { ColorWheel } from './TextToolbar';
 import './AppSettings.css';
 
 // Размер палитры (px)
-const WHEEL_SIZE = 170;
+const WHEEL_SIZE = 150;
 
 // Настройки приложения — шестерёнка справа вверху главного меню (та, что
 // внизу, — только для отладки). Пока в них цвет приложения: круговая

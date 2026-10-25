@@ -57,7 +57,7 @@ type Props = {
 };
 
 // Что открыто над панелью
-type Menu = 'color' | 'font' | 'effect' | 'marker' | 'sticker' | 'opacity' | 'delete' | null;
+type Menu = 'color' | 'font' | 'effect' | 'marker' | 'sticker' | 'opacity' | 'layer' | 'delete' | null;
 
 // Нажатие на панель не забирает фокус у поля ввода — клавиатура остаётся
 export const keepFocus = (e: MouseEvent) => e.preventDefault();
@@ -357,6 +357,13 @@ export function TextToolbar(props: Props) {
 
       {menu === 'opacity' && <OpacityMenu value={block.opacity} onPick={onOpacity} />}
 
+      {/* Слой — как у фото (просьба автора); у стикера он в меню «Стикер» */}
+      {menu === 'layer' && (
+        <div className="toolbar-menu" role="dialog" aria-label="Слой">
+          <LayerButtons onLayer={onLayer} />
+        </div>
+      )}
+
       {menu === 'delete' && (
         <ConfirmDelete
           what={isSticker ? 'стикер' : 'надпись'}
@@ -402,6 +409,14 @@ export function TextToolbar(props: Props) {
           </svg>
         )}
       {opener('opacity', 'Прозрачность', <OpacityIcon />)}
+      {!isSticker &&
+        opener(
+          'layer',
+          'Слой',
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 4l8.5 4.5L12 13 3.5 8.5zM3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5" />
+          </svg>
+        )}
       {opener(
         'delete',
         isSticker ? 'Удалить стикер' : 'Удалить надпись',

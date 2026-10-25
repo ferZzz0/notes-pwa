@@ -20,7 +20,7 @@
   font-family: 'Caveat Variable', cursive;
   font-size: 30px;
   line-height: 1;
-  color: var(--ink-muted);
+  color: var(--page-ink-muted);
   white-space: nowrap;
 }
 
@@ -38,7 +38,7 @@
 .page-date {
   font-size: 36px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--page-ink);
 }
 
 .page-date-right {
@@ -60,8 +60,60 @@
   font-size: 44px;
   font-weight: 700;
   line-height: 1;
-  color: var(--ink);
+  color: var(--page-ink);
   white-space: nowrap;
+}
+
+/* Шестерёнка настроек листа — во внешнем верхнем углу страницы (px мира:
+   страница — 850) */
+.page-gear {
+  position: absolute;
+  top: 14px;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--page-ink-muted);
+}
+
+.page-gear-left {
+  left: -834px;
+}
+
+.page-gear-right {
+  left: 758px;
+}
+
+.page-gear svg {
+  width: 40px;
+  height: 40px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Копия страницы для экспорта картинкой — сдвинута за экран (transform: на
+   картинке его снимают, exportPage.ts; left снять не вышло — копируется и
+   inset-inline, а он главнее); начало мира — в origin */
+.page-export {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform: translateX(-300vw);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.page-export-origin {
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 
 /* Надпись или фото обрезаны по корешку: то, что после поворота или
@@ -79,56 +131,4 @@
 
 .item-clip[data-clip='right'] {
   clip-path: polygon(0 -100000px, 100000px -100000px, 100000px 100000px, 0 100000px);
-}
-
-/* --- Поверх полотна, в координатах экрана --- */
-
-/* Пузырёк «Вставить» после долгого нажатия на лист — над пальцем (у верха
-   экрана — под ним), с хвостиком к точке нажатия. Нажатие мимо закрывает */
-.paste-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 8;
-}
-
-.paste-bubble {
-  position: fixed;
-  z-index: 9;
-  padding: 10px 18px;
-  border: none;
-  border-radius: 12px;
-  background: var(--text);
-  box-shadow: var(--shadow);
-  color: var(--surface);
-  font: 600 15px/1.2 var(--ui-font);
-  white-space: nowrap;
-  transform: translate(-50%, calc(-100% - 18px));
-  animation: paste-in 0.15s ease-out;
-}
-
-.paste-bubble::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  border: 7px solid transparent;
-  border-top-color: var(--text);
-  transform: translateX(-50%);
-}
-
-.paste-bubble.is-below {
-  transform: translate(-50%, 24px);
-}
-
-.paste-bubble.is-below::after {
-  top: auto;
-  bottom: 100%;
-  border-top-color: transparent;
-  border-bottom-color: var(--text);
-}
-
-@keyframes paste-in {
-  from {
-    opacity: 0;
-  }
 }

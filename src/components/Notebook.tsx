@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { pageImage } from '../exportPage';
 import { copyImage, imagePng, importImage, keepImages, pixelSize } from '../images';
 import {
   allImageIds,
   isBlank,
+  isKept,
   loadClip,
   loadPage,
   loadSpreads,
@@ -18,6 +20,7 @@ import {
   spreadOf,
   type Block,
   type Clip,
+  type PageLook,
   type Source,
   type Spread,
   type Spreads,
@@ -39,11 +42,13 @@ import {
   type TextRange
 } from '../richText';
 import { markerOf, type StickerId } from '../textStyle';
+import { isDark } from '../theme';
 import { AddMenu } from './AddMenu';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Canvas, type Camera, type CanvasHandle, type Fixed, type Grab, type Home, type Point, type Rect } from './Canvas';
 import { ImageItem } from './ImageItem';
 import { ImageToolbar } from './ImageToolbar';
+import { PageSettings } from './PageSettings';
 import { PageTurn } from './PageTurn';
 import { Paper, type PaperDisplay, type PaperHandle } from './Paper';
 import { Selection, type SelectionHandle } from './Selection';
@@ -56,9 +61,10 @@ type FlipDir = 'next' | 'prev';
 // Прочитанное из буфера обмена: картинка или текст
 type Pasted = { file: File } | { text: string };
 
-// Надпись или фото без id, дат и служебного — чтобы сравнить со скопированным
+// Надпись или фото без id, дат, замка и служебного — чтобы сравнить со
+// скопированным
 function clipKey(x: Block | Clip): string {
-  const { id: _id, day: _day, edited: _edited, size: _size, ...rest } = x as Block & Clip;
+  const { id: _id, day: _day, edited: _edited, locked: _locked, size: _size, ...rest } = x as Block & Clip;
   return JSON.stringify(rest);
 }
 type Side = 'left' | 'right';
@@ -120,9 +126,6 @@ const HISTORY_ROW = 48;
 // Скопировали стикер (или надпись) без текста — в буфер обмена кладём эту
 // невидимую метку: по ней вставка узнаёт скопированное
 const EMPTY_CLIP_MARK = '\u2063';
-// Буфер обмена прочитан быстрее (мс) — Safari не показывал свою кнопку
-// «Вставить» (скопировано здесь же)
-const SILENT_READ_MS = 150;
 // Примерная ширина вставленной надписи (мир) — чтобы поставить её посередине экрана
 const PASTE_TEXT_WIDTH = 300;
 // Столько после касания панели перемены выделения в надписи не считаем
@@ -134,16 +137,12 @@ const HANDLE_PAD = 32;
 const PHOTO_SHARE = { w: 0.55, h: 0.6 };
 // Примерный размер нового стикера (мир) — чтобы поставить его посередине экрана
 const STICKER_SIZE = { w: 230, h: 210 };
-// Пузырёк «Вставить» стоит над пальцем, если над ним столько места (px экрана)
-const PASTE_ROOM = 90;
-// Столько ждём после касания пузырька (он прячется уже под пальцем), чтобы
-// экран точно успел перерисоваться, — потом читаем буфер (и Safari
-// показывает свою кнопку)
-const BUBBLE_GONE_MS = 200;
-// iPhone и iPad (iPad представляется компьютером Mac, но с сенсорным экраном):
-// читая буфер обмена, Safari сам показывает свою кнопку «Вставить», поэтому
-// своего пузырька там нет — буфер читаем, когда отпускают палец
-const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// После касания «Вставить» в меню «+» ждём столько (мс), чтобы меню точно
+// успело исчезнуть с экрана, — потом читаем буфер, и Safari показывает свою
+// кнопку «Вставить» (пока она на экране, страница не перерисовывается, и
+// рядом с ней оставалась наша — две кнопки, жалоба автора). Таймер короче
+// секунды Safari ещё считает ответом на касание
+const MENU_GONE_MS = 200;
 // «Отменить»: столько последних действий помним; набор в одной надписи с
 // паузами короче MERGE_MS — одно действие
 const HISTORY_SIZE = 100;
@@ -213,6 +212,76 @@ function stampDates(next: Spreads, old: Spreads): Spreads {
     out[Number(key)] = { ...sp, blocks };
   }
   return out;
+}
+
+// Страница сама по себе — чтобы удалить лист или вставить новый (следующие
+// сдвигаются, и левые страницы становятся правыми и наоборот): её надписи и
+// фото в координатах правой страницы, её оформление
+type PageData = { blocks: Block[]; look?: PageLook };
+
+// x на странице side → x на правой странице и обратно: левая [−850, 0)
+// ложится на [0, 850), а то, что за её внешним краем (лист вырос наружу), —
+// зеркально за внешний край правой
+const toRightX = (x: number, side: Side) => (side === 'right' ? x : x >= -PAGE_WIDTH ? x + PAGE_WIDTH : -x);
+const fromRightX = (x: number, side: Side) => (side === 'right' ? x : x < PAGE_WIDTH ? x - PAGE_WIDTH : -x);
+
+// Развороты → страницы по порядку (с 0); пустые — пустые
+function toPages(spreads: Spreads): PageData[] {
+  const pages: PageData[] = [];
+  for (const [key, sp] of Object.entries(spreads)) {
+    const s = Number(key);
+    for (const side of ['left', 'right'] as const) {
+      const blocks = sp.blocks
+        .filter(b => sideOfBlock(b) === side)
+        // День разворота у старых записей — теперь день самого блока: он
+        // может уехать на другой разворот
+        .map(b => ({ ...b, x: toRightX(b.x, side), day: b.day ?? sp.created }));
+      const look = sp.looks?.[side];
+      if (blocks.length > 0 || look) pages[2 * s + (side === 'left' ? 0 : 1)] = { blocks, look };
+    }
+  }
+  return Array.from(pages, p => p ?? { blocks: [] });
+}
+
+function fromPages(pages: PageData[]): Spreads {
+  const out: Spreads = {};
+  pages.forEach((p, i) => {
+    if (p.blocks.length === 0 && !p.look) return;
+    const side = sideOf(i + 1);
+    const sp = (out[spreadOf(i + 1)] ??= { blocks: [] });
+    sp.blocks.push(...p.blocks.map(b => ({ ...b, x: fromRightX(b.x, side) })));
+    if (p.look) sp.looks = { ...sp.looks, [side]: p.look };
+  });
+  return out;
+}
+
+// Разворот, у страницы side которого оформление look (пустое — как у
+// приложения: не храним); разворот, где ничего не осталось, — убрать
+function withLook(all: Spreads, s: number, side: Side, look: PageLook): Spreads {
+  const cur = all[s] ?? { blocks: [] };
+  const clean: PageLook = {};
+  if (look.paper) clean.paper = look.paper;
+  if (look.labels) clean.labels = look.labels;
+  const looks = { ...cur.looks, [side]: clean.paper || clean.labels ? clean : undefined };
+  const sp: Spread = { ...cur, looks: looks.left || looks.right ? looks : undefined };
+  const next = { ...all, [s]: sp };
+  if (!isKept(sp)) delete next[s];
+  return next;
+}
+
+// Поля вокруг надписей и фото на картинке листа, если лист вырос (px мира)
+const EXPORT_MARGIN = 40;
+// Дольше картинки фото на экспорт не ждём (мс)
+const IMAGE_WAIT_MS = 3000;
+
+// Все фото в node загрузились (или прошло IMAGE_WAIT_MS): картинка фото
+// читается из памяти не сразу, а потом ещё декодируется
+async function imagesLoaded(node: HTMLElement): Promise<void> {
+  const until = performance.now() + IMAGE_WAIT_MS;
+  while (node.querySelectorAll('.item-image-photo:not(:has(> img))').length > 0 && performance.now() < until) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+  await Promise.all([...node.querySelectorAll('img')].map(img => img.decode().catch(() => {})));
 }
 
 const blurActive = () => {
@@ -333,12 +402,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const toolbarTouch = useRef(-Infinity);
   // Печатают (или вот-вот откроется клавиатура): лист заранее удлинён снизу
   const [typing, setTyping] = useState(false);
-  // Пузырёк «Вставить» после долгого нажатия: куда вставлять (мир) и где он
-  // (экран); data — буфер уже прочитан (iPhone: Safari отдал его без
-  // своей кнопки — подтверждаем своей)
-  const [pasteMenu, setPasteMenu] = useState<{ world: Point; screen: Point; data?: Pasted } | null>(null);
-  // iPhone: долгое нажатие, вставку из которого делаем, когда отпустят палец
-  const pasteOnRelease = useRef<{ world: Point; screen: Point } | null>(null);
   // Открытая страница; на развороте — любая из двух его страниц
   const [page, setPage] = useState(() => loadPage(source));
   const portrait = usePortrait();
@@ -379,10 +442,12 @@ export function Notebook({ source, onMenu, onDay }: Props) {
 
   // Записать в память. Новые и изменённые блоки получают даты (stampDates),
   // прежняя запись уходит в историю; key — что за действие (одинаковые
-  // подряд, с паузами короче MERGE_MS, — одно). Возвращает то, что записано
-  const persist = (next: Spreads, key = ''): Spreads => {
+  // подряд, с паузами короче MERGE_MS, — одно). Возвращает то, что записано.
+  // stamp = false — даты не трогаем: листы сдвинули (удалили или вставили
+  // лист), надписи переехали, но их никто не менял
+  const persist = (next: Spreads, key = '', stamp = true): Spreads => {
     const prev = saved.current!;
-    const stamped = stampDates(next, prev.spreads);
+    const stamped = stamp ? stampDates(next, prev.spreads) : next;
     const json = JSON.stringify(stamped);
     if (json === prev.json) return prev.spreads;
     const h = history.current;
@@ -399,7 +464,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     return stamped;
   };
 
-  const commit = (next: Spreads, key?: string) => setSpreads(persist(next, key));
+  const commit = (next: Spreads, key?: string, stamp?: boolean) => setSpreads(persist(next, key, stamp));
 
   // Вернуть запись из истории (отмена / возврат)
   // Панель редактирования остаётся открытой (просьба автора), если то, что
@@ -444,7 +509,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     if (!cur) return;
     const text = runsText(runs);
     const blocks = cur.blocks.map(b => (b.id === id ? { ...b, text, runs: compactRuns(runs) } : b));
-    commit({ ...spreads, [spread]: { created: cur.created ?? (text ? localDate() : undefined), blocks } }, `text:${id}`);
+    commit({ ...spreads, [spread]: { ...cur, created: cur.created ?? (text ? localDate() : undefined), blocks } }, `text:${id}`);
   };
 
   // Убрать надпись, стикер или фото с листа (картинку фото — потом, см.
@@ -454,7 +519,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     if (!cur) return;
     const blocks = cur.blocks.filter(b => b.id !== id);
     const next = { ...spreads };
-    if (blocks.some(b => !isBlank(b))) next[spread] = { ...cur, blocks };
+    if (isKept({ ...cur, blocks })) next[spread] = { ...cur, blocks };
     else delete next[spread];
     commit(next);
   };
@@ -489,7 +554,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const addBlock = (block: Block) => {
     const cur = spreads[spread] ?? { blocks: [] };
     flushSync(() => {
-      commit({ ...spreads, [spread]: { created: cur.created ?? localDate(), blocks: [...cur.blocks, block] } });
+      commit({ ...spreads, [spread]: { ...cur, created: cur.created ?? localDate(), blocks: [...cur.blocks, block] } });
       setSelected(block.id);
     });
   };
@@ -562,7 +627,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       return;
     }
     const plain = newText(p, t);
-    if (clip && clip.kind !== 'image' && clip.text === t) addBlock({ ...clip, id: plain.id, x: plain.x, y: plain.y });
+    if (clip && clip.kind !== 'image' && clip.text === t) addBlock({ ...clip, id: plain.id, x: plain.x, y: plain.y, locked: undefined });
     else addBlock(plain);
   };
 
@@ -576,7 +641,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const copySelected = () => {
     const b = selectedBlock;
     if (!b) return;
-    const { id: _id, day: _day, edited: _edited, ...rest } = b;
+    // Копия — без замка (просьба автора): её сразу можно двигать и править
+    const { id: _id, day: _day, edited: _edited, locked: _locked, ...rest } = b;
     saveClip(rest);
     setClip(rest);
     if (b.kind !== 'image') void navigator.clipboard?.writeText(b.text.trim() ? b.text : EMPTY_CLIP_MARK).catch(() => {});
@@ -604,7 +670,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const pasteClip = async (at = viewCenter()) => {
     const loaded = loadClip();
     if (!loaded) return;
-    const { size: _size, ...c } = loaded;
+    const { size: _size, locked: _locked, ...c } = loaded;
     let image = c.image;
     if (c.kind === 'image' && c.image) {
       image = newBlockId();
@@ -617,13 +683,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     const h = c.kind === 'image' ? w * (c.ratio ?? 0.75) : STICKER_SIZE.h;
     addBlock({ ...c, id: newBlockId(), image, ...place(w, at.x - w / 2, at.y - h / 2) });
   };
-  const clipLabel = !clip
-    ? null
-    : clip.kind === 'image'
-      ? 'Фото'
-      : clip.kind === 'sticker'
-        ? `Стикер${clip.text.trim() ? ` «${clip.text.trim().slice(0, 30)}»` : ''}`
-        : `«${clip.text.trim().slice(0, 40)}»`;
 
   // «Вставить» из своего пузырька: картинка из буфера обмена — фото, текст —
   // надпись, в точку нажатия p. Буфер читаем прямо в нажатии на кнопку —
@@ -670,39 +729,20 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     alert('Не получилось прочитать буфер обмена');
   };
 
-  const pasteAt = async (p: Point) => {
-    setPasteMenu(null);
+  // «+» → «Вставить» (просьба автора: вставка только так, долгое нажатие на
+  // листе ничего не вставляет): из буфера обмена — общего с другими
+  // приложениями, — посередине экрана; скопированное здесь — со всем
+  // оформлением. Буфер не прочитать (браузер не умеет) — то, что скопировано
+  // здесь
+  const pasteFromMenu = async () => {
+    const p = viewCenter();
     try {
       const data = await readClipboard();
       if (data) await insertPasted(data, p);
       else alert('В буфере обмена нет ни текста, ни картинки');
     } catch (e) {
-      clipboardFailed(e);
-    }
-  };
-
-  // iPhone: палец отпустили после долгого нажатия — читаем буфер. Safari
-  // спрашивает своей кнопкой «Вставить», только если скопировано не здесь;
-  // скопированное здесь отдаёт сразу — тогда подтверждение своим пузырьком
-  // (иначе долгое нажатие само что-то вставляло). Ответ быстрее
-  // SILENT_READ_MS — значит, Safari не спрашивал. Скопированное в другом
-  // приложении Safari после долгого нажатия читать не даёт и свою кнопку не
-  // показывает — сразу отказ (жалоба автора: «окно со вставкой не
-  // появляется»); тогда свой пузырёк: на его касание Safari свою кнопку
-  // покажет. Отказ после паузы — человек сам закрыл кнопку Safari
-  const pasteAfterHold = async (press: { world: Point; screen: Point }) => {
-    const start = performance.now();
-    try {
-      const data = await readClipboard();
-      if (!data) {
-        alert('В буфере обмена нет ни текста, ни картинки');
-        return;
-      }
-      if (performance.now() - start < SILENT_READ_MS) setPasteMenu({ ...press, data });
-      else await insertPasted(data, press.world);
-    } catch (e) {
-      const refusedAtOnce = performance.now() - start < SILENT_READ_MS;
-      if (e instanceof DOMException && e.name === 'NotAllowedError' && refusedAtOnce) setPasteMenu(press);
+      if (e instanceof DOMException && e.name === 'NotAllowedError') return;
+      if (clip) await pasteClip(p);
       else clipboardFailed(e);
     }
   };
@@ -914,16 +954,35 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     // Пока жест идёт, двигается только сам элемент (и форма стикера под ним) —
     // прямо в DOM, без перерисовки всей тетради на каждое движение пальца (на
     // iPhone их до 120 в секунду — перенос дёргался); в состояние и память —
-    // один раз, в конце
+    // один раз, в конце. И только transform, на своём слое (will-change):
+    // left/top перерисовывали элемент на каждом кадре — большое повёрнутое
+    // фото сильно тормозило (жалоба автора)
     const decor = el.previousElementSibling instanceof HTMLElement && el.previousElementSibling.classList.contains('text-decor') ? el.previousElementSibling : null;
+    const nodes = decor ? [el, decor] : [el];
+    const left0 = b.x;
+    const top0 = b.y;
     let moved: Partial<Block> | null = null;
-    const show = (m: Pick<Block, 'x' | 'y' | 'rotate' | 'scale'>) => {
+    // final — жест кончился: на место через left/top, без сдвига и слоя
+    const show = (m: Pick<Block, 'x' | 'y' | 'rotate' | 'scale'>, final = false) => {
       const rotate = m.rotate ?? 0;
       const scale = m.scale ?? 1;
-      for (const node of decor ? [el, decor] : [el]) {
-        node.style.left = `${m.x}px`;
-        node.style.top = `${m.y}px`;
-        node.style.transform = rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : '';
+      const turn = rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : '';
+      const dx = final ? 0 : m.x - left0;
+      const dy = final ? 0 : m.y - top0;
+      for (const node of nodes) {
+        if (final) {
+          node.style.left = `${m.x}px`;
+          node.style.top = `${m.y}px`;
+          node.style.willChange = '';
+        } else node.style.willChange = 'transform';
+        node.style.transform = dx || dy ? `translate(${dx}px, ${dy}px) ${turn}` : turn;
+      }
+      if (dx || dy) {
+        el.dataset.dx = String(dx);
+        el.dataset.dy = String(dy);
+      } else {
+        delete el.dataset.dx;
+        delete el.dataset.dy;
       }
       // Перешла на другую страницу — и обрезаться по корешку с другой стороны
       const clip = el.parentElement;
@@ -975,7 +1034,10 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         show({ ...pos, rotate, scale });
       },
       end: () => {
-        if (moved) patchBlock(b.id, moved);
+        if (moved) {
+          show({ x: moved.x!, y: moved.y!, rotate: moved.rotate, scale: moved.scale }, true);
+          patchBlock(b.id, moved);
+        }
         moved = null;
       }
     };
@@ -1010,37 +1072,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     });
     edit(block.id);
   };
-
-  // Долгое нажатие на пустое место листа — пузырёк «Вставить». На iPhone
-  // своего пузырька нет: буфер читаем, когда палец отпустят (Canvas:
-  // onLongPressEnd), и Safari показывает одну свою кнопку «Вставить» — без
-  // лупы и меню поля ввода (невидимое поле под бумагой давало их — просьба
-  // автора: «только вставка»)
-  const onLongPress = (p: Point, screen: Point, touch: boolean) => {
-    pasteOnRelease.current = null;
-    if (turning || blockAt(p)) return;
-    deselect();
-    if (IOS && touch) pasteOnRelease.current = { world: p, screen };
-    else setPasteMenu({ world: p, screen });
-  };
-
-  // Палец отпустили — читаем буфер; касание оборвалось (буфер читать уже
-  // нельзя) — свой пузырёк, как на других устройствах
-  const onLongPressEnd = (activated: boolean) => {
-    const press = pasteOnRelease.current;
-    pasteOnRelease.current = null;
-    if (!press) return;
-    if (activated) void pasteAfterHold(press);
-    else setPasteMenu(press);
-  };
-
-  // Повернули экран — пузырёк уже не там, где нажимали
-  useEffect(() => {
-    if (!pasteMenu) return;
-    const close = () => setPasteMenu(null);
-    window.addEventListener('resize', close);
-    return () => window.removeEventListener('resize', close);
-  }, [pasteMenu]);
 
   // Ctrl+V / ⌘V (и «Вставить» в меню поля): картинка — фото на листе (в
   // надпись её не вставить), текст вне надписи — новая надпись посередине
@@ -1234,10 +1265,12 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     });
   };
 
-  const go = async (dir: FlipDir) => {
+  // to — на эту страницу (а не на соседнюю); keepHistory — отмена остаётся
+  // и на новом развороте (вставили лист и перелистнули к нему)
+  const go = async (dir: FlipDir, to?: number, keepHistory = false) => {
     const step = dir === 'next' ? 1 : -1;
     // На развороте листаем разворотами (к левой странице следующего)
-    const target = single ? page + step : 2 * (spread + step) + 1;
+    const target = to ?? (single ? page + step : 2 * (spread + step) + 1);
     if (turning || target < 1) return;
     // Поле ввода сейчас уедет вместе с листом — убираем клавиатуру и выбор
     deselect();
@@ -1251,6 +1284,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     if (targetSpread !== spread) {
       await canvas.current?.goHome(undefined, TURN_HOME_MS);
       await turnSheet(dir, spread, targetSpread);
+      if (keepHistory) history.current.spread = targetSpread;
       flushSync(() => {
         setFlip(null);
         setPage(target);
@@ -1275,6 +1309,85 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     }
     deselect();
     onDay(dir === 'next' ? 1 : -1);
+  };
+
+  // --- Настройки листа (шестерёнка в углу страницы) ---
+  // Открыта панель страницы n (с 1)
+  const [pageMenu, setPageMenu] = useState<number | null>(null);
+  const lookOf = (all: Spreads, n: number): PageLook => all[spreadOf(n)]?.looks?.[sideOf(n)] ?? {};
+
+  // Цвет бумаги или надписей страницы n: пока палец на палитре — только на
+  // экране, отпустили — в запись (отменяется)
+  const setLook = (n: number, patch: PageLook, final: boolean) =>
+    setSpreads(prev => {
+      const next = withLook(prev, spreadOf(n), sideOf(n), { ...lookOf(prev, n), ...patch });
+      return final ? persist(next) : next;
+    });
+
+  // Оформление как у страницы from
+  const copyLook = (n: number, from: number) => commit(withLook(spreads, spreadOf(n), sideOf(n), lookOf(spreads, from)));
+
+  // Убрать со страницы всё (оформление остаётся)
+  const clearPage = (n: number) => {
+    const s = spreadOf(n);
+    const cur = spreads[s];
+    if (!cur) return;
+    const sp = { ...cur, blocks: cur.blocks.filter(b => sideOfBlock(b) !== sideOf(n)) };
+    const next = { ...spreads, [s]: sp };
+    if (!isKept(sp)) delete next[s];
+    commit(next);
+  };
+
+  // Удалить страницу: следующие сдвигаются на её место (открыта остаётся
+  // та же по номеру — теперь на ней следующая)
+  const deletePage = (n: number) => {
+    const pages = toPages(spreads);
+    if (n > pages.length) return;
+    pages.splice(n - 1, 1);
+    commit(fromPages(pages), '', false);
+  };
+
+  // Экспорт страницы n картинкой: её копия — за экраном, без шестерёнки,
+  // рамки и панелей (только бумага, номер, дата и то, что на ней). Размер —
+  // лист в начале (экран) или больше, если лист вырос
+  const [exporting, setExporting] = useState<number | null>(null);
+  const exportNode = useRef<HTMLDivElement>(null);
+  const exportPage = async (n: number): Promise<File> => {
+    flushSync(() => setExporting(n));
+    try {
+      const node = exportNode.current!;
+      await document.fonts.ready;
+      await imagesLoaded(node);
+      const sd = sideOf(n);
+      let x0 = sd === 'left' ? -PAGE_WIDTH : 0;
+      let x1 = sd === 'left' ? 0 : PAGE_WIDTH;
+      let bottom = (window.innerHeight * PAGE_WIDTH * (single ? 1 : 2)) / window.innerWidth;
+      for (const el of node.querySelectorAll<HTMLElement>(':is(.text-block, .item-image)')) {
+        const r = blockRect(el);
+        if (sd === 'left') x0 = Math.min(x0, r.x - EXPORT_MARGIN);
+        else x1 = Math.max(x1, r.x + r.w + EXPORT_MARGIN);
+        bottom = Math.max(bottom, r.y + r.h + EXPORT_MARGIN);
+      }
+      const w = Math.ceil(x1 - x0);
+      const h = Math.ceil(bottom);
+      node.style.width = `${w}px`;
+      node.style.height = `${h}px`;
+      (node.firstElementChild as HTMLElement).style.left = `${-x0}px`;
+      const blob = await pageImage(node, w, h);
+      return new File([blob], dayDate ? `${dayDate}.png` : `Лист ${n}.png`, { type: 'image/png' });
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  // Пустая страница после n (следующие сдвигаются дальше) — и к ней
+  const insertPageAfter = (n: number) => {
+    const pages = toPages(spreads);
+    if (n < pages.length) {
+      pages.splice(n, 0, { blocks: [] });
+      commit(fromPages(pages), '', false);
+    }
+    void go('next', n + 1, true);
   };
 
   // Стрелки и PageUp/PageDown на клавиатуре, когда не печатаем; Ctrl/⌘+Z —
@@ -1381,6 +1494,20 @@ export function Notebook({ source, onMenu, onDay }: Props) {
 
   // Сторона разворота; надписи на ней — только «картинкой», пока лист
   // перелистывается, а так они в своём слое (ниже)
+  // Плашки, меню и кнопки — по цвету открытого листа (просьба автора): на
+  // тёмном — тёмные (index.css: data-surface). На развороте — если тёмные
+  // обе страницы
+  const darkPaper = (display === 'both' ? (['left', 'right'] as const) : [side]).every(sd => isDark(spreads[spread]?.looks?.[sd]?.paper));
+  useEffect(() => {
+    const root = document.documentElement;
+    if (darkPaper) root.dataset.surface = 'dark';
+    else delete root.dataset.surface;
+    return () => {
+      delete root.dataset.surface;
+    };
+  }, [darkPaper]);
+
+  // Шестерёнка настроек — только на неподвижном листе
   const pageSide = (s: number, sd: Side) => (
     <PageSide
       spread={s}
@@ -1388,8 +1515,19 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       blocks={flip ? (spreads[s]?.blocks ?? []) : []}
       date={pageDate(spreads[s], sd)}
       day={dayDate}
+      look={spreads[s]?.looks?.[sd]}
+      onSettings={
+        flip
+          ? undefined
+          : () => {
+              deselect();
+              setPageMenu(2 * s + (sd === 'left' ? 1 : 2));
+            }
+      }
     />
   );
+  // Цвет бумаги — у страниц, что лежат на экране (и под переворачиваемой)
+  const paperOf = (s: number, sd: Side) => spreads[s]?.looks?.[sd]?.paper;
 
   return (
     <>
@@ -1410,7 +1548,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               : 0
         }
         locked={turning}
-        background={<Paper ref={paper} display={display} />}
+        background={<Paper ref={paper} display={display} left={paperOf(underLeft, 'left')} right={paperOf(underRight, 'right')} />}
         onFrame={(cam, size) => {
           const moved = cam.x !== camera.current.x || cam.y !== camera.current.y || cam.scale !== camera.current.scale;
           camera.current = cam;
@@ -1420,8 +1558,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         }}
         onTap={onTap}
         onDoubleTap={onDoubleTap}
-        onLongPress={onLongPress}
-        onLongPressEnd={onLongPressEnd}
         onPanStart={onPanStart}
         onPanEnd={restoreCaret}
         nativeTouch={nativeTouch}
@@ -1434,7 +1570,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         // страницы). Пока что-то выбрано, смахивание не листает
         onSwipe={(dir, start, width) => {
           const fromEdge = dir === 'next' ? start.x > width * (1 - TURN_EDGE) : start.x < width * TURN_EDGE;
-          if (fromEdge && !turning && !selectedBlock && !pasteMenu) turn(dir);
+          if (fromEdge && !turning && !selectedBlock) turn(dir);
         }}
         grab={grab}
       >
@@ -1488,42 +1624,11 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             // другую сторону корешка
             front={pageSide(flip.from, flip.dir === 'next' ? 'right' : 'left')}
             back={pageSide(flip.to, flip.dir === 'next' ? 'left' : 'right')}
+            frontPaper={paperOf(flip.from, flip.dir === 'next' ? 'right' : 'left')}
+            backPaper={paperOf(flip.to, flip.dir === 'next' ? 'left' : 'right')}
           />
         )}
       </Canvas>
-
-      {pasteMenu && (
-        <>
-          <div className="paste-backdrop" onPointerDown={() => setPasteMenu(null)} />
-          <button
-            type="button"
-            // У верха экрана — под пальцем, а не над ним
-            className={`paste-bubble${pasteMenu.screen.y < PASTE_ROOM ? ' is-below' : ''}`}
-            style={{ left: `clamp(70px, ${pasteMenu.screen.x}px, calc(100% - 70px))`, top: pasteMenu.screen.y }}
-            // Пузырёк исчезает уже под пальцем, а буфер читаем после
-            // отпускания и паузы: пока Safari показывает свою «Вставить»,
-            // страница не перерисовывается, и наш пузырёк оставался рядом с
-            // ней (две кнопки — жалоба автора). Таймер короче секунды Safari
-            // ещё считает ответом на касание
-            onPointerDown={e => {
-              // Прозрачностью, а не visibility: скрытый так элемент не ловит
-              // касание, и «клик» доставался подложке — вставки не было
-              e.currentTarget.style.opacity = '0';
-            }}
-            onClick={() => {
-              const m = pasteMenu;
-              flushSync(() => setPasteMenu(null));
-              if (m.data) {
-                void insertPasted(m.data, m.world);
-                return;
-              }
-              window.setTimeout(() => void pasteAt(m.world), BUBBLE_GONE_MS);
-            }}
-          >
-            Вставить
-          </button>
-        </>
-      )}
 
       {erased && (
         <ConfirmDialog
@@ -1540,6 +1645,51 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             setErased(null);
           }}
         />
+      )}
+
+      {pageMenu !== null && (
+        <PageSettings
+          page={dayDate ? null : pageMenu}
+          look={lookOf(spreads, pageMenu)}
+          pages={toPages(spreads).length}
+          onLook={(patch, final) => setLook(pageMenu, patch, final)}
+          onCopyFrom={from => copyLook(pageMenu, from)}
+          onClear={() => {
+            clearPage(pageMenu);
+            setPageMenu(null);
+          }}
+          onDelete={() => {
+            deletePage(pageMenu);
+            setPageMenu(null);
+          }}
+          onInsertAfter={() => {
+            setPageMenu(null);
+            insertPageAfter(pageMenu);
+          }}
+          onExport={() => exportPage(pageMenu)}
+          onClose={() => setPageMenu(null)}
+        />
+      )}
+
+      {/* Копия страницы для картинки (экспорт) — за экраном */}
+      {exporting !== null && (
+        <div
+          ref={exportNode}
+          className="page-export"
+          aria-hidden="true"
+          style={{ background: spreads[spreadOf(exporting)]?.looks?.[sideOf(exporting)]?.paper ?? 'var(--paper)' }}
+        >
+          <div className="page-export-origin">
+            <PageSide
+              spread={spreadOf(exporting)}
+              side={sideOf(exporting)}
+              blocks={spreads[spreadOf(exporting)]?.blocks ?? []}
+              date={pageDate(spreads[spreadOf(exporting)], sideOf(exporting))}
+              day={dayDate}
+              look={spreads[spreadOf(exporting)]?.looks?.[sideOf(exporting)]}
+            />
+          </div>
+        </div>
       )}
 
       {selectedBlock && (
@@ -1608,9 +1758,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             {/* Лист — в стартовое положение: начало листа, обычный размер (просьба автора) */}
             <button type="button" className="round-button" aria-label="К началу листа" onClick={() => void canvas.current?.goHome()}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="6.5" />
-                <circle cx="12" cy="12" r="1.6" style={{ fill: 'currentColor' }} />
-                <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" />
+                {/* Домик (просьба автора) */}
+                <path d="M3.5 11.5 12 4l8.5 7.5M6 9.5V20h4.5v-5.5h3V20H18V9.5" />
               </svg>
             </button>
             <button type="button" className="round-button" aria-label="Главное меню" onClick={onMenu}>
@@ -1621,8 +1770,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             <AddMenu
               onPhoto={file => void addPhoto(file)}
               onSticker={addSticker}
-              clipLabel={clipLabel}
-              onPasteClip={() => void pasteClip(viewCenter())}
+              onPaste={() => window.setTimeout(() => void pasteFromMenu(), MENU_GONE_MS)}
             />
             <Settings />
           </div>
@@ -1641,22 +1789,55 @@ type PageSideProps = {
   date: string | null;
   // Лист дня (ГГГГ-ММ-ДД): вместо номера страницы — дата
   day: string | null;
+  // Оформление страницы (настройки листа)
+  look?: PageLook;
+  // Шестерёнка настроек листа; нет — без неё (лист перелистывается)
+  onSettings?: () => void;
 };
 
 // Одна сторона разворота: номер страницы у корешка, дата, когда на развороте
 // начали писать (на пустом — ничего: на новых листах только номер, просьба
-// автора), надписи этой стороны (левая — x < 0). У листа дня вверху — его дата
-function PageSide({ spread, side, blocks, date, day }: PageSideProps) {
+// автора), надписи этой стороны (левая — x < 0). У листа дня вверху — его дата.
+// Во внешнем верхнем углу — шестерёнка настроек этой страницы
+function PageSide({ spread, side, blocks, date, day, look, onSettings }: PageSideProps) {
   const number = 2 * spread + (side === 'left' ? 1 : 2);
+  // Свой цвет номера и даты: номер — бледнее, как обычно. На тёмном листе
+  // без своего цвета — светлые
+  const ink = look?.labels ?? (isDark(look?.paper) ? 'color-mix(in srgb, var(--brand) 30%, #fff)' : undefined);
+  const strong = ink ? { color: ink } : undefined;
+  const muted = ink ? { color: `color-mix(in srgb, ${ink} 60%, transparent)` } : undefined;
   return (
     <div className="page-side">
       {day ? (
-        <span className="page-day">{formatDay(day)}</span>
+        <span className="page-day" style={strong}>
+          {formatDay(day)}
+        </span>
       ) : (
         <>
-          <span className={`page-number page-number-${side}`}>{number}</span>
-          {date && <span className={`page-date page-date-${side}`}>{date}</span>}
+          <span className={`page-number page-number-${side}`} style={muted}>
+            {number}
+          </span>
+          {date && (
+            <span className={`page-date page-date-${side}`} style={strong}>
+              {date}
+            </span>
+          )}
         </>
+      )}
+      {onSettings && (
+        <button
+          type="button"
+          className={`page-gear page-gear-${side}`}
+          style={muted}
+          aria-label={day ? 'Настройки листа' : `Настройки листа ${number}`}
+          data-no-pan
+          onClick={onSettings}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="3.2" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.4-1.51 1z" />
+          </svg>
+        </button>
       )}
       <div className="item-clip" data-clip={side}>
         {blocks

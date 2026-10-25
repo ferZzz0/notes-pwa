@@ -48,9 +48,12 @@ export function Selection({ ref, block, camera, onResize }: Props) {
         // меняются прямо в DOM (Notebook.grab), раньше, чем в block
         const rotate = Number(el.dataset.rotate ?? 0);
         const scale = Number(el.dataset.scale ?? 1);
+        // Пока тащат — сдвиг (translate, data-dx/dy): left/top стоят на месте
+        const dx = Number(el.dataset.dx ?? 0);
+        const dy = Number(el.dataset.dy ?? 0);
         // Середина надписи на экране; рамка — её размер с учётом масштаба
-        const cx = cam.x + (el.offsetLeft + el.offsetWidth / 2) * cam.scale;
-        const cy = cam.y + (el.offsetTop + el.offsetHeight / 2) * cam.scale;
+        const cx = cam.x + (el.offsetLeft + dx + el.offsetWidth / 2) * cam.scale;
+        const cy = cam.y + (el.offsetTop + dy + el.offsetHeight / 2) * cam.scale;
         const w = el.offsetWidth * scale * cam.scale + 2 * PAD;
         const h = el.offsetHeight * scale * cam.scale + 2 * PAD;
         f.style.visibility = '';

@@ -8,6 +8,16 @@
   pointer-events: none;
 }
 
+/* Свои цвета страниц: вдвое шире экрана, граница посередине — на корешке */
+.paper-tint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  will-change: transform;
+}
+
 .paper-spine {
   position: absolute;
   top: 0;
