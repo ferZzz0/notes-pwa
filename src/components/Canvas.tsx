@@ -65,6 +65,9 @@ type Props = {
   // Палец лёг в точку p (экранные px полотна): если там то, что можно
   // двигать, — его жест (Grab), иначе null — тогда двигается камера
   grab?: (p: Point) => Grab | null;
+  // Долгое нажатие на мир (палец стоит LONG_PRESS_MS) или правый клик —
+  // точка мира и точка экрана (px полотна); тапа после него нет
+  onLongPress?: (world: Point, screen: Point) => void;
   children: ReactNode;
 };
 
@@ -73,6 +76,7 @@ const MAX_SCALE = 2.5; // до 2.5 экранных px на px мира
 const EDGE_ZONE = 0.2; // содержимое ближе этой доли экрана к краю — лист растёт на экран
 const TAP_SLOP = 8; // сдвиг пальца, после которого это уже не тап, а перелёт
 const DOUBLE_TAP_MS = 300;
+const LONG_PRESS_MS = 500;
 const FRICTION = 0.94; // инерция: доля скорости, остающаяся за 16 мс
 const MIN_SPEED = 0.02; // px/мс — медленнее инерция останавливается
 const MAX_SPEED = 3; // px/мс — быстрее бросок не разгоняет
@@ -82,9 +86,10 @@ const mid = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y)
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 const matches = (t: EventTarget | null, selector: string) => t instanceof Element && t.closest(selector) !== null;
-const isEditable = (t: EventTarget | null) => matches(t, 'textarea, input, [contenteditable="true"]');
+const EDITABLE = 'textarea, input, [contenteditable]:not([contenteditable="false"])';
+const isEditable = (t: EventTarget | null) => matches(t, EDITABLE);
 // По таким элементам тап и двойной тап — их собственные
-const isInteractive = (t: EventTarget | null) => matches(t, 'textarea, input, button, a, [contenteditable="true"]');
+const isInteractive = (t: EventTarget | null) => matches(t, `${EDITABLE}, button, a`);
 
 // Полотно, над которым «летают»: одним пальцем (или мышью) мир двигается,
 // после броска скользит по инерции; щипок, Ctrl/⌘ + колесо или щипок на
@@ -105,6 +110,7 @@ export function Canvas({
   onTap,
   onDoubleTap,
   grab,
+  onLongPress,
   children
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -112,8 +118,8 @@ export function Canvas({
   const insetsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<(CanvasHandle & { reclamp: () => void }) | null>(null);
   // Свежие пропсы для обработчиков, подписанных один раз
-  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab });
-  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab };
+  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress });
+  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress };
 
   useImperativeHandle(
     ref,
@@ -391,10 +397,14 @@ export function Canvas({
     let swallowMouse = false;
     let samples: { t: number; x: number; y: number }[] = [];
     let lastTap = { t: 0, x: 0, y: 0 };
+    // Долгое нажатие: его таймер и сработало ли оно (тогда отпускание — не тап)
+    let pressTimer = 0;
+    let pressed = false;
 
     const firstTwo = () => [...pointers.values()].slice(0, 2) as [Point, Point];
 
     const beginMoving = () => {
+      clearTimeout(pressTimer);
       if (moving) return;
       moving = true;
       viewport.classList.add('is-panning');
@@ -422,6 +432,17 @@ export function Canvas({
         samples = [];
         flush(); // предмет ищут по уже применённой камере
         grabbed = props.current.grab?.(p) ?? null;
+        pressed = false;
+        clearTimeout(pressTimer);
+        // Мышью долгое нажатие — правый клик (ниже)
+        if (!grabbed && e.pointerType !== 'mouse' && !isInteractive(e.target)) {
+          pressTimer = window.setTimeout(() => {
+            if (pointers.size !== 1 || moving || props.current.locked) return;
+            pressed = true;
+            flush();
+            props.current.onLongPress?.(toWorld(downAt), downAt);
+          }, LONG_PRESS_MS);
+        }
       } else {
         beginMoving();
         grabbed?.begin(firstTwo());
@@ -474,6 +495,15 @@ export function Canvas({
         return;
       }
       viewport.classList.remove('is-panning');
+      clearTimeout(pressTimer);
+
+      // После долгого нажатия отпускание — не тап
+      if (pressed) {
+        pressed = false;
+        grabbed = null;
+        if (e.pointerType !== 'mouse') swallowMouse = true;
+        return;
+      }
 
       if (moving && grabbed) {
         moving = false;
@@ -545,6 +575,16 @@ export function Canvas({
       zoomAt(local(g.clientX, g.clientY), gestureBase * g.scale);
     };
 
+    // Правый клик мышью — как долгое нажатие. Долгое нажатие пальцем
+    // (Android шлёт и его) уже обработано таймером — только глушим меню
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      if (pointers.size > 0 || props.current.locked || isInteractive(e.target)) return;
+      const p = local(e.clientX, e.clientY);
+      flush();
+      props.current.onLongPress?.(toWorld(p), p);
+    };
+
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(viewport);
@@ -558,6 +598,7 @@ export function Canvas({
       e.preventDefault();
     };
     viewport.addEventListener('touchend', onTouchEnd, { passive: false });
+    viewport.addEventListener('contextmenu', onContextMenu);
     viewport.addEventListener('wheel', onWheel, { passive: false });
     viewport.addEventListener('gesturestart', onGestureStart);
     viewport.addEventListener('gesturechange', onGestureChange);
@@ -573,6 +614,8 @@ export function Canvas({
       viewport.removeEventListener('pointerup', onUp);
       viewport.removeEventListener('pointercancel', onUp);
       viewport.removeEventListener('touchend', onTouchEnd);
+      viewport.removeEventListener('contextmenu', onContextMenu);
+      clearTimeout(pressTimer);
       viewport.removeEventListener('wheel', onWheel);
       viewport.removeEventListener('gesturestart', onGestureStart);
       viewport.removeEventListener('gesturechange', onGestureChange);

@@ -86,7 +86,7 @@ function loadImage(file: Blob): Promise<HTMLImageElement> {
 // Сохранить выбранное фото: уменьшить, записать, вернуть id и пропорции
 // (высота / ширина). <img> сам поворачивает фото по EXIF, так что снимки
 // с телефона не лягут боком
-export async function importImage(file: File, id: string): Promise<{ ratio: number }> {
+export async function importImage(file: File, id: string): Promise<{ ratio: number; width: number }> {
   const img = await loadImage(file);
   const k = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
   const w = Math.max(1, Math.round(img.naturalWidth * k));
@@ -107,5 +107,5 @@ export async function importImage(file: File, id: string): Promise<{ ratio: numb
   urls.set(id, URL.createObjectURL(blob));
   // Просим браузер не вычищать память приложения сам, когда места мало
   void navigator.storage?.persist?.().catch(() => {});
-  return { ratio: h / w };
+  return { ratio: h / w, width: w };
 }

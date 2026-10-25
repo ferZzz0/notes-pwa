@@ -17,8 +17,8 @@ type Props = {
 type Menu = 'frame' | 'filter' | 'layer' | 'delete' | null;
 
 // Панель выбранного фото — как у надписи (TextToolbar.css): рамка и фильтр
-// (выпадающие списки), отразить, слой (наверх / вниз), удалить (с
-// подтверждением), готово. Двигают, поворачивают и меняют размер фото
+// (выпадающие списки), слой (наверх / вниз), удалить (с подтверждением),
+// готово. Двигают, поворачивают и меняют размер фото
 // пальцами, как надпись.
 export function ImageToolbar({ block, onPatch, onLayer, onDelete, onDone, onHeight }: Props) {
   const ref = useToolbarHeight(onHeight);
@@ -88,17 +88,6 @@ export function ImageToolbar({ block, onPatch, onLayer, onDelete, onDone, onHeig
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="8.5" />
           <path d="M12 3.5a8.5 8.5 0 0 1 0 17z" style={{ fill: 'currentColor' }} />
-        </svg>
-      </button>
-      <button
-        type="button"
-        className={block.flip ? 'is-active' : undefined}
-        aria-label="Отразить"
-        aria-pressed={!!block.flip}
-        onClick={() => onPatch({ flip: block.flip ? undefined : true })}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 3v18M9 7l-5 5 5 5zM15 7l5 5-5 5z" />
         </svg>
       </button>
       <button type="button" className={menu === 'layer' ? 'is-active' : undefined} aria-label="Слой" onClick={() => toggle('layer')}>

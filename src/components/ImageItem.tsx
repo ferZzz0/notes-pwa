@@ -8,9 +8,9 @@ import './ImageItem.css';
 const DEFAULT_WIDTH = 500;
 
 // Фото на листе: картинка из IndexedDB (images.ts) шириной block.width,
-// высота — по пропорциям, в рамке (frame), с фильтром, может быть
-// отражено. Поворот и размер — вокруг середины, как у надписи; data-* —
-// для выбора и замера (Notebook). Касания проходят к полотну.
+// высота — по пропорциям, в рамке (frame), с фильтром. Поворот и размер —
+// вокруг середины, как у надписи; data-* — для выбора и замера (Notebook).
+// Касания проходят к полотну.
 export function ImageItem({ block }: { block: Block }) {
   const id = block.image ?? '';
   const [url, setUrl] = useState(() => knownImageUrl(id));
@@ -47,7 +47,7 @@ export function ImageItem({ block }: { block: Block }) {
             src={url}
             alt=""
             draggable={false}
-            style={{ filter: filterCss(block.filter), transform: block.flip ? 'scaleX(-1)' : undefined }}
+            style={{ filter: filterCss(block.filter) }}
           />
         )}
       </div>

@@ -19,6 +19,19 @@ import {
   type TextStyle
 } from '../notes';
 import { usePortrait } from '../orientation';
+import {
+  applyToRange,
+  compactRuns,
+  getRange,
+  runsOf,
+  runsText,
+  setRange,
+  stripStyle,
+  textLength,
+  type Run,
+  type RunStyle,
+  type TextRange
+} from '../richText';
 import type { StickerId } from '../textStyle';
 import { AddMenu } from './AddMenu';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -29,7 +42,7 @@ import { PageTurn } from './PageTurn';
 import { Paper, type PaperDisplay, type PaperHandle } from './Paper';
 import { Selection, type SelectionHandle } from './Selection';
 import { Settings } from './Settings';
-import { TextBlock } from './TextBlock';
+import { pendingRanges, TextBlock } from './TextBlock';
 import { TextToolbar } from './TextToolbar';
 import './Notebook.css';
 
@@ -79,10 +92,14 @@ const TURN_HOME_MS = 200;
 // ней — до половины экрана и больше в горизонтали)
 const CARET_ZONE = 0.3;
 const KEYBOARD_GUESS = 0.6;
+// Столько держим этот запас — пока клавиатура открывается
+const TYPING_RESERVE_MS = 1000;
 // Новое фото — не шире этой доли видимой части листа и не выше этой
 const PHOTO_SHARE = { w: 0.55, h: 0.6 };
 // Примерный размер нового стикера (мир) — чтобы поставить его посередине экрана
 const STICKER_SIZE = { w: 230, h: 210 };
+// Пузырёк «Вставить» стоит над пальцем, если над ним столько места (px экрана)
+const PASTE_ROOM = 90;
 
 const dateFormat = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long' });
 const dayFormat = new Intl.DateTimeFormat('ru', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -121,6 +138,10 @@ function blockRect(el: HTMLElement): Rect {
 
 // Надпись, стикер (их поле ввода) или фото на листе
 const blockElement = (id: string) => document.querySelector<HTMLElement>(`.page-texts [data-block="${id}"]`);
+
+// Редактируемая надпись (в ней печатают)
+const isEditor = (el: Element | null): el is HTMLElement =>
+  el instanceof HTMLElement && el.isContentEditable && el.classList.contains('text-block');
 
 // Попадает ли точка мира в надпись — с её поворотом и размером и с запасом
 // pad (px мира) вокруг
@@ -192,11 +213,17 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const [toolbarHeight, setToolbarHeight] = useState(0);
   // Текст надписи, когда в неё начали печатать (по id) — чтобы вернуть его,
   // если её стёрли целиком и передумали удалять
-  const textBefore = useRef(new Map<string, string>());
+  const textBefore = useRef(new Map<string, { text: string; runs?: Run[] }>());
   // Надпись с текстом стёрли целиком: спрашиваем, удалить ли её
-  const [erased, setErased] = useState<{ id: string; text: string } | null>(null);
+  const [erased, setErased] = useState<{ id: string; text: string; runs?: Run[] } | null>(null);
+  // Выделение в надписи в начале нажатия на панель — до того, как касание его
+  // сбросит; null — оформление ляжет на всю надпись
+  const captured = useRef<TextRange | null>(null);
   // Печатают (или вот-вот откроется клавиатура): лист заранее удлинён снизу
   const [typing, setTyping] = useState(false);
+  // Пузырёк «Вставить» после долгого нажатия: куда вставлять (мир) и где он
+  // (экран)
+  const [pasteMenu, setPasteMenu] = useState<{ world: Point; screen: Point } | null>(null);
   // Открытая страница; на развороте — любая из двух его страниц
   const [page, setPage] = useState(() => loadPage(source));
   const portrait = usePortrait();
@@ -230,10 +257,12 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     saveSpreads(source, next);
   };
 
-  const setText = (id: string, text: string) => {
+  // Набранное в надписи — её куски (текст — их сумма)
+  const setRuns = (id: string, runs: Run[]) => {
     const cur = spreads[spread];
     if (!cur) return;
-    const blocks = cur.blocks.map(b => (b.id === id ? { ...b, text } : b));
+    const text = runsText(runs);
+    const blocks = cur.blocks.map(b => (b.id === id ? { ...b, text, runs: compactRuns(runs) } : b));
     commit({ ...spreads, [spread]: { created: cur.created ?? (text ? localDate() : undefined), blocks } });
   };
 
@@ -260,7 +289,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     const b = spreads[spread]?.blocks.find(x => x.id === id);
     if (!b || !isBlank(b)) return;
     const before = textBefore.current.get(id);
-    if (before) setErased({ id, text: before });
+    if (before?.text) setErased({ id, ...before });
     else removeBlock(id);
   };
 
@@ -310,22 +339,76 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     edit(block.id);
   };
 
-  // Фото из галереи: уменьшаем и сохраняем (images.ts), ставим посередине
-  // экрана — не шире и не выше доли видимой части листа
-  const addPhoto = async (file: File) => {
+  // Фото из галереи или буфера обмена: уменьшаем и сохраняем (images.ts),
+  // ставим серединой в точку at (нет — посередине экрана), не шире и не
+  // выше доли видимой части листа; маленькую картинку не растягиваем больше
+  // её собственного размера на экране — она бы расплылась
+  const addPhoto = async (file: File, at?: Point) => {
     const id = newBlockId();
     let ratio: number;
+    let natural: number;
     try {
-      ({ ratio } = await importImage(file, id));
+      ({ ratio, width: natural } = await importImage(file, id));
     } catch {
       alert('Не получилось открыть это фото');
       return;
     }
     const v = canvas.current!.visibleRect();
-    const width = Math.round(Math.min(v.w * PHOTO_SHARE.w, (v.h * PHOTO_SHARE.h) / ratio));
-    const c = viewCenter();
+    const width = Math.round(Math.min(v.w * PHOTO_SHARE.w, (v.h * PHOTO_SHARE.h) / ratio, natural / camera.current.scale));
+    const c = at ?? viewCenter();
     const pos = place(width, c.x - width / 2, c.y - (width * ratio) / 2);
     addBlock({ id: newBlockId(), kind: 'image', image: id, width, ratio, ...pos, text: '' });
+  };
+
+  // Новая надпись там, где коснулись (p, мир): текст начинается чуть левее
+  // и выше пальца, на левой странице — не за корешком. Цвет и шрифт — как у
+  // прошлой надписи
+  const newText = (p: Point, text = ''): Block => ({
+    id: newBlockId(),
+    x: p.x < 0 ? Math.min(p.x - NEW_TEXT_OFFSET.x, -MIN_TEXT_WIDTH - SPINE_GAP) : Math.max(p.x - NEW_TEXT_OFFSET.x, 0),
+    y: Math.max(0, p.y - NEW_TEXT_OFFSET.y),
+    text,
+    ...(style.color ? { color: style.color } : {}),
+    ...(style.font && style.font !== 'hand' ? { font: style.font } : {})
+  });
+
+  // Вставленный текст — новая выбранная надпись в точке p
+  const pasteText = (text: string, p: Point) => {
+    const t = text.replace(/\r\n?/g, '\n');
+    if (!t.trim()) {
+      alert('В буфере обмена нет ни текста, ни картинки');
+      return;
+    }
+    addBlock(newText(p, t));
+  };
+
+  // «Вставить» после долгого нажатия: картинка из буфера обмена — фото,
+  // текст — надпись, в точку нажатия p. Буфер читаем прямо в нажатии на
+  // кнопку — иначе браузер не даст (iOS ещё покажет свою кнопку «Вставить»)
+  const pasteAt = async (p: Point) => {
+    setPasteMenu(null);
+    const clip = navigator.clipboard;
+    try {
+      if (typeof clip.read !== 'function') {
+        pasteText(await clip.readText(), p);
+        return;
+      }
+      const items = await clip.read();
+      for (const item of items) {
+        const type = item.types.find(t => t.startsWith('image/'));
+        if (type) {
+          await addPhoto(new File([await item.getType(type)], 'clipboard', { type }), p);
+          return;
+        }
+      }
+      const item = items.find(i => i.types.includes('text/plain'));
+      pasteText(item ? await (await item.getType('text/plain')).text() : '', p);
+    } catch (e) {
+      // Отказ (не разрешили доступ, на iPhone не нажали «Вставить») — это
+      // решение самого человека, о нём не говорим
+      if (e instanceof DOMException && e.name === 'NotAllowedError') return;
+      alert('Не получилось прочитать буфер обмена');
+    }
   };
 
   // Изменить надпись открытого разворота. Пока её тащат пальцами — без записи в
@@ -353,12 +436,40 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     return { x: left ? Math.min(x, -SPINE_GAP - w) : Math.max(x, 0), y: Math.max(0, y) };
   };
 
-  // Цвет и шрифт — у надписи и для следующих; пока ведут пальцем по
+  // Запомнить выделение в выбранной надписи (в начале нажатия на панель)
+  const captureRange = () => {
+    const el = selectedBlock && blockElement(selectedBlock.id);
+    const range = el ? getRange(el) : null;
+    captured.current = range && range.end > range.start ? range : null;
+  };
+
+  // Оформление: на выделенный кусок, а без выделения — на всю надпись (и
+  // тогда у кусков это свойство снимается); 'none' — убрать. Цвет и шрифт
+  // всей надписи — ещё и для следующих надписей. Пока ведут пальцем по
   // палитре — без записи (save = false)
-  const restyle = (id: string, patch: TextStyle, save = true) => {
-    patchBlock(id, patch, save);
-    if (!save) return;
-    const next = { ...style, ...patch };
+  const restyle = (id: string, patch: Partial<Record<keyof RunStyle, string>>, save = true) => {
+    const range = captured.current;
+    const keys = Object.keys(patch) as (keyof RunStyle)[];
+    setSpreads(prev => {
+      const cur = prev[spread];
+      const b = cur?.blocks.find(x => x.id === id);
+      if (!cur || !b) return prev;
+      let nb: Block;
+      if (range) {
+        nb = { ...b, runs: compactRuns(applyToRange(runsOf(b), range, patch)) };
+      } else {
+        const whole: Record<string, unknown> = {};
+        for (const k of keys) whole[k] = patch[k] === 'none' ? undefined : patch[k];
+        nb = { ...b, ...whole, runs: compactRuns(stripStyle(runsOf(b), keys)) };
+      }
+      const next = { ...prev, [spread]: { ...cur, blocks: cur.blocks.map(x => (x.id === id ? nb : x)) } };
+      if (save) saveSpreads(source, next);
+      return next;
+    });
+    // Выделение вернётся после того, как надпись построится заново
+    if (range) pendingRanges.set(id, range);
+    if (!save || range || !(patch.color || patch.font)) return;
+    const next: TextStyle = { ...style, ...(patch as TextStyle) };
     setStyle(next);
     saveStyle(next);
   };
@@ -383,19 +494,23 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // курсор не там, выше текста. Поэтому строку с курсором (он в конце текста)
   // заранее, сразу поднимаем в верх экрана — лист для этого удлинён на
   // клавиатуру (typing), — а фокус ставим без прокрутки
-  const focusText = (el: HTMLTextAreaElement) => {
+  const focusText = (el: HTMLElement) => {
     flushSync(() => setTyping(true));
+    // Клавиатура к этому времени уже открыта (её место — keyboard) или её
+    // нет вовсе (компьютер) — запас больше не нужен
+    setTimeout(() => setTyping(false), TYPING_RESERVE_MS);
     const limit = window.innerHeight * CARET_ZONE;
     const bottom = el.getBoundingClientRect().bottom;
     if (bottom > limit) canvas.current?.jump(0, limit - bottom);
     el.focus({ preventScroll: true });
-    el.setSelectionRange(el.value.length, el.value.length);
+    const end = textLength(el);
+    setRange(el, { start: end, end });
   };
 
   // Печатать в надписи
   const edit = (id: string) => {
     const el = blockElement(id);
-    if (el instanceof HTMLTextAreaElement) focusText(el);
+    if (isEditor(el)) focusText(el);
   };
 
   // Касание по листу: по надписи — выбрать её (клавиатура не открывается),
@@ -474,16 +589,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       void canvas.current?.goHome();
       return;
     }
-    const block: Block = {
-      id: newBlockId(),
-      // Текст левой страницы не должен залезать за корешок
-      x: tapSide === 'left' ? Math.min(p.x - NEW_TEXT_OFFSET.x, -MIN_TEXT_WIDTH - SPINE_GAP) : Math.max(p.x - NEW_TEXT_OFFSET.x, 0),
-      y: Math.max(0, p.y - NEW_TEXT_OFFSET.y),
-      text: '',
-      // Цвет и шрифт — как у прошлой надписи
-      ...(style.color ? { color: style.color } : {}),
-      ...(style.font && style.font !== 'hand' ? { font: style.font } : {})
-    };
+    const block = newText(p);
     const cur = spreads[spread] ?? { blocks: [] };
     // Поле должно появиться и получить фокус прямо в обработчике касания:
     // иначе iOS не покажет клавиатуру
@@ -493,6 +599,46 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     });
     edit(block.id);
   };
+
+  // Долгое нажатие на пустое место листа — пузырёк «Вставить»
+  const onLongPress = (p: Point, screen: Point) => {
+    if (turning || blockAt(p)) return;
+    deselect();
+    setPasteMenu({ world: p, screen });
+  };
+
+  // Повернули экран — пузырёк уже не там, где нажимали
+  useEffect(() => {
+    if (!pasteMenu) return;
+    const close = () => setPasteMenu(null);
+    window.addEventListener('resize', close);
+    return () => window.removeEventListener('resize', close);
+  }, [pasteMenu]);
+
+  // Ctrl+V / ⌘V (и «Вставить» в меню поля): картинка — фото на листе (в
+  // надпись её не вставить), текст вне надписи — новая надпись посередине
+  // экрана; в надпись текст вставляет сам браузер
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const data = e.clipboardData;
+      if (!data || turning || erased) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest('input, textarea')) return;
+      const inText = target?.closest('[contenteditable]:not([contenteditable="false"])');
+      const file = [...data.files].find(f => f.type.startsWith('image/'));
+      if (file) {
+        e.preventDefault();
+        void addPhoto(file);
+        return;
+      }
+      const text = data.getData('text/plain');
+      if (inText || !text.trim()) return;
+      e.preventDefault();
+      pasteText(text, viewCenter());
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  });
 
   // Клавиатура телефона закрывает низ экрана (видимая часть —
   // visualViewport), а над ней — панель надписи: если строка, где пишут,
@@ -513,8 +659,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Лист сдвинулся под полем ввода — iOS может оставить курсор на старом
   // месте; то же выделение заново заставляет его перерисоваться
   const redrawCaret = (el: HTMLElement) => {
-    if (!(el instanceof HTMLTextAreaElement) || document.activeElement !== el) return;
-    el.setSelectionRange(el.selectionStart, el.selectionEnd, el.selectionDirection);
+    if (document.activeElement !== el) return;
+    const range = getRange(el);
+    if (range) setRange(el, range);
   };
 
   // Высота открытой клавиатуры (экранные px): на неё лист временно
@@ -527,7 +674,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       // iOS всё-таки сдвинул экран под клавиатуру — возвращаем: со сдвигом он
       // рисует курсор не на месте, а строку над клавиатурой и так держит keepVisible
       const el = document.activeElement;
-      if ((vv.offsetTop > 0 || window.scrollY > 0) && el instanceof HTMLTextAreaElement) window.scrollTo(0, 0);
+      if ((vv.offsetTop > 0 || window.scrollY > 0) && isEditor(el)) window.scrollTo(0, 0);
       setKeyboard(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
     };
     vv.addEventListener('resize', onChange);
@@ -541,7 +688,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Клавиатура открылась (лист уже удлинён) — поднимаем строку над ней
   useEffect(() => {
     const el = document.activeElement;
-    if (keyboard > 0 && el instanceof HTMLTextAreaElement && el.classList.contains('text-block')) keepVisible(el);
+    if (keyboard > 0 && isEditor(el)) keepVisible(el);
   }, [keyboard]);
 
   useEffect(() => {
@@ -639,7 +786,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Стрелки и PageUp/PageDown на клавиатуре, когда не печатаем
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable="true"]')) return;
+      if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]:not([contenteditable="false"])')) return;
       if (e.key === 'ArrowRight' || e.key === 'PageDown') turn('next');
       else if (e.key === 'ArrowLeft' || e.key === 'PageUp') turn('prev');
     };
@@ -674,8 +821,15 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         content={content}
         fixed={fixedOf(display)}
         bounded={!transit}
+        // Снизу лист удлиняется только под открытую клавиатуру (и панель над
+        // ней) и на миг перед тем, как она откроется; с одной панелью — нет:
+        // лист не должен сдвигаться вниз (просьба автора)
         extraBottom={
-          Math.max(keyboard, typing ? Math.round(window.innerHeight * KEYBOARD_GUESS) : 0) + (selectedBlock ? toolbarHeight + 16 : 0)
+          keyboard > 0
+            ? keyboard + (selectedBlock ? toolbarHeight + 16 : 0)
+            : typing
+              ? Math.round(window.innerHeight * KEYBOARD_GUESS)
+              : 0
         }
         locked={turning}
         background={<Paper ref={paper} display={display} />}
@@ -686,6 +840,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         }}
         onTap={onTap}
         onDoubleTap={onDoubleTap}
+        onLongPress={onLongPress}
         grab={grab}
       >
         {display !== 'right' && pageSide(underLeft, 'left')}
@@ -704,10 +859,10 @@ export function Notebook({ source, onMenu, onDay }: Props) {
                   block={b}
                   width={maxWidthOf(b)}
                   editing={focused === b.id}
-                  onText={setText}
+                  onContent={setRuns}
                   onBlur={dropIfEmpty}
                   onFocus={(id, el) => {
-                    textBefore.current.set(id, b.text);
+                    textBefore.current.set(id, { text: b.text, runs: b.runs });
                     setSelected(id);
                     setFocused(id);
                     setTimeout(() => keepVisible(el), 350);
@@ -738,6 +893,21 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         )}
       </Canvas>
 
+      {pasteMenu && (
+        <>
+          <div className="paste-backdrop" onPointerDown={() => setPasteMenu(null)} />
+          <button
+            type="button"
+            // У верха экрана — под пальцем, а не над ним
+            className={`paste-bubble${pasteMenu.screen.y < PASTE_ROOM ? ' is-below' : ''}`}
+            style={{ left: `clamp(70px, ${pasteMenu.screen.x}px, calc(100% - 70px))`, top: pasteMenu.screen.y }}
+            onClick={() => void pasteAt(pasteMenu.world)}
+          >
+            Вставить
+          </button>
+        </>
+      )}
+
       {erased && (
         <ConfirmDialog
           title="Удалить надпись?"
@@ -749,7 +919,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             setErased(null);
           }}
           onCancel={() => {
-            patchBlock(erased.id, { text: erased.text });
+            patchBlock(erased.id, { text: erased.text, runs: erased.runs });
             setErased(null);
           }}
         />
@@ -776,8 +946,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               keyboard={keyboard}
               onColor={(color, final) => restyle(selectedBlock.id, { color }, final)}
               onFont={font => restyle(selectedBlock.id, { font })}
-              onEffect={effect => patchBlock(selectedBlock.id, { effect: effect === 'none' ? undefined : effect })}
-              onMarker={marker => patchBlock(selectedBlock.id, { marker: marker === 'none' ? undefined : marker })}
+              onEffect={effect => restyle(selectedBlock.id, { effect })}
+              onMarker={marker => restyle(selectedBlock.id, { marker })}
+              onCapture={captureRange}
               onSticker={(patch, save) => patchBlock(selectedBlock.id, patch, save)}
               onLayer={dir => reorder(selectedBlock.id, dir)}
               onDelete={() => {

@@ -30,6 +30,8 @@ type Props = {
   onFont: (font: FontId) => void;
   onEffect: (effect: EffectId) => void;
   onMarker: (marker: MarkerId) => void;
+  // Нажали на панель: запомнить выделение в надписи (касание его сбросит)
+  onCapture: () => void;
   // Стикер: форма и цвет (save = false — пока ведут пальцем по палитре);
   // слой — выше всех или ниже всех на листе
   onSticker: (patch: Partial<Block>, save?: boolean) => void;
@@ -111,7 +113,7 @@ export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => voi
 // текстом), у стикера — его форма, цвет и слой, удалить (с подтверждением),
 // готово. Списки открываются над панелью, по одному.
 export function TextToolbar(props: Props) {
-  const { block, keyboard, onColor, onFont, onEffect, onMarker, onSticker, onLayer, onDelete, onDone, onHeight } = props;
+  const { block, keyboard, onColor, onFont, onEffect, onMarker, onCapture, onSticker, onLayer, onDelete, onDone, onHeight } = props;
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
   const font = fontOf(block.font);
@@ -145,6 +147,7 @@ export function TextToolbar(props: Props) {
       aria-label="Оформление надписи"
       style={keyboard > 0 ? { bottom: keyboard + 8 } : undefined}
       onMouseDown={keepFocus}
+      onPointerDownCapture={onCapture}
     >
       {menu === 'color' && (
         <div className="color-wheel-pop">
@@ -312,7 +315,7 @@ type WheelProps = {
 // Круговая палитра: по кругу — оттенок, от середины к краю — от чёрного (или
 // белого) к яркому (textStyle.ts: wheelColor). Цвет меняется, пока ведёшь
 // пальцем; отметка — где цвет сейчас.
-function ColorWheel({ color, base = 'dark', size, label = 'Цвет', onPick }: WheelProps) {
+function ColorWheel({ color, base = 'dark', size, label = 'Палитра цвета', onPick }: WheelProps) {
   const wheel = useRef<HTMLDivElement>(null);
   const { h, r } = wheelPosition(color, base);
   const a = (h * Math.PI) / 180;

@@ -102,3 +102,53 @@
 .page-arrow:active {
   transform: scale(0.94);
 }
+
+/* Пузырёк «Вставить» после долгого нажатия на лист — над пальцем (у верха
+   экрана — под ним), с хвостиком к точке нажатия. Нажатие мимо закрывает */
+.paste-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+}
+
+.paste-bubble {
+  position: fixed;
+  z-index: 9;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 12px;
+  background: var(--text);
+  box-shadow: var(--shadow);
+  color: var(--surface);
+  font: 600 15px/1.2 var(--ui-font);
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 18px));
+  animation: paste-in 0.15s ease-out;
+}
+
+.paste-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  border: 7px solid transparent;
+  border-top-color: var(--text);
+  transform: translateX(-50%);
+}
+
+.paste-bubble.is-below {
+  transform: translate(-50%, 24px);
+}
+
+.paste-bubble.is-below::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: var(--text);
+}
+
+@keyframes paste-in {
+  from {
+    opacity: 0;
+  }
+}

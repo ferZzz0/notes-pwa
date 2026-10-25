@@ -33,14 +33,28 @@
 }
 
 /* --- Дневники: обложки школьных тетрадей с наклейкой-названием --- */
+/* Дневники — лента, которая прокручивается вбок (просьба автора); тень
+   обложек не обрезаем — снизу и по бокам запас */
 .diaries {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 140px));
+  display: flex;
   gap: 16px;
+  margin: 0 -20px;
+  padding: 4px 20px 18px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
 }
 
-.diary {
+.diaries::-webkit-scrollbar {
+  display: none;
+}
+
+.diary,
+.diary-new {
   position: relative;
+  flex: 0 0 124px;
+  scroll-snap-align: start;
 }
 
 .diary-cover {

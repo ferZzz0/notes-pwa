@@ -6,6 +6,7 @@
 // Храним только развороты с текстом; у установленного на iPhone приложения
 // память своя, отдельная от Safari.
 
+import type { Run } from './richText';
 import type { EffectId, FilterId, FontId, FrameId, MarkerId, StickerId } from './textStyle';
 
 export type Block = {
@@ -18,6 +19,9 @@ export type Block = {
   y: number;
   // Текст надписи или стикера (у фото — пусто)
   text: string;
+  // Куски текста со своим оформлением (richText.ts); нет — весь текст
+  // оформлен как вся надпись. Вместе куски — ровно text
+  runs?: Run[];
   // Оформление; чего нет — то по умолчанию: синие чернила, рукописный
   // шрифт, без поворота, обычный размер. Цвет — #rrggbb (в старых записях —
   // имя чернил, textStyle.ts)
@@ -33,18 +37,17 @@ export type Block = {
   sticker?: StickerId;
   fill?: string;
   // Фото: картинка в IndexedDB (images.ts), ширина (px мира), пропорции
-  // (высота / ширина), рамка, фильтр, отражено ли по горизонтали
+  // (высота / ширина), рамка, фильтр
   image?: string;
   width?: number;
   ratio?: number;
   frame?: FrameId;
   filter?: FilterId;
-  flip?: boolean;
 };
 
-// Пустая надпись (без текста) — её убирают с листа; стикер и фото без текста
-// остаются
-export const isBlank = (b: Block) => !b.kind && !b.text;
+// Пустая надпись (без текста, или только пробелы и переводы строки) — её
+// убирают с листа; стикер и фото без текста остаются
+export const isBlank = (b: Block) => !b.kind && !b.text.trim();
 
 // Цвет и шрифт, выбранные последними, — с ними начинается новая надпись
 export type TextStyle = { color?: string; font?: FontId };

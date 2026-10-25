@@ -1,6 +1,8 @@
-/* Надпись на листе. Поле ввода и текст «картинкой» выглядят одинаково,
-   поэтому переворот листа незаметно подменяет одно другим. Размеры — в px
-   мира полотна; цвет (--ink-color), поворот и размер — из TextBlock.tsx. */
+/* Надпись на листе — редактируемый блок (contenteditable). Он и текст
+   «картинкой» выглядят одинаково, поэтому переворот листа незаметно подменяет
+   одно другим. Размеры — в px мира полотна; ширина — по тексту (от min-width
+   до max-width из TextBlock.tsx); цвет (--ink-color), поворот и размер —
+   оттуда же. Куски текста со своим оформлением — span.run (richText.ts). */
 .text-block {
   position: absolute;
   /* Поля под завитки букв (BLEED_X в TextBlock.tsx) — сверху, снизу и по
@@ -8,20 +10,20 @@
   margin: -6px 0 0 -12px;
   padding: 6px 12px;
   box-sizing: border-box;
+  width: max-content;
   border: none;
   outline: none;
-  appearance: none;
   background: transparent;
   color: var(--ink-color, var(--ink));
   caret-color: currentColor;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  overflow: hidden;
-  resize: none;
+  /* Тени и свечение букв не обрезаем */
+  overflow: visible;
   /* Поворот и размер — вокруг середины надписи */
   transform-origin: center;
   /* Касания проходят к полотну: оно выбирает надпись и двигает её; ловит
-     их только поле, в котором печатают (.is-editing) */
+     их только надпись, в которой печатают (.is-editing) */
   pointer-events: none;
   /* Полотно запрещает выделение, чтобы перелёт не выделял текст;
      в самом тексте выделять можно */
@@ -34,19 +36,38 @@
   pointer-events: auto;
 }
 
-/* Текст «картинкой» — шириной по тексту, как и поле ввода; тени не обрезаем */
-.text-face {
-  width: max-content;
-  overflow: visible;
-}
-
-/* Слой под полем ввода: те же буквы, только прозрачные, — под ними маркер,
-   от них тени и свечение (поле ввода обрезало бы их по своему краю) */
+/* Слой под стикером с текстом — его форма, того же размера, что и блок */
 .text-block.text-decor {
-  color: transparent;
-  overflow: visible;
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* Свой шрифт у куска текста — со своим размером (как у надписи этим шрифтом) */
+.run.font-hand {
+  font-size: 40px;
+}
+
+.run.font-script {
+  font-size: 38px;
+}
+
+.run.font-marker {
+  font-size: 32px;
+}
+
+.run.font-print {
+  font-size: 30px;
+  font-weight: 400;
+}
+
+.run.font-serif {
+  font-size: 32px;
+  font-weight: 400;
+}
+
+.run.font-mono {
+  font-size: 30px;
+  font-weight: 600;
 }
 
 /* Эффекты букв: цвет теней — цвет надписи (--ink-color) */
@@ -76,7 +97,7 @@
 }
 
 /* Маркер — фон строчного span: по строкам, под буквами */
-[class^='mark-'] {
+[class*='mark-'] {
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
@@ -110,17 +131,6 @@
   text-decoration-thickness: 0.07em;
   text-underline-offset: 0.2em;
   text-decoration-skip-ink: none;
-}
-
-/* Невидимая копия надписи: по ней меряют ширину текста */
-.text-block.text-measure {
-  position: fixed;
-  top: 0;
-  left: -10000px;
-  width: max-content;
-  height: auto;
-  visibility: hidden;
-  pointer-events: none;
 }
 
 /* Шрифты. У каждого свои размер и высота строки — чтобы надписи выглядели
