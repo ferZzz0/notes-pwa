@@ -677,7 +677,11 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // спрашивает своей кнопкой «Вставить», только если скопировано не здесь;
   // скопированное здесь отдаёт сразу — тогда подтверждение своим пузырьком
   // (иначе долгое нажатие само что-то вставляло). Ответ быстрее
-  // SILENT_READ_MS — значит, Safari не спрашивал
+  // SILENT_READ_MS — значит, Safari не спрашивал. Скопированное в другом
+  // приложении Safari после долгого нажатия читать не даёт и свою кнопку не
+  // показывает — сразу отказ (жалоба автора: «окно со вставкой не
+  // появляется»); тогда свой пузырёк: на его касание Safari свою кнопку
+  // покажет. Отказ после паузы — человек сам закрыл кнопку Safari
   const pasteAfterHold = async (press: { world: Point; screen: Point }) => {
     const start = performance.now();
     try {
@@ -689,7 +693,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       if (performance.now() - start < SILENT_READ_MS) setPasteMenu({ ...press, data });
       else await insertPasted(data, press.world);
     } catch (e) {
-      clipboardFailed(e);
+      const refusedAtOnce = performance.now() - start < SILENT_READ_MS;
+      if (e instanceof DOMException && e.name === 'NotAllowedError' && refusedAtOnce) setPasteMenu(press);
+      else clipboardFailed(e);
     }
   };
 
