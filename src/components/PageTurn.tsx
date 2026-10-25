@@ -10,10 +10,14 @@ type Props = {
   // которая ляжет по другую сторону корешка, тоже на своём (конечном) месте
   front: ReactNode;
   back: ReactNode;
+  // Сколько длится (мс)
+  duration: number;
+  // Толщина линии корешка (px мира): бумага листа её не закрывает, и линия
+  // между страницами не становится тоньше, пока лист перелистывается
+  spine: number;
   onDone: () => void;
 };
 
-const DURATION = 850;
 // Насколько поднимается уголок на полпути — доля меньшей стороны листа
 const LIFT = 0.3;
 // Ширина тени у сгиба (px мира): на открывшейся странице и на загибе
@@ -61,7 +65,7 @@ function placeStrip(el: HTMLElement, m: Point, d: Point, half: number, length: n
 // отражения: через корешок и через сгиб — это поворот, одна матрица.
 // Только плоские преобразования (clip-path и matrix), без 3D: одинаково
 // выглядит при любой форме экрана и на iPhone.
-export function PageTurn({ dir, sheet, front, back, onDone }: Props) {
+export function PageTurn({ dir, sheet, front, back, duration, spine, onDone }: Props) {
   const frontRef = useRef<HTMLDivElement>(null);
   const castRef = useRef<HTMLDivElement>(null);
   const castLine = useRef<HTMLDivElement>(null);
@@ -122,7 +126,7 @@ export function PageTurn({ dir, sheet, front, back, onDone }: Props) {
     };
 
     const step = (now: number) => {
-      const t = reduced ? 1 : Math.min(Math.max((now - start) / DURATION, 0), 1);
+      const t = reduced ? 1 : Math.min(Math.max((now - start) / duration, 0), 1);
       draw(ease(t));
       if (t < 1) frame = requestAnimationFrame(step);
       else done.current();
@@ -132,18 +136,24 @@ export function PageTurn({ dir, sheet, front, back, onDone }: Props) {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  const backX = dir === 'next' ? -sheet.w : 0;
+  // Бумага страниц — от линии корешка до края листа
+  const paper = (side: 1 | -1) => ({
+    left: side === 1 ? spine / 2 : -sheet.w,
+    width: sheet.w - spine / 2,
+    height: sheet.h
+  });
+  const s = dir === 'next' ? 1 : -1;
   return (
     <div className="page-turn" aria-hidden="true">
       <div ref={frontRef} className="page-turn-front">
-        <div className="page-turn-paper" style={{ left: sheet.x, width: sheet.w, height: sheet.h }} />
+        <div className="page-turn-paper" style={paper(s)} />
         {front}
       </div>
       <div ref={castRef} className="page-turn-cast">
         <div ref={castLine} className="page-turn-strip page-turn-cast-line" />
       </div>
       <div ref={flapRef} className="page-turn-flap">
-        <div className="page-turn-paper page-turn-back" style={{ left: backX, width: sheet.w, height: sheet.h }} />
+        <div className="page-turn-paper page-turn-back" style={paper(-s as 1 | -1)} />
         {back}
         <div ref={flapShade} className="page-turn-strip page-turn-flap-shade" />
       </div>

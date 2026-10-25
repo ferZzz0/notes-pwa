@@ -13,10 +13,19 @@ export type Size = { w: number; h: number };
 export type Home = { x: number; y: number; width: number; minScale: number; align: 'center' | 'left' | 'right' };
 // Какие края листа не растут вслед за текстом (верх листа, корешок)
 export type Fixed = { top?: boolean; left?: boolean; right?: boolean };
+// Жест, начатый на предмете в мире (выбранной надписи), двигает его, а не
+// камеру. Пальцы — в экранных px полотна, один или два: begin — когда жест
+// начался и когда пальцев стало больше или меньше, move — на каждом сдвиге
+export type Grab = {
+  begin: (pts: Point[]) => void;
+  move: (pts: Point[]) => void;
+  end: () => void;
+};
 
 export type CanvasHandle = {
-  // Плавно перелететь к стартовому виду (или к указанному); промис — когда долетели
-  goHome: (home?: Home) => Promise<void>;
+  // Плавно перелететь к стартовому виду (или к указанному) за duration мс;
+  // промис — когда долетели (сразу, если камера уже там)
+  goHome: (home?: Home, duration?: number) => Promise<void>;
   // Сразу показать лист в полном отдалении (как после поворота экрана)
   overview: () => void;
   // Какая часть мира сейчас на экране
@@ -50,6 +59,9 @@ type Props = {
   onTap?: (p: Point) => void;
   // Двойное касание по миру (не по полю ввода или кнопке) — точка мира
   onDoubleTap?: (p: Point) => void;
+  // Палец лёг в точку p (экранные px полотна): если там то, что можно
+  // двигать, — его жест (Grab), иначе null — тогда двигается камера
+  grab?: (p: Point) => Grab | null;
   children: ReactNode;
 };
 
@@ -89,6 +101,7 @@ export function Canvas({
   onFrame,
   onTap,
   onDoubleTap,
+  grab,
   children
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -96,13 +109,13 @@ export function Canvas({
   const insetsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<(CanvasHandle & { reclamp: () => void }) | null>(null);
   // Свежие пропсы для обработчиков, подписанных один раз
-  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap });
-  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap };
+  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab });
+  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab };
 
   useImperativeHandle(
     ref,
     () => ({
-      goHome: h => apiRef.current?.goHome(h) ?? Promise.resolve(),
+      goHome: (h, duration) => apiRef.current?.goHome(h, duration) ?? Promise.resolve(),
       overview: () => apiRef.current?.overview(),
       visibleRect: () => apiRef.current!.visibleRect(),
       panBy: (dx, dy) => apiRef.current?.panBy(dx, dy)
@@ -266,6 +279,13 @@ export function Canvas({
       new Promise<void>(resolve => {
         stop();
         const from = cam;
+        // Уже на месте — не ждём (иначе перелистывание стояло бы впустую)
+        if (Math.abs(to.x - from.x) < 0.5 && Math.abs(to.y - from.y) < 0.5 && Math.abs(to.scale - from.scale) < 1e-4) {
+          set(to);
+          flush();
+          resolve();
+          return;
+        }
         const start = performance.now();
         const step = (now: number) => {
           const t = Math.min((now - start) / duration, 1);
@@ -311,10 +331,10 @@ export function Canvas({
     const toWorld = (p: Point): Point => ({ x: (p.x - cam.x) / cam.scale, y: (p.y - cam.y) / cam.scale });
 
     apiRef.current = {
-      goHome: h => {
+      goHome: (h, duration) => {
         measure();
         bounds = computeBounds();
-        return animateTo(homeCamera(h));
+        return animateTo(homeCamera(h), duration);
       },
       overview: () => {
         measure();
@@ -362,6 +382,8 @@ export function Canvas({
     const pointers = new Map<number, Point>();
     let downAt: Point = { x: 0, y: 0 };
     let moving = false; // жест стал перелётом/щипком, а не тапом
+    // Жест, отданный предмету в мире (первый палец лёг на него)
+    let grabbed: Grab | null = null;
     let samples: { t: number; x: number; y: number }[] = [];
     let lastTap = { t: 0, x: 0, y: 0 };
 
@@ -393,8 +415,11 @@ export function Canvas({
         downAt = p;
         moving = false;
         samples = [];
+        flush(); // предмет ищут по уже применённой камере
+        grabbed = props.current.grab?.(p) ?? null;
       } else {
         beginMoving();
+        grabbed?.begin(firstTwo());
       }
     };
 
@@ -402,6 +427,18 @@ export function Canvas({
       const prev = pointers.get(e.pointerId);
       if (!prev) return;
       const p = local(e.clientX, e.clientY);
+
+      // Жест предмета: камера стоит, пальцы двигают его
+      if (grabbed) {
+        if (pointers.size === 1 && !moving) {
+          if (dist(p, downAt) < TAP_SLOP) return;
+          beginMoving();
+          grabbed.begin([downAt]);
+        }
+        pointers.set(e.pointerId, p);
+        grabbed.move(pointers.size === 1 ? [p] : firstTwo());
+        return;
+      }
 
       if (pointers.size === 1) {
         if (!moving && dist(p, downAt) < TAP_SLOP) return;
@@ -425,12 +462,21 @@ export function Canvas({
 
     const onUp = (e: PointerEvent) => {
       if (!pointers.delete(e.pointerId)) return;
-      // Из щипка остался один палец — дальше он просто двигает мир
+      // Из щипка остался один палец — дальше он просто двигает мир (или предмет)
       if (pointers.size > 0) {
         samples = [];
+        if (grabbed && moving) grabbed.begin(firstTwo().slice(0, pointers.size));
         return;
       }
       viewport.classList.remove('is-panning');
+
+      if (moving && grabbed) {
+        moving = false;
+        grabbed.end();
+        grabbed = null;
+        return;
+      }
+      grabbed = null;
 
       if (moving) {
         moving = false;

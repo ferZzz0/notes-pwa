@@ -6,7 +6,7 @@
 // Храним только развороты с текстом; у установленного на iPhone приложения
 // память своя, отдельная от Safari.
 
-import type { FontId, InkId } from './textStyle';
+import type { FontId } from './textStyle';
 
 export type Block = {
   id: string;
@@ -15,8 +15,9 @@ export type Block = {
   y: number;
   text: string;
   // Оформление; чего нет — то по умолчанию: синие чернила, рукописный
-  // шрифт, без поворота, обычный размер
-  color?: InkId;
+  // шрифт, без поворота, обычный размер. Цвет — #rrggbb (в старых записях —
+  // имя чернил, textStyle.ts)
+  color?: string;
   font?: FontId;
   // Поворот вокруг середины надписи (градусы) и размер (1 — обычный)
   rotate?: number;
@@ -24,7 +25,7 @@ export type Block = {
 };
 
 // Цвет и шрифт, выбранные последними, — с ними начинается новая надпись
-export type TextStyle = { color?: InkId; font?: FontId };
+export type TextStyle = { color?: string; font?: FontId };
 
 export type Spread = {
   // Когда на развороте впервые написали — ГГГГ-ММ-ДД по местному времени

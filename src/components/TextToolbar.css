@@ -1,6 +1,5 @@
-/* Панель выбранной надписи — светлая, как стрелки перелистывания.
-   Горизонтально цвета, шрифты и действия — в одну строку; на узком
-   вертикальном экране шрифты уходят на вторую строку. */
+/* Панель выбранной надписи — светлая, как стрелки перелистывания, в одну
+   строку: цвет, шрифты, удалить, готово. Над ней — круговая палитра. */
 .text-toolbar {
   position: fixed;
   left: 50%;
@@ -8,12 +7,10 @@
   z-index: 8;
   transform: translateX(-50%);
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
   align-items: center;
-  gap: 4px 10px;
+  gap: 8px;
   width: max-content;
-  max-width: calc(100% - 16px - var(--safe-left) - var(--safe-right));
+  max-width: calc(100% - 12px - var(--safe-left) - var(--safe-right));
   padding: 6px 8px;
   border: 1px solid rgb(60 40 10 / 0.08);
   border-radius: 18px;
@@ -27,13 +24,13 @@
 .text-toolbar-group {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
 }
 
 .text-toolbar button {
   display: grid;
   place-items: center;
-  width: 38px;
+  width: 36px;
   height: 38px;
   padding: 0;
   border: none;
@@ -42,23 +39,19 @@
   color: var(--ink);
 }
 
-/* Цвет — кружок; выбранный обведён */
-.text-toolbar .text-toolbar-ink {
-  width: 34px;
-}
-
-.text-toolbar-ink::before {
-  content: '';
-  width: 22px;
-  height: 22px;
+/* Кнопка цвета: радужное кольцо, внутри — цвет надписи */
+.text-toolbar .text-toolbar-color {
+  width: 38px;
   border-radius: 50%;
-  background: currentColor;
 }
 
-.text-toolbar-ink.is-active::before {
-  box-shadow:
-    0 0 0 2px var(--paper),
-    0 0 0 4px currentColor;
+.text-toolbar-color span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, var(--color) 0 66%, var(--paper) 66% 80%, transparent 80%),
+    conic-gradient(from 90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
 }
 
 .text-toolbar .text-toolbar-font {
@@ -91,13 +84,41 @@
   color: var(--paper);
 }
 
-/* Вертикально: цвета и действия — первой строкой, шрифты — второй */
-@media (orientation: portrait) {
-  .text-toolbar-actions {
-    order: 1;
-  }
+/* Круговая палитра — над панелью, у её левого края (над кнопкой цвета) */
+.color-wheel-pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  padding: 10px;
+  border: 1px solid rgb(60 40 10 / 0.08);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 16px rgb(60 40 10 / 0.16);
+}
 
-  .text-toolbar-fonts {
-    order: 2;
-  }
+/* По кругу — оттенок (0° — вправо, по часовой), к середине — чернее:
+   ровно hsl(оттенок, 100%, 50%·доля радиуса), как в textStyle.ts */
+.color-wheel {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, #000, transparent),
+    conic-gradient(from 90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.color-wheel-mark {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+  pointer-events: none;
 }

@@ -3,14 +3,20 @@
 // соразмерно. Рукописные шрифты собраны в приложение и работают офлайн, а
 // печатные — системные (на iPhone они есть и с кириллицей).
 
-export const INKS = [
-  { id: 'blue', label: 'Синие чернила', color: 'var(--ink)' },
-  { id: 'black', label: 'Чёрные чернила', color: 'var(--ink-black)' },
-  { id: 'red', label: 'Красные чернила', color: 'var(--ink-red)' },
-  { id: 'green', label: 'Зелёные чернила', color: 'var(--ink-green)' },
-  { id: 'violet', label: 'Фиолетовые чернила', color: 'var(--ink-violet)' },
-  { id: 'orange', label: 'Оранжевые чернила', color: 'var(--ink-orange)' }
-] as const;
+// Цвет выбирают на круговой палитре (TextToolbar): по кругу — оттенок, от
+// середины к краю — от чёрного к яркому. Хранится как #rrggbb; без цвета —
+// обычные синие чернила (--ink). Раньше было шесть чернил с именами — они
+// ещё встречаются в сохранённых записях.
+const OLD_INKS: Record<string, string> = {
+  blue: '#24398c',
+  black: '#26262b',
+  red: '#c0392b',
+  green: '#22784a',
+  violet: '#6b3fa0',
+  orange: '#d0681c'
+};
+// Синие чернила по умолчанию (светлая тема) — для отметки на палитре
+export const DEFAULT_INK = OLD_INKS.blue;
 
 export const FONTS = [
   { id: 'hand', label: 'Рукописный' },
@@ -21,12 +27,49 @@ export const FONTS = [
   { id: 'mono', label: 'Пишущая машинка' }
 ] as const;
 
-export type InkId = (typeof INKS)[number]['id'];
 export type FontId = (typeof FONTS)[number]['id'];
 
-// Незнакомое значение (из будущей версии или испорченное) — как по умолчанию
-export const inkOf = (id?: string): InkId => INKS.find(i => i.id === id)?.id ?? 'blue';
+const HEX = /^#[0-9a-f]{6}$/i;
+
+// Цвет надписи для CSS; незнакомое значение — обычные чернила
+export const inkColor = (color?: string): string =>
+  color && HEX.test(color) ? color : color && OLD_INKS[color] ? OLD_INKS[color] : 'var(--ink)';
+
+// Незнакомый шрифт (из будущей версии или испорченный) — как по умолчанию
 export const fontOf = (id?: string): FontId => FONTS.find(f => f.id === id)?.id ?? 'hand';
-export const inkColor = (id?: string): string => INKS.find(i => i.id === inkOf(id))!.color;
 // Класс со шрифтом (TextBlock.css)
 export const fontClass = (id?: string) => `font-${fontOf(id)}`;
+
+const hex2 = (v: number) =>
+  Math.round(Math.min(255, Math.max(0, v * 255)))
+    .toString(16)
+    .padStart(2, '0');
+
+// Точка палитры → цвет: оттенок h (градусы), r — доля радиуса (0 — чёрный в
+// середине, 1 — яркий на краю). Это hsl(h, 100%, 50·r%)
+export function wheelColor(h: number, r: number): string {
+  const k = (n: number) => (n + h / 30) % 12;
+  const l = r / 2;
+  const a = l; // насыщенность 100%: a = l·min(1, 2 − 2l) = l при l ≤ ½
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return `#${hex2(f(0))}${hex2(f(8))}${hex2(f(4))}`;
+}
+
+// Где цвет на палитре: оттенок и доля радиуса (по светлоте). Цвета не с
+// палитры (поблёклые) встают на ближайший оттенок
+export function wheelPosition(color?: string): { h: number; r: number } {
+  const c = inkColor(color);
+  const hex = HEX.test(c) ? c : DEFAULT_INK;
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d > 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h = (h * 60 + 360) % 360;
+  }
+  return { h, r: Math.min(1, max + min) };
+}

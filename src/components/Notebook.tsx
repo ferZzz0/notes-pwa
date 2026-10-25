@@ -12,16 +12,16 @@ import {
   sideOf,
   spreadOf,
   type Block,
-  type Spreads
+  type Spreads,
+  type TextStyle
 } from '../notes';
 import { usePortrait } from '../orientation';
-import type { FontId, InkId } from '../textStyle';
-import { Canvas, type Camera, type CanvasHandle, type Fixed, type Home, type Point, type Rect } from './Canvas';
+import { Canvas, type Camera, type CanvasHandle, type Fixed, type Grab, type Home, type Point, type Rect } from './Canvas';
 import { PageTurn } from './PageTurn';
 import { Paper, type PaperDisplay, type PaperHandle } from './Paper';
 import { Selection, type SelectionHandle } from './Selection';
 import { Settings } from './Settings';
-import { BLEED_X, TextBlock } from './TextBlock';
+import { BLEED_X, BLEED_Y, TextBlock } from './TextBlock';
 import { TextToolbar } from './TextToolbar';
 import './Notebook.css';
 
@@ -51,6 +51,20 @@ const MIN_TEXT_WIDTH = 200;
 const SPINE_GAP = 24; // текст левой страницы не подходит к корешку ближе
 // Новый текст встаёт так, чтобы точка касания пришлась на первую строку
 const NEW_TEXT_OFFSET = { x: 12, y: 30 };
+// Касание и жест попадают в надпись и чуть рядом с ней (экранные px)
+const TAP_PAD = 8;
+const GRAB_PAD = 16;
+// Размер надписи — от 0.4 до 4; поворот рядом с прямым углом и размер рядом
+// с обычным «прилипают» к ним
+const MIN_TEXT_SCALE = 0.4;
+const MAX_TEXT_SCALE = 4;
+const SNAP_DEG = 4;
+const SNAP_SCALE = 0.06;
+// Перелистывание (мс): горизонтально — быстро (просьба автора), вертикально
+// за ним ещё летит камера к новой странице
+const TURN_MS = { spread: 170, single: 850 };
+// Перелёт к началу листа перед перелистыванием (если лист приближен)
+const TURN_HOME_MS = 200;
 
 const dateFormat = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long' });
 
@@ -82,13 +96,42 @@ function blockRect(el: HTMLElement): Rect {
 
 const blockElement = (id: string) => document.querySelector<HTMLTextAreaElement>(`.page-texts [data-block="${id}"]`);
 
+// Попадает ли точка мира в надпись — с её поворотом и размером и с запасом
+// pad (px мира) вокруг
+function hitBlock(el: HTMLElement, p: Point, pad: number): boolean {
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  const a = (-(Number(el.dataset.rotate) || 0) * Math.PI) / 180;
+  const k = Number(el.dataset.scale) || 1;
+  const dx = p.x - (el.offsetLeft + w / 2);
+  const dy = p.y - (el.offsetTop + h / 2);
+  const lx = dx * Math.cos(a) - dy * Math.sin(a);
+  const ly = dx * Math.sin(a) + dy * Math.cos(a);
+  return Math.abs(lx) <= (w * k) / 2 + pad && Math.abs(ly) <= (h * k) / 2 + pad;
+}
+
+const midpoint = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+const angleDeg = (a: Point, b: Point) => (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+// Угол в пределах (−180°, 180°]
+const normalize = (deg: number) => {
+  const d = ((deg % 360) + 360) % 360;
+  return d > 180 ? d - 360 : d;
+};
+const snapAngle = (deg: number) => {
+  const right = Math.round(deg / 90) * 90;
+  return Math.abs(deg - right) < SNAP_DEG ? normalize(right) : deg;
+};
+
 // Раскрытая тетрадь. Разворот s (с 0) — страницы 2s+1 (слева от корешка,
 // x < 0) и 2s+2 (справа). Лист сначала по экрану и растёт на экран, когда
 // текст подходит к краю (Canvas). Вертикально видно одну страницу,
 // горизонтально — разворот.
-// Двойное касание по бумаге — написать в этом месте. Новая надпись и та,
-// которой коснулись, выбраны: вокруг рамка с ручками (Selection), внизу —
-// панель цвета и шрифта (TextToolbar); касание по бумаге снимает выбор.
+// Двойное касание по бумаге — написать в этом месте. Касание по надписи
+// выбирает её (рамка — Selection, внизу панель цвета и шрифта — TextToolbar),
+// без клавиатуры; ещё одно касание по ней — печатать. Выбранную надпись
+// двигают пальцем, а двумя пальцами ещё поворачивают и меняют размер (grab).
+// Касание по бумаге снимает выбор.
 // Листают стрелками внизу экрана (или на клавиатуре): камера летит к началу
 // листа, и страница перелистывается — загибается с нижнего уголка и уходит
 // через корешок (PageTurn). На одной странице
@@ -101,6 +144,9 @@ export function Notebook() {
   const camera = useRef<Camera>({ x: 0, y: 0, scale: 1 });
   const flipDone = useRef<(() => void) | null>(null);
   const [spreads, setSpreads] = useState(loadSpreads);
+  // Записи прямо сейчас — для жеста, который длится дольше одной перерисовки
+  const spreadsRef = useRef(spreads);
+  spreadsRef.current = spreads;
   // Выбранная надпись (рамка и панель) и та, которую сейчас печатают
   const [selected, setSelected] = useState<string | null>(null);
   const [focused, setFocused] = useState<string | null>(null);
@@ -163,7 +209,7 @@ export function Notebook() {
     removeBlock(id);
   };
 
-  // Изменить надпись открытого разворота. Пока тащат ручку — без записи в
+  // Изменить надпись открытого разворота. Пока её тащат пальцами — без записи в
   // память (save = false), в конце — saveNow
   const patchBlock = (id: string, patch: Partial<Block>, save = true) =>
     setSpreads(prev => {
@@ -180,18 +226,19 @@ export function Notebook() {
       return prev;
     });
 
-  // Перенос надписи: не выше верха листа и не через корешок — надпись целиком
-  // на той странице, где её середина (на одной странице — на ней)
-  const moveBlock = (id: string, x: number, y: number) => {
-    const el = blockElement(id);
-    const w = el ? el.offsetWidth - 2 * BLEED_X : 0;
+  // Куда можно поставить надпись шириной w (текст, мир) с левым верхним углом
+  // (x, y): не выше верха листа и не через корешок — целиком на той
+  // странице, где её середина (на одной странице — на ней)
+  const place = (w: number, x: number, y: number) => {
     const left = display === 'left' || (display === 'both' && x + w / 2 < 0);
-    patchBlock(id, { x: left ? Math.min(x, -SPINE_GAP - w) : Math.max(x, 0), y: Math.max(0, y) }, false);
+    return { x: left ? Math.min(x, -SPINE_GAP - w) : Math.max(x, 0), y: Math.max(0, y) };
   };
 
-  // Цвет и шрифт — у надписи и для следующих
-  const restyle = (id: string, patch: { color?: InkId; font?: FontId }) => {
-    patchBlock(id, patch);
+  // Цвет и шрифт — у надписи и для следующих; пока ведут пальцем по
+  // палитре — без записи (save = false)
+  const restyle = (id: string, patch: TextStyle, save = true) => {
+    patchBlock(id, patch, save);
+    if (!save) return;
     const next = { ...style, ...patch };
     setStyle(next);
     saveStyle(next);
@@ -202,8 +249,90 @@ export function Notebook() {
     setSelected(null);
   };
 
-  const onDoubleTap = (p: Point) => {
+  // Верхняя из видимых надписей в точке мира p
+  const blockAt = (p: Point) => {
+    const pad = TAP_PAD / camera.current.scale;
+    return [...visibleBlocks].reverse().find(b => {
+      const el = blockElement(b.id);
+      return el !== null && hitBlock(el, p, pad);
+    });
+  };
+
+  // Печатать в надписи. Фокус — прямо в обработчике касания, иначе iOS не
+  // покажет клавиатуру
+  const edit = (id: string) => {
+    const el = blockElement(id);
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  };
+
+  // Касание по листу: по надписи — выбрать её (клавиатура не открывается),
+  // по уже выбранной — печатать в ней; мимо надписей — снять выбор
+  const onTap = (p: Point) => {
     if (turning) return;
+    const hit = blockAt(p);
+    if (!hit) setSelected(null);
+    else if (hit.id === selected) edit(hit.id);
+    else setSelected(hit.id);
+  };
+
+  // Жест на выбранной надписи двигает её: один палец — перенос, два —
+  // ещё поворот и размер вокруг точки между пальцами
+  const grab = (screen: Point): Grab | null => {
+    const b = selectedBlock;
+    const el = b && blockElement(b.id);
+    if (!b || !el || turning) return null;
+    const toWorld = (q: Point): Point => {
+      const c = camera.current;
+      return { x: (q.x - c.x) / c.scale, y: (q.y - c.y) / c.scale };
+    };
+    if (!hitBlock(el, toWorld(screen), GRAB_PAD / camera.current.scale)) return null;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    // Надпись и пальцы (мир), когда жест начался или пальцев стало больше/меньше
+    let base: { pts: Point[]; block: Block } | null = null;
+    const begin = (pts: Point[]) => {
+      base = { pts: pts.map(toWorld), block: spreadsRef.current[spread]?.blocks.find(x => x.id === b.id) ?? b };
+    };
+    return {
+      begin,
+      move: pts => {
+        if (!base || base.pts.length !== pts.length) return begin(pts);
+        const p = pts.map(toWorld);
+        const b0 = base.block;
+        const s0 = b0.scale ?? 1;
+        const r0 = b0.rotate ?? 0;
+        let scale = s0;
+        let rotate = r0;
+        let from = base.pts[0];
+        let to = p[0];
+        if (p.length === 2) {
+          const [a0, c0] = base.pts;
+          const [a, c] = p;
+          from = midpoint(a0, c0);
+          to = midpoint(a, c);
+          scale = Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, (s0 * distance(a, c)) / Math.max(distance(a0, c0), 1)));
+          if (Math.abs(scale - 1) < SNAP_SCALE) scale = 1;
+          rotate = snapAngle(normalize(r0 + angleDeg(a, c) - angleDeg(a0, c0)));
+        }
+        // Середина надписи идёт за пальцами — повёрнутая и растянутая вокруг них
+        const k = scale / s0;
+        const t = ((rotate - r0) * Math.PI) / 180;
+        const dx = b0.x - BLEED_X + w / 2 - from.x;
+        const dy = b0.y - BLEED_Y + h / 2 - from.y;
+        const cx = to.x + k * (dx * Math.cos(t) - dy * Math.sin(t));
+        const cy = to.y + k * (dx * Math.sin(t) + dy * Math.cos(t));
+        const pos = place(w - 2 * BLEED_X, cx - w / 2 + BLEED_X, cy - h / 2 + BLEED_Y);
+        patchBlock(b.id, { ...pos, rotate: rotate || undefined, scale: scale !== 1 ? scale : undefined }, false);
+      },
+      end: saveNow
+    };
+  };
+
+  const onDoubleTap = (p: Point) => {
+    // По надписи двойное касание — выбрать и печатать (это сделали касания)
+    if (turning || blockAt(p)) return;
     // Выше верха текста (полоса под вырезом камеры) или за корешком одной
     // страницы не пишем — просто к началу листа
     const tapSide: Side = p.x < 0 ? 'left' : 'right';
@@ -218,7 +347,7 @@ export function Notebook() {
       y: Math.max(0, p.y - NEW_TEXT_OFFSET.y),
       text: '',
       // Цвет и шрифт — как у прошлой надписи
-      ...(style.color && style.color !== 'blue' ? { color: style.color } : {}),
+      ...(style.color ? { color: style.color } : {}),
       ...(style.font && style.font !== 'hand' ? { font: style.font } : {})
     };
     const cur = spreads[spread] ?? { blocks: [] };
@@ -331,7 +460,7 @@ export function Notebook() {
     });
 
     if (targetSpread !== spread) {
-      await canvas.current?.goHome();
+      await canvas.current?.goHome(undefined, TURN_HOME_MS);
       await turnSheet(dir, spread, targetSpread);
       flushSync(() => {
         setFlip(null);
@@ -394,8 +523,9 @@ export function Notebook() {
           paper.current?.update(cam, size);
           selection.current?.update();
         }}
-        onTap={() => setSelected(null)}
+        onTap={onTap}
         onDoubleTap={onDoubleTap}
+        grab={grab}
       >
         {display !== 'right' && pageSide(underLeft, 'left')}
         {display !== 'left' && pageSide(underRight, 'right')}
@@ -409,6 +539,7 @@ export function Notebook() {
                 key={b.id}
                 block={b}
                 width={maxWidthOf(b)}
+                editing={focused === b.id}
                 onText={setText}
                 onBlur={dropIfEmpty}
                 onFocus={(id, el) => {
@@ -426,6 +557,9 @@ export function Notebook() {
           <PageTurn
             dir={flip.dir}
             sheet={flip.sheet}
+            duration={single ? TURN_MS.single : TURN_MS.spread}
+            // Линия корешка — 2 экранных px (Paper.css)
+            spine={2 / camera.current.scale}
             onDone={() => {
               flipDone.current?.();
               flipDone.current = null;
@@ -440,27 +574,11 @@ export function Notebook() {
 
       {selectedBlock && (
         <>
-          <Selection
-            ref={selection}
-            block={selectedBlock}
-            focused={focused === selectedBlock.id}
-            camera={() => camera.current}
-            onMove={(x, y) => moveBlock(selectedBlock.id, x, y)}
-            onTransform={(rotate, scale) =>
-              patchBlock(selectedBlock.id, { rotate: rotate || undefined, scale: scale !== 1 ? scale : undefined }, false)
-            }
-            onEnd={saveNow}
-            onEdit={() => {
-              const el = blockElement(selectedBlock.id);
-              if (!el) return;
-              el.focus();
-              el.setSelectionRange(el.value.length, el.value.length);
-            }}
-          />
+          <Selection ref={selection} block={selectedBlock} camera={() => camera.current} />
           <TextToolbar
             block={selectedBlock}
             keyboard={keyboard}
-            onColor={color => restyle(selectedBlock.id, { color })}
+            onColor={(color, final) => restyle(selectedBlock.id, { color }, final)}
             onFont={font => restyle(selectedBlock.id, { font })}
             onDelete={() => {
               removeBlock(selectedBlock.id);

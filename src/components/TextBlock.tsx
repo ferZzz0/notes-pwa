@@ -7,6 +7,7 @@ import './TextBlock.css';
 // границы строки, и поле ввода обрезало бы их. Блок сдвинут на эти поля
 // назад (TextBlock.css), так что сам текст стоит ровно в (x, y)
 export const BLEED_X = 12;
+export const BLEED_Y = 6;
 // Пустая надпись всё равно шириной с короткое слово — есть куда поставить курсор
 const MIN_WIDTH = 140;
 // Запас под курсор в конце строки
@@ -35,6 +36,10 @@ type Props = {
   width: number;
   // Текст «картинкой» (на листе, который переворачивается): без поля ввода
   face?: boolean;
+  // Надпись сейчас печатают: только тогда поле ловит касания (курсор,
+  // выделение). Остальные касания — полотну: первое выбирает надпись,
+  // второе открывает клавиатуру (Notebook)
+  editing?: boolean;
   onText?: (id: string, text: string) => void;
   onBlur?: (id: string) => void;
   onFocus?: (id: string, el: HTMLTextAreaElement) => void;
@@ -44,7 +49,7 @@ type Props = {
 // Надпись в любом месте листа, без рамок: шириной по тексту (не шире
 // width), растёт вниз вместе с ним. Цвет, шрифт, поворот и размер — из
 // блока; поворачивается и растёт вокруг своей середины.
-export function TextBlock({ block, width, face = false, onText, onBlur, onFocus, onInput }: Props) {
+export function TextBlock({ block, width, face = false, editing = false, onText, onBlur, onFocus, onInput }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const className = `text-block ${fontClass(block.font)}`;
   const maxWidth = width + 2 * BLEED_X;
@@ -93,7 +98,7 @@ export function TextBlock({ block, width, face = false, onText, onBlur, onFocus,
   return (
     <textarea
       ref={ref}
-      className={className}
+      className={editing ? `${className} is-editing` : className}
       style={style}
       data-block={block.id}
       {...data}
