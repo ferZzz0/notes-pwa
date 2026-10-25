@@ -147,6 +147,8 @@ export function TextBlock({ block, width, face = false, editing = false, onText,
         data-block={block.id}
         {...data}
         rows={1}
+        // Ошибки не подчёркиваем (просьба автора)
+        spellCheck={false}
         value={block.text}
         aria-label="Запись"
         onChange={e => {

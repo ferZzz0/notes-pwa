@@ -20,6 +20,7 @@ import {
 import { usePortrait } from '../orientation';
 import type { StickerId } from '../textStyle';
 import { AddMenu } from './AddMenu';
+import { ConfirmDialog } from './ConfirmDialog';
 import { Canvas, type Camera, type CanvasHandle, type Fixed, type Grab, type Home, type Point, type Rect } from './Canvas';
 import { ImageItem } from './ImageItem';
 import { ImageToolbar } from './ImageToolbar';
@@ -165,6 +166,11 @@ export function Notebook() {
   // Цвет и шрифт последней надписи — с ними начинается следующая
   const [style, setStyle] = useState(loadStyle);
   const [toolbarHeight, setToolbarHeight] = useState(0);
+  // Текст надписи, когда в неё начали печатать (по id) — чтобы вернуть его,
+  // если её стёрли целиком и передумали удалять
+  const textBefore = useRef(new Map<string, string>());
+  // Надпись с текстом стёрли целиком: спрашиваем, удалить ли её
+  const [erased, setErased] = useState<{ id: string; text: string } | null>(null);
   // Открытая страница; на развороте — любая из двух его страниц
   const [page, setPage] = useState(loadPage);
   const portrait = usePortrait();
@@ -217,11 +223,16 @@ export function Notebook() {
     commit(next);
   };
 
-  // Стёртая до пустоты надпись исчезает с листа (стикер остаётся)
+  // Пустая надпись исчезает с листа (стикер остаётся). Новая, в которой так
+  // ничего и не написали, — сразу; а ту, где был текст, стёрли целиком —
+  // только после подтверждения (отмена возвращает текст)
   const dropIfEmpty = (id: string) => {
     setFocused(f => (f === id ? null : f));
     const b = spreads[spread]?.blocks.find(x => x.id === id);
-    if (b && isBlank(b)) removeBlock(id);
+    if (!b || !isBlank(b)) return;
+    const before = textBefore.current.get(id);
+    if (before) setErased({ id, text: before });
+    else removeBlock(id);
   };
 
   // Наверх / вниз среди всего на листе: порядок в списке — порядок слоёв
@@ -505,14 +516,15 @@ export function Notebook() {
   // перенос, поворот, шрифт); при движении камеры — в onFrame
   useLayoutEffect(() => selection.current?.update());
 
-  // Повернули телефон: одна страница ↔ разворот, и новый вид сразу в полном
-  // отдалении (полотно и само так делает при смене размера экрана — здесь
-  // ещё раз, уже с новым видом). Ждём кадр: flushSync нельзя звать из эффекта
+  // Повернули телефон: одна страница ↔ разворот, и новый вид сразу с начала
+  // листа в стандартном размере (полотно и само так делает при смене размера
+  // экрана — здесь ещё раз, уже с новым видом). Ждём кадр: flushSync нельзя
+  // звать из эффекта
   useEffect(() => {
     if (portrait === single) return;
     const frame = requestAnimationFrame(() => {
       flushSync(() => setSingle(portrait));
-      canvas.current?.overview();
+      canvas.current?.showHome();
     });
     return () => cancelAnimationFrame(frame);
   }, [portrait]);
@@ -628,6 +640,7 @@ export function Notebook() {
                   onText={setText}
                   onBlur={dropIfEmpty}
                   onFocus={(id, el) => {
+                    textBefore.current.set(id, b.text);
                     setSelected(id);
                     setFocused(id);
                     setTimeout(() => keepVisible(el), 350);
@@ -657,6 +670,23 @@ export function Notebook() {
           />
         )}
       </Canvas>
+
+      {erased && (
+        <ConfirmDialog
+          title="Удалить надпись?"
+          note="Весь её текст стёрт."
+          confirm="Удалить"
+          cancel="Вернуть текст"
+          onConfirm={() => {
+            removeBlock(erased.id);
+            setErased(null);
+          }}
+          onCancel={() => {
+            patchBlock(erased.id, { text: erased.text });
+            setErased(null);
+          }}
+        />
+      )}
 
       {selectedBlock && (
         <>

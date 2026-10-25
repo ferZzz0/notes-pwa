@@ -26,8 +26,8 @@ export type CanvasHandle = {
   // Плавно перелететь к стартовому виду (или к указанному) за duration мс;
   // промис — когда долетели (сразу, если камера уже там)
   goHome: (home?: Home, duration?: number) => Promise<void>;
-  // Сразу показать лист в полном отдалении (как после поворота экрана)
-  overview: () => void;
+  // Сразу показать начало листа в стандартном размере (как после поворота экрана)
+  showHome: () => void;
   // Какая часть мира сейчас на экране
   visibleRect: () => Rect;
   // Плавно сдвинуть камеру на (dx, dy) экранных px
@@ -116,7 +116,7 @@ export function Canvas({
     ref,
     () => ({
       goHome: (h, duration) => apiRef.current?.goHome(h, duration) ?? Promise.resolve(),
-      overview: () => apiRef.current?.overview(),
+      showHome: () => apiRef.current?.showHome(),
       visibleRect: () => apiRef.current!.visibleRect(),
       panBy: (dx, dy) => apiRef.current?.panBy(dx, dy)
     }),
@@ -236,17 +236,6 @@ export function Canvas({
 
     const clampScale = (s: number) => clamp(s, minScale(), Math.max(MAX_SCALE, minScale()));
 
-    // Полное отдаление: самый мелкий масштаб, при котором лист ещё закрывает
-    // экран (у листа, выросшего вбок, — вся его ширина), с самого верха и
-    // с той же привязкой по горизонтали, что у стартового вида
-    const overviewCamera = (): Camera => {
-      const h = homeCamera();
-      const { x, y } = props.current.home;
-      const scale = bounds ? minScale() : h.scale;
-      const anchorX = h.x + x * h.scale;
-      return { scale, x: anchorX - x * scale, y: ins.top - y * scale };
-    };
-
     // Камера не выходит за лист: его края не заходят внутрь экрана — за
     // листом никогда не видно ничего, кроме бумаги
     const set = (c: Camera) => {
@@ -336,11 +325,11 @@ export function Canvas({
         bounds = computeBounds();
         return animateTo(homeCamera(h), duration);
       },
-      overview: () => {
+      showHome: () => {
         measure();
         bounds = computeBounds();
         stop();
-        set(overviewCamera());
+        set(homeCamera());
         flush();
       },
       visibleRect: () => ({ x: -cam.x / cam.scale, y: -cam.y / cam.scale, w: size.w / cam.scale, h: size.h / cam.scale }),
@@ -369,11 +358,12 @@ export function Canvas({
         flush();
         return;
       }
-      // Поворот экрана (и любое другое изменение размера) — всегда полное
-      // отдаление. На iPhone размер при повороте меняется в несколько шагов,
-      // поэтому так — на каждом шаге
+      // Поворот экрана (и любое другое изменение размера) — всегда начало
+      // листа в стандартном размере, даже если лист приблизили или он вырос
+      // (просьба автора). На iPhone размер при повороте меняется в несколько
+      // шагов, поэтому так — на каждом шаге
       stop();
-      set(overviewCamera());
+      set(homeCamera());
       flush();
     };
 
