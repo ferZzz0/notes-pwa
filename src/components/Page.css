@@ -1,0 +1,168 @@
+/* Лист тетради. Размеры текста кратны клетке --cell (задаёт .notebook),
+   чтобы строки ложились на сетку. */
+.page {
+  position: relative;
+  /* Ровно половина разворота — корешок точно на границе листов */
+  width: 50%;
+  overflow: hidden;
+  /* Содержимое — столбиком; поле заметки растягивается до низа листа */
+  display: flex;
+  flex-direction: column;
+  padding: var(--pad);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(to right, var(--grid) var(--hairline), transparent var(--hairline)),
+    linear-gradient(to bottom, var(--grid) var(--hairline), transparent var(--hairline));
+  background-size: var(--cell) var(--cell);
+  color: var(--ink);
+  font-family: 'Caveat Variable', cursive;
+  font-size: calc(var(--cell) * 1.6);
+  line-height: calc(var(--cell) * 2);
+}
+
+.page-left {
+  border-radius: 6px 0 0 6px;
+}
+
+.page-right {
+  border-radius: 0 6px 6px 0;
+}
+
+/* Тень у сгиба: листы будто уходят в корешок */
+.page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.page-left::after {
+  background: linear-gradient(to left, var(--fold-shadow), transparent 9%);
+}
+
+.page-right::after {
+  background: linear-gradient(to right, var(--fold-shadow), transparent 9%);
+}
+
+.page-number {
+  position: absolute;
+  top: var(--cell);
+  font-size: calc(var(--cell) * 1.2);
+  line-height: 1;
+  color: var(--ink-muted);
+}
+
+.page-left .page-number {
+  left: var(--cell);
+}
+
+.page-right .page-number {
+  right: var(--cell);
+}
+
+.page-title {
+  margin: 0 0 var(--cell);
+  font-size: calc(var(--cell) * 2.4);
+  line-height: calc(var(--cell) * 3);
+  font-weight: 700;
+}
+
+.page-muted {
+  margin: 0 0 var(--cell);
+  color: var(--ink-muted);
+}
+
+.page-date {
+  margin: 0 0 var(--cell);
+  text-align: center;
+  font-weight: 600;
+}
+
+.page-date-empty {
+  opacity: 0.4;
+}
+
+/* Текст заметки — рукописью прямо по клетке: поле ввода без рамок и фона
+   и такой же блок на листе «картинкой» выглядят одинаково */
+.note-text {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  appearance: none;
+  background: transparent;
+  color: inherit;
+  caret-color: var(--ink);
+  font: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  resize: none;
+  /* Полотно (Canvas.css) запрещает выделение, чтобы перелёт не выделял
+     текст; в самой заметке выделять можно */
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+.note-text::placeholder {
+  color: var(--ink-muted);
+  opacity: 1;
+}
+
+/* Загнутый уголок внизу у внешнего края — перелистнуть. Кнопка крупнее
+   рисунка, чтобы в неё легко попасть пальцем и при отдалённой тетради */
+.page-corner {
+  position: absolute;
+  bottom: 0;
+  z-index: 1;
+  width: calc(var(--cell) * 5);
+  height: calc(var(--cell) * 5);
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.page-corner-next {
+  right: 0;
+}
+
+.page-corner-prev {
+  left: 0;
+}
+
+/* Рисунок: по диагонали — сгиб; с внешней стороны видна страница под
+   листом, с внутренней — загнутый кусок листа (его оборот) с тенью */
+.page-corner::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: calc(var(--cell) * 2.6);
+  height: calc(var(--cell) * 2.6);
+  filter: drop-shadow(0 0 5px rgb(0 0 0 / 0.18));
+  transition:
+    width 0.2s ease-out,
+    height 0.2s ease-out;
+}
+
+.page-corner-next::before {
+  right: 0;
+  background: linear-gradient(to top left, var(--paper-under) 50%, var(--paper-flap) 50%);
+}
+
+.page-corner-prev::before {
+  left: 0;
+  background: linear-gradient(to top right, var(--paper-under) 50%, var(--paper-flap) 50%);
+}
+
+@media (hover: hover) {
+  .page-corner:hover::before {
+    width: calc(var(--cell) * 3.4);
+    height: calc(var(--cell) * 3.4);
+  }
+}

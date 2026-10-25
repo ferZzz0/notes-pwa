@@ -23,14 +23,13 @@
   cursor: grabbing;
 }
 
+/* Мир — всегда отдельный слой: перелёт и щипок не перерисовывают его,
+   а только двигают. Чёткость после масштаба восстанавливает Canvas.tsx */
 .canvas-world {
   position: absolute;
   top: 0;
   left: 0;
   transform-origin: 0 0;
-}
-
-.canvas.is-moving .canvas-world {
   will-change: transform;
 }
 

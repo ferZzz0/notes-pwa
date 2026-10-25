@@ -1,65 +1,120 @@
 /* Тетрадь — предмет в мире полотна (Canvas): размеры в px мира заданы в
-   Notebook.tsx, на экран её выводит камера полотна. */
+   Notebook.tsx, на экран её выводит камера полотна. Листы — Page.css. */
 .notebook {
-  /* Клетка 5 мм; размеры текста на листах кратны ей (App.css) */
+  /* Клетка 5 мм; размеры текста на листах кратны ей */
   --cell: 25px;
   --pad: calc(var(--cell) * 2);
-  /* Линия клетки — всегда 1 экранный пиксель: --zoom (масштаб камеры)
-     выставляет Canvas. Иначе при отдалении клетка исчезает */
+  /* Линия клетки — 1 экранный пиксель: --zoom (масштаб камеры) выставляет
+     Canvas, когда камера замерла. Иначе при отдалении клетка исчезает */
   --hairline: calc(1px / var(--zoom, 1));
+  --flip-time: 650ms;
 
   position: absolute;
   inset: 0;
   display: flex;
   border-radius: 6px;
+  /* Тень с небольшим размытием: большое размытие дорого перерисовывать */
   box-shadow:
-    0 2px 6px rgb(0 0 0 / 0.12),
-    0 40px 80px -30px rgb(0 0 0 / 0.45);
+    0 2px 4px rgb(0 0 0 / 0.15),
+    0 14px 24px -10px rgb(0 0 0 / 0.35);
+  /* Глубина для переворота листа */
+  perspective: 3400px;
 }
 
-.page {
-  position: relative;
-  /* Ровно половина разворота — корешок точно на границе листов */
+/* Переворачиваемый лист: лицо и оборот — две страницы спиной друг к другу,
+   лист поворачивается вокруг корешка на 180° */
+.flip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
   width: 50%;
-  overflow: hidden;
-  /* Содержимое страницы — столбиком; последний блок может растянуться
-     до низа листа (например, поле заметки) */
-  display: flex;
-  flex-direction: column;
-  padding: var(--pad);
-  background-color: var(--paper);
-  background-image:
-    linear-gradient(to right, var(--grid) var(--hairline), transparent var(--hairline)),
-    linear-gradient(to bottom, var(--grid) var(--hairline), transparent var(--hairline));
-  background-size: var(--cell) var(--cell);
-  color: var(--ink);
-  font-family: 'Caveat Variable', cursive;
-  font-size: calc(var(--cell) * 1.6);
-  line-height: calc(var(--cell) * 2);
+  transform-style: preserve-3d;
+  pointer-events: none;
+  animation-duration: var(--flip-time);
+  animation-timing-function: cubic-bezier(0.45, 0.05, 0.3, 1);
+  animation-fill-mode: forwards;
 }
 
-.page-left {
-  border-radius: 6px 0 0 6px;
+.flip-next {
+  left: 50%;
+  transform-origin: left center;
+  animation-name: flip-next;
 }
 
-.page-right {
-  border-radius: 0 6px 6px 0;
+.flip-prev {
+  left: 0;
+  transform-origin: right center;
+  animation-name: flip-prev;
 }
 
-/* Тень у сгиба: листы будто уходят в корешок */
-.page::after {
+@keyframes flip-next {
+  to {
+    transform: rotateY(-180deg);
+  }
+}
+
+@keyframes flip-prev {
+  to {
+    transform: rotateY(180deg);
+  }
+}
+
+.flip .flip-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.flip .flip-back {
+  transform: rotateY(180deg);
+}
+
+/* Свет на листе: темнеет, пока встаёт ребром, и светлеет, ложась */
+.flip-face::before {
   content: '';
   position: absolute;
   inset: 0;
+  z-index: 1;
+  background: rgb(0 0 0 / 0.22);
   pointer-events: none;
+  animation-duration: var(--flip-time);
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
 }
 
-.page-left::after {
-  background: linear-gradient(to left, var(--fold-shadow), transparent 9%);
+.flip-front::before {
+  opacity: 0;
+  animation-name: flip-shade-front;
 }
 
-.page-right::after {
-  background: linear-gradient(to right, var(--fold-shadow), transparent 9%);
+.flip-back::before {
+  opacity: 1;
+  animation-name: flip-shade-back;
+}
+
+@keyframes flip-shade-front {
+  50%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes flip-shade-back {
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notebook {
+    --flip-time: 1ms;
+  }
 }
 
 .notebook-spine {
@@ -67,6 +122,7 @@
   top: 0;
   bottom: 0;
   left: 50%;
+  z-index: 2;
   width: 3px;
   transform: translateX(-50%);
   background: var(--fold-line);
