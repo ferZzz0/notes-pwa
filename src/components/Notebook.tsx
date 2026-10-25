@@ -74,6 +74,11 @@ const SNAP_SCALE = 0.06;
 const TURN_MS = { spread: 340, single: 850 };
 // Перелёт к началу листа перед перелистыванием (если лист приближен)
 const TURN_HOME_MS = 200;
+// Перед тем как открыть клавиатуру, строку с курсором поднимаем не ниже этой
+// доли экрана, а лист удлиняем на столько (клавиатура iPhone с полосой над
+// ней — до половины экрана и больше в горизонтали)
+const CARET_ZONE = 0.3;
+const KEYBOARD_GUESS = 0.6;
 // Новое фото — не шире этой доли видимой части листа и не выше этой
 const PHOTO_SHARE = { w: 0.55, h: 0.6 };
 // Примерный размер нового стикера (мир) — чтобы поставить его посередине экрана
@@ -190,6 +195,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const textBefore = useRef(new Map<string, string>());
   // Надпись с текстом стёрли целиком: спрашиваем, удалить ли её
   const [erased, setErased] = useState<{ id: string; text: string } | null>(null);
+  // Печатают (или вот-вот откроется клавиатура): лист заранее удлинён снизу
+  const [typing, setTyping] = useState(false);
   // Открытая страница; на развороте — любая из двух его страниц
   const [page, setPage] = useState(() => loadPage(source));
   const portrait = usePortrait();
@@ -249,6 +256,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // только после подтверждения (отмена возвращает текст)
   const dropIfEmpty = (id: string) => {
     setFocused(f => (f === id ? null : f));
+    setTyping(false);
     const b = spreads[spread]?.blocks.find(x => x.id === id);
     if (!b || !isBlank(b)) return;
     const before = textBefore.current.get(id);
@@ -369,13 +377,25 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     });
   };
 
-  // Печатать в надписи. Фокус — прямо в обработчике касания, иначе iOS не
-  // покажет клавиатуру
+  // Фокус в поле надписи — прямо в обработчике касания, иначе iOS не покажет
+  // клавиатуру. Открывая её, iOS сдвигает весь экран, если поле окажется под
+  // клавиатурой, — и в нашем закреплённом (position: fixed) приложении рисует
+  // курсор не там, выше текста. Поэтому строку с курсором (он в конце текста)
+  // заранее, сразу поднимаем в верх экрана — лист для этого удлинён на
+  // клавиатуру (typing), — а фокус ставим без прокрутки
+  const focusText = (el: HTMLTextAreaElement) => {
+    flushSync(() => setTyping(true));
+    const limit = window.innerHeight * CARET_ZONE;
+    const bottom = el.getBoundingClientRect().bottom;
+    if (bottom > limit) canvas.current?.jump(0, limit - bottom);
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(el.value.length, el.value.length);
+  };
+
+  // Печатать в надписи
   const edit = (id: string) => {
     const el = blockElement(id);
-    if (!(el instanceof HTMLTextAreaElement)) return;
-    el.focus();
-    el.setSelectionRange(el.value.length, el.value.length);
+    if (el instanceof HTMLTextAreaElement) focusText(el);
   };
 
   // Касание по листу: по надписи — выбрать её (клавиатура не открывается),
@@ -471,7 +491,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       setSpreads({ ...spreads, [spread]: { ...cur, blocks: [...cur.blocks, block] } });
       setSelected(block.id);
     });
-    blockElement(block.id)?.focus();
+    edit(block.id);
   };
 
   // Клавиатура телефона закрывает низ экрана (видимая часть —
@@ -486,8 +506,15 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     const bottom = Math.min(vv.offsetTop + vv.height, bar ? bar.top : Infinity) - 24;
     // У длинного текста следим за низом, но не дальше 60% видимой высоты
     const watched = Math.min(r.bottom, r.top + vv.height * 0.6);
-    if (watched > bottom) canvas.current?.panBy(0, bottom - watched);
-    else if (r.top < top) canvas.current?.panBy(0, top - r.top);
+    const dy = watched > bottom ? bottom - watched : r.top < top ? top - r.top : 0;
+    if (dy) void canvas.current?.panBy(0, dy).then(() => redrawCaret(el));
+  };
+
+  // Лист сдвинулся под полем ввода — iOS может оставить курсор на старом
+  // месте; то же выделение заново заставляет его перерисоваться
+  const redrawCaret = (el: HTMLElement) => {
+    if (!(el instanceof HTMLTextAreaElement) || document.activeElement !== el) return;
+    el.setSelectionRange(el.selectionStart, el.selectionEnd, el.selectionDirection);
   };
 
   // Высота открытой клавиатуры (экранные px): на неё лист временно
@@ -496,7 +523,13 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const onChange = () => setKeyboard(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+    const onChange = () => {
+      // iOS всё-таки сдвинул экран под клавиатуру — возвращаем: со сдвигом он
+      // рисует курсор не на месте, а строку над клавиатурой и так держит keepVisible
+      const el = document.activeElement;
+      if ((vv.offsetTop > 0 || window.scrollY > 0) && el instanceof HTMLTextAreaElement) window.scrollTo(0, 0);
+      setKeyboard(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+    };
     vv.addEventListener('resize', onChange);
     vv.addEventListener('scroll', onChange);
     return () => {
@@ -641,7 +674,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         content={content}
         fixed={fixedOf(display)}
         bounded={!transit}
-        extraBottom={keyboard + (selectedBlock ? toolbarHeight + 16 : 0)}
+        extraBottom={
+          Math.max(keyboard, typing ? Math.round(window.innerHeight * KEYBOARD_GUESS) : 0) + (selectedBlock ? toolbarHeight + 16 : 0)
+        }
         locked={turning}
         background={<Paper ref={paper} display={display} />}
         onFrame={(cam, size) => {

@@ -30,8 +30,11 @@ export type CanvasHandle = {
   showHome: () => void;
   // Какая часть мира сейчас на экране
   visibleRect: () => Rect;
-  // Плавно сдвинуть камеру на (dx, dy) экранных px
-  panBy: (dx: number, dy: number) => void;
+  // Плавно сдвинуть камеру на (dx, dy) экранных px; промис — когда сдвинулась
+  panBy: (dx: number, dy: number) => Promise<void>;
+  // Сдвинуть сразу, без анимации, по свежим границам листа (их только что
+  // поменяли пропсы — например, лист удлинили под клавиатуру)
+  jump: (dx: number, dy: number) => void;
 };
 
 type Props = {
@@ -118,7 +121,8 @@ export function Canvas({
       goHome: (h, duration) => apiRef.current?.goHome(h, duration) ?? Promise.resolve(),
       showHome: () => apiRef.current?.showHome(),
       visibleRect: () => apiRef.current!.visibleRect(),
-      panBy: (dx, dy) => apiRef.current?.panBy(dx, dy)
+      panBy: (dx, dy) => apiRef.current?.panBy(dx, dy) ?? Promise.resolve(),
+      jump: (dx, dy) => apiRef.current?.jump(dx, dy)
     }),
     []
   );
@@ -333,7 +337,13 @@ export function Canvas({
         flush();
       },
       visibleRect: () => ({ x: -cam.x / cam.scale, y: -cam.y / cam.scale, w: size.w / cam.scale, h: size.h / cam.scale }),
-      panBy: (dx, dy) => void animateTo({ ...cam, x: cam.x + dx, y: cam.y + dy }, 250),
+      panBy: (dx, dy) => animateTo({ ...cam, x: cam.x + dx, y: cam.y + dy }, 250),
+      jump: (dx, dy) => {
+        bounds = computeBounds();
+        stop();
+        set({ ...cam, x: cam.x + dx, y: cam.y + dy });
+        flush();
+      },
       // Лист изменился (вырос, уменьшился, закрылась клавиатура, переход
       // закончился) — камера плавно возвращается внутрь листа
       reclamp: () => {
@@ -374,6 +384,11 @@ export function Canvas({
     let moving = false; // жест стал перелётом/щипком, а не тапом
     // Жест, отданный предмету в мире (первый палец лёг на него)
     let grabbed: Grab | null = null;
+    // Касание по листу уже обработано — «мышиные» события, которые браузер
+    // присылает после него (mousedown, click), глушим: mousedown по бумаге
+    // снял бы фокус с поля, которое касание только что открыло (строку при
+    // этом уже подняли над будущей клавиатурой, и под пальцем — бумага)
+    let swallowMouse = false;
     let samples: { t: number; x: number; y: number }[] = [];
     let lastTap = { t: 0, x: 0, y: 0 };
 
@@ -483,14 +498,18 @@ export function Canvas({
 
       // Это был тап
       if (e.type !== 'pointerup' || isInteractive(e.target)) return;
+      if (e.pointerType !== 'mouse') swallowMouse = true;
       // Тап по пустому месту убирает клавиатуру
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       const p = local(e.clientX, e.clientY);
       flush(); // точка мира — по уже применённой камере
-      props.current.onTap?.(toWorld(p));
+      // Одна и та же точка мира для обоих: касание может сразу сдвинуть лист
+      // (открыть надпись и поднять её над клавиатурой)
+      const w = toWorld(p);
+      props.current.onTap?.(w);
       if (e.timeStamp - lastTap.t < DOUBLE_TAP_MS && dist(p, lastTap) < 30) {
         lastTap = { t: 0, x: 0, y: 0 };
-        props.current.onDoubleTap?.(toWorld(p));
+        props.current.onDoubleTap?.(w);
       } else {
         lastTap = { t: e.timeStamp, x: p.x, y: p.y };
       }
@@ -533,6 +552,12 @@ export function Canvas({
     viewport.addEventListener('pointermove', onMove);
     viewport.addEventListener('pointerup', onUp);
     viewport.addEventListener('pointercancel', onUp);
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!swallowMouse || e.touches.length > 0) return;
+      swallowMouse = false;
+      e.preventDefault();
+    };
+    viewport.addEventListener('touchend', onTouchEnd, { passive: false });
     viewport.addEventListener('wheel', onWheel, { passive: false });
     viewport.addEventListener('gesturestart', onGestureStart);
     viewport.addEventListener('gesturechange', onGestureChange);
@@ -547,6 +572,7 @@ export function Canvas({
       viewport.removeEventListener('pointermove', onMove);
       viewport.removeEventListener('pointerup', onUp);
       viewport.removeEventListener('pointercancel', onUp);
+      viewport.removeEventListener('touchend', onTouchEnd);
       viewport.removeEventListener('wheel', onWheel);
       viewport.removeEventListener('gesturestart', onGestureStart);
       viewport.removeEventListener('gesturechange', onGestureChange);
