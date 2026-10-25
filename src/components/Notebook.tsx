@@ -136,6 +136,9 @@ const PHOTO_SHARE = { w: 0.55, h: 0.6 };
 const STICKER_SIZE = { w: 230, h: 210 };
 // Пузырёк «Вставить» стоит над пальцем, если над ним столько места (px экрана)
 const PASTE_ROOM = 90;
+// Столько ждём после касания пузырька, чтобы он успел исчезнуть с экрана, —
+// потом читаем буфер (и Safari показывает свою кнопку)
+const BUBBLE_GONE_MS = 60;
 // iPhone и iPad (iPad представляется компьютером Mac, но с сенсорным экраном):
 // читая буфер обмена, Safari сам показывает свою кнопку «Вставить», поэтому
 // своего пузырька там нет — буфер читаем, когда отпускают палец
@@ -1448,8 +1451,17 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             style={{ left: `clamp(70px, ${pasteMenu.screen.x}px, calc(100% - 70px))`, top: pasteMenu.screen.y }}
             onClick={() => {
               const m = pasteMenu;
-              setPasteMenu(null);
-              void (m.data ? insertPasted(m.data, m.world) : pasteAt(m.world));
+              flushSync(() => setPasteMenu(null));
+              if (m.data) {
+                void insertPasted(m.data, m.world);
+                return;
+              }
+              // Буфер — чуть позже, когда пузырька уже нет на экране: пока
+              // Safari показывает свою «Вставить», страница не
+              // перерисовывается, и наш пузырёк оставался рядом с ней (две
+              // кнопки — жалоба автора). Таймер короче секунды Safari ещё
+              // считает ответом на касание
+              window.setTimeout(() => void pasteAt(m.world), BUBBLE_GONE_MS);
             }}
           >
             Вставить
