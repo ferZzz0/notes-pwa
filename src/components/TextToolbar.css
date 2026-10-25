@@ -55,7 +55,7 @@
 }
 
 .text-toolbar > button.is-active {
-  background: rgb(36 57 140 / 0.12);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 .text-toolbar svg {
@@ -150,7 +150,7 @@
 }
 
 .toolbar-menu-item.is-active {
-  background: rgb(36 57 140 / 0.12);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 /* Шрифты в списке — каждый своим шрифтом (классы .font-* — TextBlock.css),
@@ -315,7 +315,7 @@
 
 .toolbar-sticker-shapes button.is-active,
 .toolbar-layer button:active {
-  background: rgb(36 57 140 / 0.12);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 /* Наверх / вниз среди всего на листе */

@@ -63,7 +63,7 @@ const HEX = /^#[0-9a-f]{6}$/i;
 
 // Цвет надписи для CSS; незнакомое значение — обычные чернила
 export const inkColor = (color?: string): string =>
-  color && HEX.test(color) ? color : color && OLD_INKS[color] ? OLD_INKS[color] : 'var(--ink)';
+  color && HEX.test(color) ? color : color && OLD_INKS[color] ? OLD_INKS[color] : 'var(--ink-default)';
 
 // Незнакомый шрифт (из будущей версии или испорченный) — как по умолчанию
 export const fontOf = (id?: string): FontId => FONTS.find(f => f.id === id)?.id ?? 'hand';

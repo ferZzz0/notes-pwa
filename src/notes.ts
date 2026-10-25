@@ -299,7 +299,9 @@ export function savePage(source: Source, n: number): void {
 
 // Скопированное кнопкой «Копировать»: надпись, стикер или фото со всем
 // оформлением (без id и дат) — вставляется в любом дневнике и дне
-export type Clip = Omit<Block, 'id' | 'day' | 'edited'>;
+// У фото — ещё размер картинки (px): по нему вставка из буфера обмена
+// узнаёт, что там это самое фото
+export type Clip = Omit<Block, 'id' | 'day' | 'edited'> & { size?: [number, number] };
 const CLIP_KEY = 'notes-pwa:clip';
 
 export function loadClip(): Clip | null {

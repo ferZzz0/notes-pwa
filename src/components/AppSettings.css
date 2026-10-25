@@ -1,0 +1,96 @@
+/* Настройки приложения — шестерёнка справа вверху главного меню (кнопка —
+   App.css: .round-button) и панель под ней */
+.app-settings-button {
+  position: absolute;
+  top: calc(12px + var(--safe-top));
+  right: calc(14px + var(--safe-right));
+  z-index: 3;
+}
+
+.app-settings-button svg {
+  transition: transform 0.3s ease-out;
+}
+
+.app-settings-button.is-open svg {
+  transform: rotate(60deg);
+}
+
+/* Касание мимо панели закрывает её */
+.app-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+}
+
+.app-settings-panel {
+  position: fixed;
+  top: calc(62px + var(--safe-top));
+  right: calc(12px + var(--safe-right));
+  z-index: 7;
+  width: min(300px, calc(100% - 24px));
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font: 15px/1.35 var(--ui-font);
+  animation: settings-in 0.18s ease-out;
+}
+
+.app-settings-title {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+/* Палитра и рядом — как цвет выглядит: рукописный текст, бледные цифры,
+   подсветка */
+.app-settings-color {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Палитра — ровный круг: в узкой панели не сжимается */
+.app-settings-color .color-wheel {
+  flex: none;
+}
+
+.app-settings-sample {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-settings-sample-hand {
+  color: var(--ink);
+  font: 700 26px/1 'Caveat Variable', cursive;
+}
+
+.app-settings-sample-muted {
+  color: var(--ink-muted);
+  font: 26px/1 'Caveat Variable', cursive;
+}
+
+.app-settings-sample-tint {
+  width: 56px;
+  height: 18px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.app-settings-reset {
+  margin-top: 14px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: 600 14px/1.2 var(--ui-font);
+}
+
+.app-settings-reset:disabled {
+  opacity: 0.45;
+}

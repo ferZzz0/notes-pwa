@@ -39,6 +39,8 @@ type Props = {
   rangeStyle?: RunStyle | null;
   // «Отменить» / «Вернуть» — над панелью
   history?: ReactNode;
+  // Открыли (true) или закрыли список над панелью — прямо в нажатии
+  onMenu?: (open: boolean) => void;
   // Стикер: форма и цвет (save = false — пока ведут пальцем по палитре);
   // слой — выше всех или ниже всех на листе
   onSticker: (patch: Partial<Block>, save?: boolean) => void;
@@ -179,7 +181,7 @@ export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => voi
 // текстом), у стикера — его форма, цвет и слой, прозрачность (ползунок),
 // удалить (с подтверждением), готово. Списки открываются над панелью, по одному.
 export function TextToolbar(props: Props) {
-  const { block, keyboard, onColor, onFont, onEffect, onMarker, onCapture, rangeStyle, history, onSticker, onOpacity, onLayer, onDelete, onDone, onHeight } = props;
+  const { block, keyboard, onColor, onFont, onEffect, onMarker, onCapture, rangeStyle, history, onMenu, onSticker, onOpacity, onLayer, onDelete, onDone, onHeight } = props;
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
   const font = fontOf(rangeStyle?.font ?? block.font);
@@ -190,7 +192,11 @@ export function TextToolbar(props: Props) {
   const fill = stickerFill(block.sticker, block.fill);
   const room = menuRoom(keyboard);
 
-  const toggle = (m: Menu) => setMenu(menu === m ? null : m);
+  const toggle = (m: Menu) => {
+    const next = menu === m ? null : m;
+    setMenu(next);
+    onMenu?.(next !== null);
+  };
   // Кнопка, открывающая список
   const opener = (m: Exclude<Menu, null>, label: string, content: ReactNode, className = '') => (
     <button
@@ -314,7 +320,14 @@ export function TextToolbar(props: Props) {
       {menu === 'opacity' && <OpacityMenu value={block.opacity} onPick={onOpacity} />}
 
       {menu === 'delete' && (
-        <ConfirmDelete what={isSticker ? 'стикер' : 'надпись'} onDelete={onDelete} onCancel={() => setMenu(null)} />
+        <ConfirmDelete
+          what={isSticker ? 'стикер' : 'надпись'}
+          onDelete={onDelete}
+          onCancel={() => {
+            setMenu(null);
+            onMenu?.(false);
+          }}
+        />
       )}
 
       {opener('color', 'Цвет', <span className="text-toolbar-swatch" style={{ '--color': color } as CSSProperties} />, 'text-toolbar-color')}
@@ -387,7 +400,7 @@ type WheelProps = {
 // Круговая палитра: по кругу — оттенок, от середины к краю — от чёрного (или
 // белого) к яркому (textStyle.ts: wheelColor). Цвет меняется, пока ведёшь
 // пальцем; отметка — где цвет сейчас.
-function ColorWheel({ color, base = 'dark', size, label = 'Палитра цвета', onPick }: WheelProps) {
+export function ColorWheel({ color, base = 'dark', size, label = 'Палитра цвета', onPick }: WheelProps) {
   const wheel = useRef<HTMLDivElement>(null);
   const { h, r } = wheelPosition(color, base);
   const a = (h * Math.PI) / 180;

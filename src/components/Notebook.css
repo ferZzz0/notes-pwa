@@ -12,6 +12,11 @@
 .page-date {
   position: absolute;
   top: 24px;
+  /* Запас вокруг букв (отступы, и такие же отрицательные поля — буквы на
+     прежнем месте): рукописные цифры выступают за свою рамку, и Safari
+     срезал хвостик «1» по ней ровной линией */
+  margin: -6px -12px;
+  padding: 6px 12px;
   font-family: 'Caveat Variable', cursive;
   font-size: 30px;
   line-height: 1;
@@ -49,6 +54,8 @@
   position: absolute;
   top: 22px;
   left: 60px;
+  margin: -6px -12px;
+  padding: 6px 12px;
   font-family: 'Caveat Variable', cursive;
   font-size: 44px;
   font-weight: 700;

@@ -1,8 +1,9 @@
-import { useState, type CSSProperties } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import type { NotebookInfo } from '../notes';
 import { Calendar } from './Calendar';
 import { ConfirmDialog } from './ConfirmDialog';
+import { AppSettings } from './AppSettings';
 import { Settings } from './Settings';
 import './MainMenu.css';
 
@@ -41,6 +42,19 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onDelet
   // Дневник, который сейчас называют, и тот, который хотят удалить
   const [editing, setEditing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<NotebookInfo | null>(null);
+  // Всё меню помещается на экране — вверх-вниз оно не двигается (просьба
+  // автора: иначе его можно было потянуть и оно «пружинило»)
+  const menu = useRef<HTMLDivElement>(null);
+  const [fits, setFits] = useState(true);
+  useLayoutEffect(() => {
+    const el = menu.current!;
+    const check = () => setFits(el.scrollHeight <= el.clientHeight + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => observer.disconnect();
+  }, []);
 
   // Начать называть дневник (новый — создаётся в том же нажатии)
   const startEditing = (pick: () => string) => {
@@ -59,7 +73,7 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onDelet
   };
 
   return (
-    <div className="main-menu">
+    <div ref={menu} className={fits ? 'main-menu is-fit' : 'main-menu'}>
       <div className="main-menu-content">
         <section className="main-menu-section">
           <h1>Дневники</h1>
@@ -135,6 +149,9 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onDelet
           <Calendar onDay={onDay} />
         </section>
       </div>
+
+      {/* Настройки приложения — справа вверху; шестерёнка внизу — отладка */}
+      <AppSettings />
 
       <div className="bottom-center">
         <Settings />

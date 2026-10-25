@@ -29,6 +29,13 @@
 /* Колонка не шире экрана: иначе она растягивалась по всей ленте дневников
    (её ширине «по содержимому») — лента не листалась, а «Новый дневник»
    уходил за край */
+/* Всё помещается — вверх-вниз меню не двигается и не пружинит; вбок
+   листается лента дневников */
+.main-menu.is-fit {
+  overflow-y: hidden;
+  touch-action: pan-x;
+}
+
 .main-menu-section {
   min-width: 0;
 }
@@ -244,7 +251,7 @@
 }
 
 .calendar-day:active {
-  background: rgb(36 57 140 / 0.12);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 .calendar-day.is-today {

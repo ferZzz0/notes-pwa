@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { copyImage, importImage, keepImages } from '../images';
+import { copyImage, imagePng, importImage, keepImages, pixelSize } from '../images';
 import {
   allImageIds,
   isBlank,
@@ -53,6 +53,14 @@ import { TextToolbar } from './TextToolbar';
 import './Notebook.css';
 
 type FlipDir = 'next' | 'prev';
+// Прочитанное из буфера обмена: картинка или текст
+type Pasted = { file: File } | { text: string };
+
+// Надпись или фото без id, дат и служебного — чтобы сравнить со скопированным
+function clipKey(x: Block | Clip): string {
+  const { id: _id, day: _day, edited: _edited, size: _size, ...rest } = x as Block & Clip;
+  return JSON.stringify(rest);
+}
 type Side = 'left' | 'right';
 // Переворот листа: разворот from → to; sheet — переворачиваемая половина
 // листа в координатах мира: от корешка до края экрана, от верха листа до
@@ -109,8 +117,9 @@ const TYPING_RESERVE_MS = 1000;
 const CARET_SETTLE_MS = 120;
 // Ряд «Отменить» / «Вернуть» над панелью надписи: кнопка 40 + отступ 8 (px экрана)
 const HISTORY_ROW = 48;
-// Столько на кнопке «Копировать» галочка — скопировано
-const COPIED_MS = 1200;
+// Буфер обмена прочитан быстрее (мс) — Safari не показывал свою кнопку
+// «Вставить» (скопировано здесь же)
+const SILENT_READ_MS = 150;
 // Примерная ширина вставленной надписи (мир) — чтобы поставить её посередине экрана
 const PASTE_TEXT_WIDTH = 300;
 // Столько после касания панели перемены выделения в надписи не считаем
@@ -314,8 +323,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Печатают (или вот-вот откроется клавиатура): лист заранее удлинён снизу
   const [typing, setTyping] = useState(false);
   // Пузырёк «Вставить» после долгого нажатия: куда вставлять (мир) и где он
-  // (экран)
-  const [pasteMenu, setPasteMenu] = useState<{ world: Point; screen: Point } | null>(null);
+  // (экран); data — буфер уже прочитан (iPhone: Safari отдал его без
+  // своей кнопки — подтверждаем своей)
+  const [pasteMenu, setPasteMenu] = useState<{ world: Point; screen: Point; data?: Pasted } | null>(null);
   // iPhone: долгое нажатие, вставку из которого делаем, когда отпустят палец
   const pasteOnRelease = useRef<{ world: Point; screen: Point } | null>(null);
   // Открытая страница; на развороте — любая из двух его страниц
@@ -381,16 +391,20 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const commit = (next: Spreads, key?: string) => setSpreads(persist(next, key));
 
   // Вернуть запись из истории (отмена / возврат)
+  // Панель редактирования остаётся открытой (просьба автора), если то, что
+  // выбрано, после отмены на листе есть; нет — выбор снимается
   const restore = (json: string) => {
     const next = JSON.parse(json) as Spreads;
     saved.current = { spreads: next, json };
     history.current.key = '';
     saveSpreads(source, next);
     setSpreads(next);
+    captured.current = null;
+    setRangeStyle(null);
+    if (selected && !Object.values(next).some(s => s.blocks.some(b => b.id === selected))) deselect();
   };
 
   const undo = () => {
-    deselect();
     const h = history.current;
     const prev = h.past.pop();
     if (prev === undefined) return;
@@ -399,7 +413,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   };
 
   const redo = () => {
-    deselect();
     const h = history.current;
     const next = h.future.pop();
     if (next === undefined) return;
@@ -439,6 +452,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // ничего и не написали, — сразу; а ту, где был текст, стёрли целиком —
   // только после подтверждения (отмена возвращает текст)
   const dropIfEmpty = (id: string) => {
+    // Из ввода вышли сами — на время списка на панели
+    if (menuHold.current) return;
     panCaret.current = null;
     setFocused(f => (f === id ? null : f));
     setTyping(false);
@@ -544,7 +559,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // в память приложения (вставка — «+» → «Вставить скопированное»); текст
   // надписи — ещё и в буфер обмена, для других приложений
   const [clip, setClip] = useState<Clip | null>(loadClip);
-  const [copied, setCopied] = useState(false);
+  // Галочка на «Копировать» — пока выбранное то же, что скопировано (с ним
+  // ничего не делали; просьба автора)
+  const copied = !!selectedBlock && !!clip && clipKey(selectedBlock) === clipKey(clip);
   const copySelected = () => {
     const b = selectedBlock;
     if (!b) return;
@@ -552,15 +569,31 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     saveClip(rest);
     setClip(rest);
     if (b.kind !== 'image' && b.text.trim()) void navigator.clipboard?.writeText(b.text).catch(() => {});
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), COPIED_MS);
+    // Фото: картинку — в буфер обмена (вставка долгим нажатием тоже его
+    // найдёт; запись — прямо в нажатии, картинка дочитывается потом), а её
+    // размер — в скопированное, чтобы узнать её при вставке
+    if (b.kind === 'image' && b.image) {
+      const image = b.image;
+      try {
+        if (typeof ClipboardItem !== 'undefined') void navigator.clipboard?.write([new ClipboardItem({ 'image/png': imagePng(image) })]).catch(() => {});
+      } catch {
+        // Буфер обмена недоступен — вставить можно через «+»
+      }
+      void pixelSize(image).then(size => {
+        if (!size) return;
+        const withSize = { ...rest, size };
+        saveClip(withSize);
+        setClip(withSize);
+      });
+    }
   };
 
   // «Вставить скопированное»: посередине экрана, выбранным; у фото — своя
   // копия картинки
-  const pasteClip = async () => {
-    const c = loadClip();
-    if (!c) return;
+  const pasteClip = async (at = viewCenter()) => {
+    const loaded = loadClip();
+    if (!loaded) return;
+    const { size: _size, ...c } = loaded;
     let image = c.image;
     if (c.kind === 'image' && c.image) {
       image = newBlockId();
@@ -571,7 +604,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     }
     const w = c.kind === 'image' ? (c.width ?? 500) : c.kind === 'sticker' ? STICKER_SIZE.w : PASTE_TEXT_WIDTH;
     const h = c.kind === 'image' ? w * (c.ratio ?? 0.75) : STICKER_SIZE.h;
-    const at = viewCenter();
     addBlock({ ...c, id: newBlockId(), image, ...place(w, at.x - w / 2, at.y - h / 2) });
   };
   const clipLabel = !clip
@@ -586,29 +618,71 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // надпись, в точку нажатия p. Буфер читаем прямо в нажатии на кнопку —
   // иначе браузер не даст; iOS ещё покажет свою кнопку «Вставить», если
   // скопировано не здесь
+  // Прочитать буфер обмена: картинка — файлом, иначе текст; null — пусто
+  const readClipboard = async (): Promise<Pasted | null> => {
+    const board = navigator.clipboard;
+    if (typeof board.read !== 'function') {
+      const text = await board.readText();
+      return text.trim() ? { text } : null;
+    }
+    const items = await board.read();
+    for (const item of items) {
+      const type = item.types.find(t => t.startsWith('image/'));
+      if (type) return { file: new File([await item.getType(type)], 'clipboard', { type }) };
+    }
+    const item = items.find(i => i.types.includes('text/plain'));
+    const text = item ? await (await item.getType('text/plain')).text() : '';
+    return text.trim() ? { text } : null;
+  };
+
+  // Вставить прочитанное в точку p: текст — надпись, картинка — фото. Если
+  // это скопированное кнопкой «Копировать» (тот же текст / картинка того же
+  // размера) — оно само, со всем оформлением
+  const insertPasted = async (data: Pasted, p: Point) => {
+    if ('text' in data) {
+      pasteText(data.text, p);
+      return;
+    }
+    const size = clip?.kind === 'image' && clip.size ? await pixelSize(data.file) : null;
+    if (size && clip?.size && size[0] === clip.size[0] && size[1] === clip.size[1]) await pasteClip(p);
+    else await addPhoto(data.file, p);
+  };
+
+  // Отказ читать буфер (не разрешили доступ, на iPhone не нажали
+  // «Вставить») — решение самого человека, о нём не говорим
+  const clipboardFailed = (e: unknown) => {
+    if (e instanceof DOMException && e.name === 'NotAllowedError') return;
+    alert('Не получилось прочитать буфер обмена');
+  };
+
   const pasteAt = async (p: Point) => {
     setPasteMenu(null);
-    const clip = navigator.clipboard;
     try {
-      if (typeof clip.read !== 'function') {
-        pasteText(await clip.readText(), p);
+      const data = await readClipboard();
+      if (data) await insertPasted(data, p);
+      else alert('В буфере обмена нет ни текста, ни картинки');
+    } catch (e) {
+      clipboardFailed(e);
+    }
+  };
+
+  // iPhone: палец отпустили после долгого нажатия — читаем буфер. Safari
+  // спрашивает своей кнопкой «Вставить», только если скопировано не здесь;
+  // скопированное здесь отдаёт сразу — тогда подтверждение своим пузырьком
+  // (иначе долгое нажатие само что-то вставляло). Ответ быстрее
+  // SILENT_READ_MS — значит, Safari не спрашивал
+  const pasteAfterHold = async (press: { world: Point; screen: Point }) => {
+    const start = performance.now();
+    try {
+      const data = await readClipboard();
+      if (!data) {
+        alert('В буфере обмена нет ни текста, ни картинки');
         return;
       }
-      const items = await clip.read();
-      for (const item of items) {
-        const type = item.types.find(t => t.startsWith('image/'));
-        if (type) {
-          await addPhoto(new File([await item.getType(type)], 'clipboard', { type }), p);
-          return;
-        }
-      }
-      const item = items.find(i => i.types.includes('text/plain'));
-      pasteText(item ? await (await item.getType('text/plain')).text() : '', p);
+      if (performance.now() - start < SILENT_READ_MS) setPasteMenu({ ...press, data });
+      else await insertPasted(data, press.world);
     } catch (e) {
-      // Отказ (не разрешили доступ, на iPhone не нажали «Вставить») — это
-      // решение самого человека, о нём не говорим
-      if (e instanceof DOMException && e.name === 'NotAllowedError') return;
-      alert('Не получилось прочитать буфер обмена');
+      clipboardFailed(e);
     }
   };
 
@@ -650,6 +724,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   };
   useEffect(() => {
     const onSelection = () => {
+      if (menuHold.current) return;
       // Выделение сменилось сразу после касания панели, а саму надпись с тех
       // пор не трогали (ни пальцем, ни клавишей) — это сделал iPhone, не человек
       const sinceToolbar = performance.now() - toolbarTouch.current;
@@ -673,10 +748,15 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       document.removeEventListener('keydown', mark, true);
     };
   }, []);
-  // Другая надпись (или никакой) — прежний кусок не в счёт
+  // Другая надпись (или никакой) — прежний кусок не в счёт; надпись, из
+  // ввода которой вышли на время списка, — как после обычного ухода из неё
+  // (пустая — убрать)
   useEffect(() => {
     captured.current = null;
     setRangeStyle(null);
+    const held = menuHold.current;
+    menuHold.current = null;
+    if (held?.el.dataset.block) dropIfEmpty(held.el.dataset.block);
   }, [selected]);
 
   // Оформление: на выделенный кусок, а без выделения — на всю надпись (и
@@ -739,7 +819,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // курсор не там, выше текста. Поэтому строку с курсором (он в конце текста)
   // заранее, сразу поднимаем в верх экрана — лист для этого удлинён на
   // клавиатуру (typing), — а фокус ставим без прокрутки
-  const focusText = (el: HTMLElement) => {
+  const focusText = (el: HTMLElement, range?: TextRange) => {
     flushSync(() => setTyping(true));
     // Клавиатура к этому времени уже открыта (её место — keyboard) или её
     // нет вовсе (компьютер) — запас больше не нужен
@@ -749,7 +829,27 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     if (bottom > limit) canvas.current?.jump(0, limit - bottom);
     el.focus({ preventScroll: true });
     const end = textLength(el);
-    setRange(el, { start: end, end });
+    setRange(el, range ?? { start: end, end });
+  };
+
+  // Пока открыт список на панели (шрифт, эффект, цвет…), курсора и выделения
+  // в надписи нет: iOS рисует их поверх всего, и списков тоже (жалоба
+  // автора). Открыли список — надпись выходит из ввода (клавиатура
+  // прячется, место — спискам), закрыли той же кнопкой — снова ввод, с тем
+  // же выделением. Кусок для оформления (captured) при этом не меняется
+  const menuHold = useRef<{ el: HTMLElement; range: TextRange } | null>(null);
+  const onToolbarMenu = (open: boolean) => {
+    if (open) {
+      const el = document.activeElement;
+      if (menuHold.current || !isEditor(el)) return;
+      const end = textLength(el);
+      menuHold.current = { el, range: getRange(el) ?? { start: end, end } };
+      el.blur();
+      return;
+    }
+    const held = menuHold.current;
+    menuHold.current = null;
+    if (held && held.el.isConnected && selectedBlock && held.el.dataset.block === selectedBlock.id) focusText(held.el, held.range);
   };
 
   // Печатать в надписи
@@ -908,7 +1008,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     const press = pasteOnRelease.current;
     pasteOnRelease.current = null;
     if (!press) return;
-    if (activated) void pasteAt(press.world);
+    if (activated) void pasteAfterHold(press);
     else setPasteMenu(press);
   };
 
@@ -933,7 +1033,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       const file = [...data.files].find(f => f.type.startsWith('image/'));
       if (file) {
         e.preventDefault();
-        void addPhoto(file);
+        void insertPasted({ file }, viewCenter());
         return;
       }
       const text = data.getData('text/plain');
@@ -1291,6 +1391,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
                     onContent={setRuns}
                     onBlur={dropIfEmpty}
                     onFocus={(id, el) => {
+                      // Снова печатают — список уже не держит надпись вне ввода
+                      menuHold.current = null;
                       textBefore.current.set(id, { text: b.text, runs: b.runs });
                       setSelected(id);
                       setFocused(id);
@@ -1331,7 +1433,11 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             // У верха экрана — под пальцем, а не над ним
             className={`paste-bubble${pasteMenu.screen.y < PASTE_ROOM ? ' is-below' : ''}`}
             style={{ left: `clamp(70px, ${pasteMenu.screen.x}px, calc(100% - 70px))`, top: pasteMenu.screen.y }}
-            onClick={() => void pasteAt(pasteMenu.world)}
+            onClick={() => {
+              const m = pasteMenu;
+              setPasteMenu(null);
+              void (m.data ? insertPasted(m.data, m.world) : pasteAt(m.world));
+            }}
           >
             Вставить
           </button>
@@ -1383,6 +1489,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               onCapture={captureRange}
               rangeStyle={rangeStyle}
               history={toolbarTop}
+              onMenu={onToolbarMenu}
               onSticker={(patch, save) => patchBlock(selectedBlock.id, patch, save)}
               onOpacity={(opacity, final) => patchBlock(selectedBlock.id, { opacity: opacity < 1 ? opacity : undefined }, final)}
               onLayer={dir => reorder(selectedBlock.id, dir)}
@@ -1411,7 +1518,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               onPhoto={file => void addPhoto(file)}
               onSticker={addSticker}
               clipLabel={clipLabel}
-              onPasteClip={() => void pasteClip()}
+              onPasteClip={() => void pasteClip(viewCenter())}
             />
             <Settings />
           </div>

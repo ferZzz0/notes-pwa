@@ -57,6 +57,37 @@ export async function deleteImage(id: string): Promise<void> {
   await run('readwrite', s => s.delete(id)).catch(() => {});
 }
 
+// Картинка фото в PNG — для буфера обмена (Safari кладёт туда только PNG)
+export async function imagePng(id: string): Promise<Blob> {
+  const blob = await run<Blob | undefined>('readonly', s => s.get(id) as IDBRequest<Blob | undefined>);
+  if (!blob) throw new Error('Картинки нет');
+  if (blob.type === 'image/png') return blob;
+  const bmp = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = bmp.width;
+  canvas.height = bmp.height;
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0);
+  bmp.close();
+  return new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Не удалось сохранить картинку'))), 'image/png')
+  );
+}
+
+// Размер картинки (px): у сохранённой по id или у любой (Blob); null — не открыть
+export async function pixelSize(image: string | Blob): Promise<[number, number] | null> {
+  try {
+    const blob =
+      typeof image === 'string' ? await run<Blob | undefined>('readonly', s => s.get(image) as IDBRequest<Blob | undefined>) : image;
+    if (!blob) return null;
+    const bmp = await createImageBitmap(blob);
+    const size: [number, number] = [bmp.width, bmp.height];
+    bmp.close();
+    return size;
+  } catch {
+    return null;
+  }
+}
+
 // Копия картинки from под id to (вставленное фото — со своей картинкой:
 // удаление дневника стирает картинки его фото); false — картинки нет
 export async function copyImage(from: string, to: string): Promise<boolean> {
