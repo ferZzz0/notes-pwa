@@ -1,5 +1,5 @@
-/* Бумага на весь экран; корешок и тень у сгиба — отдельные слои во всю
-   высоту экрана, камера их только двигает. */
+/* Бумага на весь экран; корешок — отдельный слой во всю высоту экрана,
+   камера его только двигает. */
 .paper {
   position: absolute;
   inset: 0;
@@ -8,36 +8,14 @@
   pointer-events: none;
 }
 
-.paper-fold,
 .paper-spine {
   position: absolute;
   top: 0;
-  height: 100%;
-  will-change: transform;
-}
-
-/* Тень у сгиба: 150 px мира по обе стороны корешка; ширину задаёт масштаб
-   камеры через scaleX от середины полосы */
-.paper-fold {
-  left: -150px;
-  width: 300px;
-  transform-origin: 150px 0;
-  background: linear-gradient(to right, transparent, var(--fold-shadow) 50%, transparent);
-}
-
-/* Одна страница — тень только на её стороне */
-.paper-left .paper-fold {
-  background: linear-gradient(to right, transparent, var(--fold-shadow) 50%, transparent 50%);
-}
-
-.paper-right .paper-fold {
-  background: linear-gradient(to right, transparent 50%, var(--fold-shadow) 50%, transparent);
-}
-
-.paper-spine {
   left: -1px;
   width: 2px;
+  height: 100%;
   background: var(--fold-line);
+  will-change: transform;
 }
 
 /* У одной страницы корешок — край экрана, линии нет */

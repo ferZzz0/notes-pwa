@@ -1,0 +1,103 @@
+/* Панель выбранной надписи — светлая, как стрелки перелистывания.
+   Горизонтально цвета, шрифты и действия — в одну строку; на узком
+   вертикальном экране шрифты уходят на вторую строку. */
+.text-toolbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(10px + var(--safe-bottom));
+  z-index: 8;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 10px;
+  width: max-content;
+  max-width: calc(100% - 16px - var(--safe-left) - var(--safe-right));
+  padding: 6px 8px;
+  border: 1px solid rgb(60 40 10 / 0.08);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 16px rgb(60 40 10 / 0.16);
+  touch-action: manipulation;
+}
+
+.text-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.text-toolbar button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+}
+
+/* Цвет — кружок; выбранный обведён */
+.text-toolbar .text-toolbar-ink {
+  width: 34px;
+}
+
+.text-toolbar-ink::before {
+  content: '';
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.text-toolbar-ink.is-active::before {
+  box-shadow:
+    0 0 0 2px var(--paper),
+    0 0 0 4px currentColor;
+}
+
+.text-toolbar .text-toolbar-font {
+  font-size: 19px;
+  line-height: 1;
+  font-weight: 400;
+}
+
+.text-toolbar .text-toolbar-font.font-hand,
+.text-toolbar .text-toolbar-font.font-script {
+  font-size: 23px;
+}
+
+.text-toolbar button.is-active {
+  background: rgb(36 57 140 / 0.12);
+}
+
+.text-toolbar svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.text-toolbar .text-toolbar-done {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Вертикально: цвета и действия — первой строкой, шрифты — второй */
+@media (orientation: portrait) {
+  .text-toolbar-actions {
+    order: 1;
+  }
+
+  .text-toolbar-fonts {
+    order: 2;
+  }
+}

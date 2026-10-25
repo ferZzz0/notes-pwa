@@ -1,0 +1,50 @@
+/* Перелистывание (PageTurn.tsx). Все слои — в точке (0, 0) мира и нулевого
+   размера: их содержимое лежит в координатах мира, а форму каждому задаёт
+   clip-path (тоже в координатах мира). */
+.page-turn,
+.page-turn-front,
+.page-turn-cast,
+.page-turn-flap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+/* Отдельные слои: на каждом кадре меняются только их форма и положение */
+.page-turn-front,
+.page-turn-cast,
+.page-turn-flap {
+  will-change: transform, clip-path;
+}
+
+/* Бумага страницы под её текстом — закрывает то, что под листом */
+.page-turn-paper {
+  position: absolute;
+  top: 0;
+  background: var(--paper);
+}
+
+/* Оборот загиба чуть темнее: он повёрнут от света, и край загиба виден на
+   странице под ним */
+.page-turn-back {
+  background: color-mix(in srgb, var(--paper) 94%, #8a7350);
+}
+
+.page-turn-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: center;
+}
+
+/* Тень от поднятого уголка на открывшейся странице — у самого сгиба */
+.page-turn-cast-line {
+  background: linear-gradient(to right, transparent, rgb(60 40 10 / 0.3) 50%, transparent);
+}
+
+/* Загиб у сгиба темнее — бумага там изгибается */
+.page-turn-flap-shade {
+  background: linear-gradient(to right, transparent, rgb(60 40 10 / 0.16) 50%, transparent);
+}

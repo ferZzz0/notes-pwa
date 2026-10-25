@@ -45,6 +45,9 @@ type Props = {
   background?: ReactNode;
   // Каждый кадр, когда камера сдвинулась
   onFrame?: (cam: Camera, size: Size) => void;
+  // Касание по миру (не по полю ввода или кнопке) — точка мира; у двойного
+  // касания приходит и на каждое из двух
+  onTap?: (p: Point) => void;
   // Двойное касание по миру (не по полю ввода или кнопке) — точка мира
   onDoubleTap?: (p: Point) => void;
   children: ReactNode;
@@ -84,6 +87,7 @@ export function Canvas({
   locked = false,
   background,
   onFrame,
+  onTap,
   onDoubleTap,
   children
 }: Props) {
@@ -92,8 +96,8 @@ export function Canvas({
   const insetsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<(CanvasHandle & { reclamp: () => void }) | null>(null);
   // Свежие пропсы для обработчиков, подписанных один раз
-  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onDoubleTap });
-  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onDoubleTap };
+  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap });
+  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap };
 
   useImperativeHandle(
     ref,
@@ -446,9 +450,10 @@ export function Canvas({
       // Тап по пустому месту убирает клавиатуру
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       const p = local(e.clientX, e.clientY);
+      flush(); // точка мира — по уже применённой камере
+      props.current.onTap?.(toWorld(p));
       if (e.timeStamp - lastTap.t < DOUBLE_TAP_MS && dist(p, lastTap) < 30) {
         lastTap = { t: 0, x: 0, y: 0 };
-        flush(); // точка мира — по уже применённой камере
         props.current.onDoubleTap?.(toWorld(p));
       } else {
         lastTap = { t: e.timeStamp, x: p.x, y: p.y };

@@ -6,13 +6,25 @@
 // Храним только развороты с текстом; у установленного на iPhone приложения
 // память своя, отдельная от Safari.
 
+import type { FontId, InkId } from './textStyle';
+
 export type Block = {
   id: string;
   // Левый верхний угол блока в координатах мира (px; верх листа — y = 0)
   x: number;
   y: number;
   text: string;
+  // Оформление; чего нет — то по умолчанию: синие чернила, рукописный
+  // шрифт, без поворота, обычный размер
+  color?: InkId;
+  font?: FontId;
+  // Поворот вокруг середины надписи (градусы) и размер (1 — обычный)
+  rotate?: number;
+  scale?: number;
 };
+
+// Цвет и шрифт, выбранные последними, — с ними начинается новая надпись
+export type TextStyle = { color?: InkId; font?: FontId };
 
 export type Spread = {
   // Когда на развороте впервые написали — ГГГГ-ММ-ДД по местному времени
@@ -29,6 +41,7 @@ const OLD_SPREAD_KEY = 'notes-pwa:spread';
 // заметка (она была справа на первом развороте, то есть страница 2)
 const OLD_PAGES_KEY = 'notes-pwa:pages';
 const OLD_DRAFT_KEY = 'notes-pwa:draft';
+const STYLE_KEY = 'notes-pwa:style';
 
 // Разовая очистка: при первом запуске версии с новым RESET_ID устройство
 // стирает все записи и запоминает это, так что записи, сделанные после,
@@ -38,12 +51,22 @@ const OLD_DRAFT_KEY = 'notes-pwa:draft';
 const RESET_ID = '2026-10-25';
 const RESET_KEY = 'notes-pwa:reset';
 // Все ключи приложения, включая прежние форматы и убранные настройки
-const ALL_KEYS = [SPREADS_KEY, PAGE_KEY, OLD_SPREAD_KEY, OLD_PAGES_KEY, OLD_DRAFT_KEY, 'notes-pwa:settings'];
+const ALL_KEYS = [SPREADS_KEY, PAGE_KEY, OLD_SPREAD_KEY, OLD_PAGES_KEY, OLD_DRAFT_KEY, STYLE_KEY, 'notes-pwa:settings'];
+
+// Стереть все записи и настройки на этом устройстве (кнопка в настройках).
+// Отметку о разовой очистке не трогаем — иначе она прошла бы ещё раз
+export function clearAll(): void {
+  try {
+    for (const key of ALL_KEYS) localStorage.removeItem(key);
+  } catch {
+    // Память недоступна — стирать нечего
+  }
+}
 
 export function resetOnce(): void {
   try {
     if (localStorage.getItem(RESET_KEY) === RESET_ID) return;
-    for (const key of ALL_KEYS) localStorage.removeItem(key);
+    clearAll();
     localStorage.setItem(RESET_KEY, RESET_ID);
   } catch {
     // Память недоступна — стирать нечего
@@ -138,6 +161,14 @@ export function loadPage(): number {
 
 export function savePage(n: number): void {
   write(PAGE_KEY, n);
+}
+
+export function loadStyle(): TextStyle {
+  return read<TextStyle>(STYLE_KEY, {});
+}
+
+export function saveStyle(style: TextStyle): void {
+  write(STYLE_KEY, style);
 }
 
 // Разворот и сторона страницы n (с 1): нечётные — слева, чётные — справа

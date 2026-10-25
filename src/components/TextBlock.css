@@ -1,9 +1,8 @@
-/* Текст на листе: рукопись синими чернилами. Поле ввода и текст «картинкой»
-   выглядят одинаково, поэтому переворот листа незаметно подменяет одно
-   другим. Размеры — в px мира полотна. */
+/* Надпись на листе. Поле ввода и текст «картинкой» выглядят одинаково,
+   поэтому переворот листа незаметно подменяет одно другим. Размеры — в px
+   мира полотна; цвет, поворот и размер — из TextBlock.tsx. */
 .text-block {
   position: absolute;
-  min-height: 52px;
   /* Поля под завитки букв (BLEED_X в TextBlock.tsx) — сверху, снизу и по
      бокам; отрицательный отступ возвращает сам текст на место */
   margin: -6px 0 0 -12px;
@@ -13,18 +12,96 @@
   outline: none;
   appearance: none;
   background: transparent;
-  color: var(--ink);
-  caret-color: var(--ink);
-  font-family: 'Caveat Variable', cursive;
-  font-size: 40px;
-  line-height: 52px;
+  caret-color: currentColor;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   overflow: hidden;
   resize: none;
+  /* Поворот и размер — вокруг середины надписи */
+  transform-origin: center;
   /* Полотно запрещает выделение, чтобы перелёт не выделял текст;
      в самом тексте выделять можно */
   -webkit-user-select: text;
   user-select: text;
   cursor: text;
+}
+
+/* Текст «картинкой» — шириной по тексту, как и поле ввода */
+.text-face {
+  width: max-content;
+}
+
+/* Невидимая копия надписи: по ней меряют ширину текста */
+.text-block.text-measure {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: max-content;
+  height: auto;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Шрифты. У каждого свои размер и высота строки — чтобы надписи выглядели
+   соразмерно; классы со шрифтом без .text-block (кнопки выбора шрифта)
+   берут только сам шрифт */
+.font-hand {
+  font-family: 'Caveat Variable', cursive;
+}
+
+.font-script {
+  font-family: 'Marck Script', cursive;
+}
+
+.font-marker {
+  font-family: 'Pangolin', cursive;
+}
+
+.font-print {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.font-serif {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.font-mono {
+  font-family: 'Courier New', ui-monospace, monospace;
+}
+
+.text-block.font-hand {
+  font-size: 40px;
+  line-height: 52px;
+  min-height: 64px;
+}
+
+.text-block.font-script {
+  font-size: 38px;
+  line-height: 52px;
+  min-height: 64px;
+}
+
+.text-block.font-marker {
+  font-size: 32px;
+  line-height: 46px;
+  min-height: 58px;
+}
+
+.text-block.font-print {
+  font-size: 30px;
+  line-height: 42px;
+  min-height: 54px;
+}
+
+.text-block.font-serif {
+  font-size: 32px;
+  line-height: 44px;
+  min-height: 56px;
+}
+
+.text-block.font-mono {
+  font-size: 30px;
+  line-height: 42px;
+  font-weight: 600;
+  min-height: 54px;
 }

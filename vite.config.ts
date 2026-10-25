@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  // Когда собрана версия — видно в настройках (дошло ли обновление)
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString())
+  },
   plugins: [
     react(),
     // Делает сайт PWA: собирает service worker (Workbox) со списком всех

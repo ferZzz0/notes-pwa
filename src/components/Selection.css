@@ -1,0 +1,91 @@
+/* Рамка выбранной надписи — поверх полотна, в координатах экрана (её
+   положение, размер и поворот задаёт Selection.tsx). Сквозь слой касания
+   проходят к полотну, ловят только рамка с ручками. */
+.selection-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.selection {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: center;
+  border: 1.5px dashed var(--ink-muted);
+  border-radius: 8px;
+  will-change: transform;
+}
+
+.selection,
+.selection * {
+  touch-action: none;
+}
+
+/* Пока надпись не печатают, её тащат за сам текст; пока печатают — касания
+   проходят к полю ввода (курсор, выделение) */
+.selection-body {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  cursor: move;
+}
+
+.selection.is-focused .selection-body {
+  pointer-events: none;
+}
+
+.selection-handle {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgb(60 40 10 / 0.12);
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: 0 2px 6px rgb(60 40 10 / 0.18);
+  color: var(--ink);
+  pointer-events: auto;
+}
+
+/* Палец больше ручки — касание ловим с запасом вокруг неё */
+.selection-handle::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+}
+
+.selection-handle svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.selection-move {
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  cursor: move;
+}
+
+.selection-rotate {
+  top: 0;
+  right: 0;
+  transform: translate(50%, -50%);
+  cursor: grab;
+}
+
+.selection-scale {
+  right: 0;
+  bottom: 0;
+  transform: translate(50%, 50%);
+  cursor: nwse-resize;
+}
