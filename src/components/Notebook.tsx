@@ -202,17 +202,14 @@ export function Notebook() {
     setContent(prev => (JSON.stringify(prev) === JSON.stringify(r) ? prev : r));
   });
 
-  // Повернули телефон: одна страница ↔ разворот. Ждём кадр, чтобы полотно
-  // узнало новый размер экрана, и летим к началу нового вида
+  // Повернули телефон: одна страница ↔ разворот, и новый вид сразу в полном
+  // отдалении (полотно и само так делает при смене размера экрана — здесь
+  // ещё раз, уже с новым видом). Ждём кадр: flushSync нельзя звать из эффекта
   useEffect(() => {
     if (portrait === single) return;
-    const frame = requestAnimationFrame(async () => {
-      flushSync(() => {
-        setTransit(true);
-        setSingle(portrait);
-      });
-      await canvas.current?.goHome();
-      flushSync(() => setTransit(false));
+    const frame = requestAnimationFrame(() => {
+      flushSync(() => setSingle(portrait));
+      canvas.current?.overview();
     });
     return () => cancelAnimationFrame(frame);
   }, [portrait]);

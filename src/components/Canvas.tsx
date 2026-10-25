@@ -17,6 +17,8 @@ export type Fixed = { top?: boolean; left?: boolean; right?: boolean };
 export type CanvasHandle = {
   // Плавно перелететь к стартовому виду (или к указанному); промис — когда долетели
   goHome: (home?: Home) => Promise<void>;
+  // Сразу показать лист в полном отдалении (как после поворота экрана)
+  overview: () => void;
   // Какая часть мира сейчас на экране
   visibleRect: () => Rect;
   // Плавно сдвинуть камеру на (dx, dy) экранных px
@@ -97,6 +99,7 @@ export function Canvas({
     ref,
     () => ({
       goHome: h => apiRef.current?.goHome(h) ?? Promise.resolve(),
+      overview: () => apiRef.current?.overview(),
       visibleRect: () => apiRef.current!.visibleRect(),
       panBy: (dx, dy) => apiRef.current?.panBy(dx, dy)
     }),
@@ -216,6 +219,17 @@ export function Canvas({
 
     const clampScale = (s: number) => clamp(s, minScale(), Math.max(MAX_SCALE, minScale()));
 
+    // Полное отдаление: самый мелкий масштаб, при котором лист ещё закрывает
+    // экран (у листа, выросшего вбок, — вся его ширина), с самого верха и
+    // с той же привязкой по горизонтали, что у стартового вида
+    const overviewCamera = (): Camera => {
+      const h = homeCamera();
+      const { x, y } = props.current.home;
+      const scale = bounds ? minScale() : h.scale;
+      const anchorX = h.x + x * h.scale;
+      return { scale, x: anchorX - x * scale, y: ins.top - y * scale };
+    };
+
     // Камера не выходит за лист: его края не заходят внутрь экрана — за
     // листом никогда не видно ничего, кроме бумаги
     const set = (c: Camera) => {
@@ -298,6 +312,13 @@ export function Canvas({
         bounds = computeBounds();
         return animateTo(homeCamera(h));
       },
+      overview: () => {
+        measure();
+        bounds = computeBounds();
+        stop();
+        set(overviewCamera());
+        flush();
+      },
       visibleRect: () => ({ x: -cam.x / cam.scale, y: -cam.y / cam.scale, w: size.w / cam.scale, h: size.h / cam.scale }),
       panBy: (dx, dy) => void animateTo({ ...cam, x: cam.x + dx, y: cam.y + dy }, 250),
       // Лист изменился (вырос, уменьшился, закрылась клавиатура, переход
@@ -324,9 +345,12 @@ export function Canvas({
         flush();
         return;
       }
-      // Поворот экрана: точка мира в центре экрана остаётся в центре
-      const c = toWorld({ x: prev.w / 2, y: prev.h / 2 });
-      set({ scale: cam.scale, x: size.w / 2 - c.x * cam.scale, y: size.h / 2 - c.y * cam.scale });
+      // Поворот экрана (и любое другое изменение размера) — всегда полное
+      // отдаление. На iPhone размер при повороте меняется в несколько шагов,
+      // поэтому так — на каждом шаге
+      stop();
+      set(overviewCamera());
+      flush();
     };
 
     // --- Пальцы и мышь ---
