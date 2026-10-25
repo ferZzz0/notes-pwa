@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { knownImageUrl } from '../images';
 import type { Block } from '../notes';
 import { FILTERS, FRAMES, filterOf, frameOf } from '../textStyle';
@@ -14,6 +14,8 @@ type Props = {
   onDelete: () => void;
   onDone: () => void;
   onHeight: (h: number) => void;
+  // «Отменить» / «Вернуть» — над панелью
+  history?: ReactNode;
 };
 
 type Menu = 'frame' | 'filter' | 'opacity' | 'layer' | 'delete' | null;
@@ -22,7 +24,7 @@ type Menu = 'frame' | 'filter' | 'opacity' | 'layer' | 'delete' | null;
 // (выпадающие списки), прозрачность (ползунок), слой (наверх / вниз),
 // удалить (с подтверждением), готово. Двигают, поворачивают и меняют размер фото
 // пальцами, как надпись.
-export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onDone, onHeight }: Props) {
+export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onDone, onHeight, history }: Props) {
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
   const frame = frameOf(block.frame);
@@ -33,6 +35,8 @@ export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onD
 
   return (
     <div ref={ref} className="text-toolbar" role="toolbar" aria-label="Фото" onMouseDown={keepFocus}>
+      {history && <div className="toolbar-history">{history}</div>}
+
       {menu === 'frame' && (
         <ul className="toolbar-menu" style={{ maxHeight: room }} role="listbox" aria-label="Рамка">
           {FRAMES.map(f => (

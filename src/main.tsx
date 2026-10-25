@@ -14,6 +14,12 @@ import './index.css';
 // До того как тетрадь прочитает записи: разовая очистка, если она есть
 resetOnce();
 
+// Safari масштабирует страницу щипком даже вопреки meta viewport —
+// жесты масштаба страницы глушим везде (у полотна масштаб свой)
+for (const type of ['gesturestart', 'gesturechange']) {
+  document.addEventListener(type, e => e.preventDefault(), { passive: false });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

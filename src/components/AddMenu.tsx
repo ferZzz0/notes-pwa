@@ -5,6 +5,10 @@ import './AddMenu.css';
 type Props = {
   onPhoto: (file: File) => void;
   onSticker: (sticker: StickerId) => void;
+  // Что скопировано кнопкой «Копировать» (подпись) — вставить его; нет —
+  // пункта нет
+  clipLabel?: string | null;
+  onPasteClip?: () => void;
 };
 
 // Выбор фото: на каждое нажатие — новое поле выбора файла (в документе —
@@ -32,7 +36,7 @@ function pickPhoto(onPhoto: (file: File) => void) {
 
 // «+» внизу экрана (рядом с шестерёнкой): добавить на лист фото из галереи
 // (или снять) либо готовый стикер, на котором сразу можно писать.
-export function AddMenu({ onPhoto, onSticker }: Props) {
+export function AddMenu({ onPhoto, onSticker, clipLabel, onPasteClip }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -53,6 +57,24 @@ export function AddMenu({ onPhoto, onSticker }: Props) {
         <>
           <div className="add-backdrop" onClick={() => setOpen(false)} />
           <div className="add-panel" role="dialog" aria-label="Добавить">
+            {clipLabel && onPasteClip && (
+              <button
+                type="button"
+                className="add-paste"
+                onClick={() => {
+                  setOpen(false);
+                  onPasteClip();
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 4.5h6v3H9zM7.5 6H5.5v14h13V6h-2" />
+                </svg>
+                <span>
+                  Вставить скопированное
+                  <small>{clipLabel}</small>
+                </span>
+              </button>
+            )}
             <button
               type="button"
               className="add-photo"

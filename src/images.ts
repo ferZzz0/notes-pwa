@@ -57,6 +57,16 @@ export async function deleteImage(id: string): Promise<void> {
   await run('readwrite', s => s.delete(id)).catch(() => {});
 }
 
+// Копия картинки from под id to (вставленное фото — со своей картинкой:
+// удаление дневника стирает картинки его фото); false — картинки нет
+export async function copyImage(from: string, to: string): Promise<boolean> {
+  const blob = await run<Blob | undefined>('readonly', s => s.get(from) as IDBRequest<Blob | undefined>).catch(() => undefined);
+  if (!blob) return false;
+  await run('readwrite', s => s.put(blob, to));
+  urls.set(to, URL.createObjectURL(blob));
+  return true;
+}
+
 // Стереть картинки, которых нет ни на одном листе: фото с листа убирают
 // сразу, а картинку — потом (Notebook при открытии), чтобы удаление можно
 // было отменить

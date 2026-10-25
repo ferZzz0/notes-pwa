@@ -1,20 +1,23 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { importImage, keepImages } from '../images';
+import { copyImage, importImage, keepImages } from '../images';
 import {
   allImageIds,
   isBlank,
+  loadClip,
   loadPage,
   loadSpreads,
   loadStyle,
   localDate,
   newBlockId,
+  saveClip,
   savePage,
   saveSpreads,
   saveStyle,
   sideOf,
   spreadOf,
   type Block,
+  type Clip,
   type Source,
   type Spread,
   type Spreads,
@@ -30,6 +33,7 @@ import {
   setRange,
   stripStyle,
   textLength,
+  styleAt,
   type Run,
   type RunStyle,
   type TextRange
@@ -103,6 +107,17 @@ const KEYBOARD_GUESS = 0.6;
 const TYPING_RESERVE_MS = 1000;
 // Камера не двигалась столько (мс) — курсор в надписи ставим на место
 const CARET_SETTLE_MS = 120;
+// Ряд «Отменить» / «Вернуть» над панелью надписи: кнопка 40 + отступ 8 (px экрана)
+const HISTORY_ROW = 48;
+// Столько на кнопке «Копировать» галочка — скопировано
+const COPIED_MS = 1200;
+// Примерная ширина вставленной надписи (мир) — чтобы поставить её посередине экрана
+const PASTE_TEXT_WIDTH = 300;
+// Столько после касания панели перемены выделения в надписи не считаем
+const TOOLBAR_GRACE_MS = 700;
+// Ручки выделения выступают за текст: касания ближе этого (px экрана) к
+// надписи, в которой печатают и что-то выделено, — её
+const HANDLE_PAD = 32;
 // Новое фото — не шире этой доли видимой части листа и не выше этой
 const PHOTO_SHARE = { w: 0.55, h: 0.6 };
 // Примерный размер нового стикера (мир) — чтобы поставить его посередине экрана
@@ -291,6 +306,11 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Выделение в надписи в начале нажатия на панель — до того, как касание его
   // сбросит; null — оформление ляжет на всю надпись
   const captured = useRef<TextRange | null>(null);
+  // Оформление выделенного куска — список на панели отмечает его
+  const [rangeStyle, setRangeStyle] = useState<RunStyle | null>(null);
+  // Когда последний раз касались панели: выделение, которое iOS снимает от
+  // этого касания, не в счёт
+  const toolbarTouch = useRef(-Infinity);
   // Печатают (или вот-вот откроется клавиатура): лист заранее удлинён снизу
   const [typing, setTyping] = useState(false);
   // Пузырёк «Вставить» после долгого нажатия: куда вставлять (мир) и где он
@@ -506,15 +526,61 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     ...(style.font && style.font !== 'hand' ? { font: style.font } : {})
   });
 
-  // Вставленный текст — новая выбранная надпись в точке p
+  // Вставленный текст — новая выбранная надпись в точке p; если это текст
+  // надписи, скопированной кнопкой «Копировать», — она сама, со всем
+  // оформлением
   const pasteText = (text: string, p: Point) => {
     const t = text.replace(/\r\n?/g, '\n');
     if (!t.trim()) {
       alert('В буфере обмена нет ни текста, ни картинки');
       return;
     }
-    addBlock(newText(p, t));
+    const plain = newText(p, t);
+    if (clip && clip.kind !== 'image' && clip.text === t) addBlock({ ...clip, id: plain.id, x: plain.x, y: plain.y });
+    else addBlock(plain);
   };
+
+  // «Копировать» на панели: надпись, стикер или фото — со всем оформлением
+  // в память приложения (вставка — «+» → «Вставить скопированное»); текст
+  // надписи — ещё и в буфер обмена, для других приложений
+  const [clip, setClip] = useState<Clip | null>(loadClip);
+  const [copied, setCopied] = useState(false);
+  const copySelected = () => {
+    const b = selectedBlock;
+    if (!b) return;
+    const { id: _id, day: _day, edited: _edited, ...rest } = b;
+    saveClip(rest);
+    setClip(rest);
+    if (b.kind !== 'image' && b.text.trim()) void navigator.clipboard?.writeText(b.text).catch(() => {});
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), COPIED_MS);
+  };
+
+  // «Вставить скопированное»: посередине экрана, выбранным; у фото — своя
+  // копия картинки
+  const pasteClip = async () => {
+    const c = loadClip();
+    if (!c) return;
+    let image = c.image;
+    if (c.kind === 'image' && c.image) {
+      image = newBlockId();
+      if (!(await copyImage(c.image, image))) {
+        alert('Картинки скопированного фото уже нет');
+        return;
+      }
+    }
+    const w = c.kind === 'image' ? (c.width ?? 500) : c.kind === 'sticker' ? STICKER_SIZE.w : PASTE_TEXT_WIDTH;
+    const h = c.kind === 'image' ? w * (c.ratio ?? 0.75) : STICKER_SIZE.h;
+    const at = viewCenter();
+    addBlock({ ...c, id: newBlockId(), image, ...place(w, at.x - w / 2, at.y - h / 2) });
+  };
+  const clipLabel = !clip
+    ? null
+    : clip.kind === 'image'
+      ? 'Фото'
+      : clip.kind === 'sticker'
+        ? `Стикер${clip.text.trim() ? ` «${clip.text.trim().slice(0, 30)}»` : ''}`
+        : `«${clip.text.trim().slice(0, 40)}»`;
 
   // «Вставить» из своего пузырька: картинка из буфера обмена — фото, текст —
   // надпись, в точку нажатия p. Буфер читаем прямо в нажатии на кнопку —
@@ -564,12 +630,54 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     return { x: left ? Math.min(x, -SPINE_GAP - w) : Math.max(x, 0), y: Math.max(0, y) };
   };
 
-  // Запомнить выделение в выбранной надписи (в начале нажатия на панель)
-  const captureRange = () => {
-    const el = selectedBlock && blockElement(selectedBlock.id);
-    const range = el ? getRange(el) : null;
-    captured.current = range && range.end > range.start ? range : null;
+  // Выделенный кусок, на который ляжет оформление с панели, — следим за
+  // выделением в надписи всё время (selectionchange). Касание панели на
+  // iPhone может снять выделение — такие перемены (в течение
+  // TOOLBAR_GRACE_MS после касания) не считаем: кусок остаётся прежним. Поставили курсор
+  // без выделения (или ушли из надписи) — оформление снова на всю надпись
+  const takeRange = (fromToolbar: boolean) => {
+    const b = selectedBlock;
+    const el = b && blockElement(b.id);
+    const range = el && document.activeElement === el ? getRange(el) : null;
+    const piece = range && range.end > range.start ? range : null;
+    if (!piece && fromToolbar) return;
+    captured.current = piece;
+    setRangeStyle(piece && b ? styleAt(runsOf(b), piece.start) : null);
   };
+  const captureRange = () => {
+    toolbarTouch.current = performance.now();
+    takeRange(true);
+  };
+  useEffect(() => {
+    const onSelection = () => {
+      // Выделение сменилось сразу после касания панели, а саму надпись с тех
+      // пор не трогали (ни пальцем, ни клавишей) — это сделал iPhone, не человек
+      const sinceToolbar = performance.now() - toolbarTouch.current;
+      if (sinceToolbar < TOOLBAR_GRACE_MS && textTouch.current < toolbarTouch.current) return;
+      takeRange(false);
+    };
+    document.addEventListener('selectionchange', onSelection);
+    return () => document.removeEventListener('selectionchange', onSelection);
+  });
+  // Когда последний раз касались надписи, в которой печатают, или нажимали
+  // в ней клавишу
+  const textTouch = useRef(-Infinity);
+  useEffect(() => {
+    const mark = (e: Event) => {
+      if (e.target instanceof Element && e.target.closest('.text-block.is-editing')) textTouch.current = performance.now();
+    };
+    document.addEventListener('pointerdown', mark, true);
+    document.addEventListener('keydown', mark, true);
+    return () => {
+      document.removeEventListener('pointerdown', mark, true);
+      document.removeEventListener('keydown', mark, true);
+    };
+  }, []);
+  // Другая надпись (или никакой) — прежний кусок не в счёт
+  useEffect(() => {
+    captured.current = null;
+    setRangeStyle(null);
+  }, [selected]);
 
   // Оформление: на выделенный кусок, а без выделения — на всю надпись (и
   // тогда у кусков это свойство снимается); 'none' — убрать. Цвет и шрифт
@@ -593,8 +701,16 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       const next = { ...prev, [spread]: { ...cur, blocks: cur.blocks.map(x => (x.id === id ? nb : x)) } };
       return save ? persist(next) : next;
     });
-    // Выделение вернётся после того, как надпись построится заново
-    if (range) pendingRanges.set(id, range);
+    // Выделение вернётся после того, как надпись построится заново; список
+    // на панели отмечает новое оформление куска
+    if (range) {
+      pendingRanges.set(id, range);
+      setRangeStyle(prev => {
+        const next: Record<string, unknown> = { ...prev };
+        for (const k of keys) next[k] = patch[k] === 'none' ? undefined : patch[k];
+        return next as RunStyle;
+      });
+    }
     if (!save || range || !(patch.color || patch.font)) return;
     const next: TextStyle = { ...style, ...(patch as TextStyle) };
     setStyle(next);
@@ -607,13 +723,15 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   };
 
   // Верхняя из видимых надписей в точке мира p
-  const blockAt = (p: Point) => {
+  // Всё, что в точке мира p, — сверху вниз (порядок в списке — порядок слоёв)
+  const blocksAt = (p: Point) => {
     const pad = TAP_PAD / camera.current.scale;
-    return [...visibleBlocks].reverse().find(b => {
+    return [...visibleBlocks].reverse().filter(b => {
       const el = blockElement(b.id);
       return el !== null && hitBlock(el, p, pad);
     });
   };
+  const blockAt = (p: Point): Block | undefined => blocksAt(p)[0];
 
   // Фокус в поле надписи — прямо в обработчике касания, иначе iOS не покажет
   // клавиатуру. Открывая её, iOS сдвигает весь экран, если поле окажется под
@@ -642,12 +760,17 @@ export function Notebook({ source, onMenu, onDay }: Props) {
 
   // Касание по листу: по надписи — выбрать её (клавиатура не открывается),
   // по уже выбранной — печатать в ней; мимо надписей — снять выбор
+  // Несколько слоёв в одной точке — касания выбирают их по очереди сверху
+  // вниз, после нижнего — снова верхний (просьба автора); одна надпись —
+  // касание по выбранной открывает клавиатуру
   const onTap = (p: Point) => {
     if (turning) return;
-    const hit = blockAt(p);
-    if (!hit) setSelected(null);
-    else if (hit.id === selected) edit(hit.id);
-    else setSelected(hit.id);
+    const hits = blocksAt(p);
+    const i = hits.findIndex(b => b.id === selected);
+    if (hits.length === 0) setSelected(null);
+    else if (i < 0) setSelected(hits[0].id);
+    else if (hits.length > 1) setSelected(hits[(i + 1) % hits.length].id);
+    else edit(hits[0].id);
   };
 
   // Жест на выбранной надписи двигает её: один палец — перенос, два —
@@ -737,10 +860,17 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   };
 
   const onDoubleTap = (p: Point) => {
-    // По надписи двойное касание — выбрать и печатать (это сделали касания);
-    // по фото — новая надпись прямо на нём (просьба автора)
+    // По надписи двойное касание — выбрать верхнюю и печатать (касания по
+    // слоям могли выбрать другую); по фото — новая надпись прямо на нём
+    // (просьба автора)
     const hit = blockAt(p);
-    if (turning || (hit && hit.kind !== 'image')) return;
+    if (turning) return;
+    if (hit && hit.kind !== 'image') {
+      if (document.activeElement === blockElement(hit.id)) return;
+      flushSync(() => setSelected(hit.id));
+      edit(hit.id);
+      return;
+    }
     // Выше верха текста (полоса под вырезом камеры) или за корешком одной
     // страницы не пишем — просто к началу листа
     const tapSide: Side = p.x < 0 ? 'left' : 'right';
@@ -822,7 +952,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     const vv = window.visualViewport;
     if (!vv) return;
     const r = el.getBoundingClientRect();
-    const bar = document.querySelector('.text-toolbar')?.getBoundingClientRect();
+    // Над панелью — ещё и кнопки отмены
+    const bar = (document.querySelector('.toolbar-history') ?? document.querySelector('.text-toolbar'))?.getBoundingClientRect();
     const top = vv.offsetTop + 24;
     const bottom = Math.min(vv.offsetTop + vv.height, bar ? bar.top : Infinity) - 24;
     // У длинного текста следим за низом, но не дальше 60% видимой высоты
@@ -834,7 +965,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Лист сдвинулся под полем ввода — iOS может оставить курсор на старом
   // месте; то же выделение заново заставляет его перерисоваться
   const redrawCaret = (el: HTMLElement) => {
-    if (document.activeElement !== el) return;
+    if (document.activeElement !== el || el.dataset.composing) return;
     const range = getRange(el);
     if (range) setRange(el, range);
   };
@@ -873,11 +1004,29 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     panCaret.current = { el, range };
     window.getSelection()?.removeAllRanges();
   };
+  // Касания у надписи, в которой печатают, — её собственные: курсор,
+  // выделение, лупа и ручки выделения (они выступают за текст, поэтому, пока
+  // что-то выделено, — ещё и рядом с ней). Иначе палец на ручке двигал лист
+  const nativeTouch = (target: EventTarget | null, x: number, y: number) => {
+    const el = document.activeElement;
+    if (!isEditor(el)) return false;
+    if (target instanceof Node && el.contains(target)) return true;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return false;
+    const r = el.getBoundingClientRect();
+    return x > r.left - HANDLE_PAD && x < r.right + HANDLE_PAD && y > r.top - HANDLE_PAD && y < r.bottom + HANDLE_PAD;
+  };
+
   // Лист сдвинулся сам (лист вернулся в границы, поднялась строка над
   // клавиатурой): когда замер — то же выделение заново
   const caretTimer = useRef(0);
   const followCaret = () => {
-    if (!isEditor(document.activeElement)) return;
+    const now = document.activeElement;
+    if (!isEditor(now)) return;
+    // Лист двигает само приложение (строка над клавиатурой, возврат в
+    // границы), а печатать при этом можно — выделение не снимаем, а ставим
+    // заново на каждом кадре: курсор идёт вместе с текстом
+    if (!panCaret.current && onScreen(now)) redrawCaret(now);
     clearTimeout(caretTimer.current);
     caretTimer.current = window.setTimeout(() => {
       const el = document.activeElement;
@@ -1025,6 +1174,40 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // «Отменить» / «Вернуть»: в нижнем ряду, а пока открыта панель надписи
+  // или фото — над ней (просьба автора: видны и при редактировании)
+  const historyButtons = (
+    <>
+      <button type="button" className="round-button" aria-label="Отменить" disabled={history.current.past.length === 0} onClick={undo}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 14 4 9l5-5" />
+          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+        </svg>
+      </button>
+      <button type="button" className="round-button" aria-label="Вернуть" disabled={history.current.future.length === 0} onClick={redo}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m15 14 5-5-5-5" />
+          <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+        </svg>
+      </button>
+    </>
+  );
+
+  // Ряд над панелью надписи или фото: слева отмена и возврат, справа —
+  // «Копировать» (галочка — скопировано)
+  const toolbarTop = (
+    <>
+      <div>{historyButtons}</div>
+      <div>
+        <button type="button" className="round-button" aria-label={copied ? 'Скопировано' : 'Копировать'} onClick={copySelected}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {copied ? <path d="M5 12.5l4.5 4.5L19 7.5" /> : <path d="M8.5 8.5h10v11h-10zM15.5 8.5v-4h-10v11h3" />}
+          </svg>
+        </button>
+      </div>
+    </>
+  );
+
   // Под переворачиваемым листом со стороны, откуда листаем, — разворот, куда листаем
   const underLeft = flip?.dir === 'prev' ? flip.to : spread;
   const underRight = flip?.dir === 'next' ? flip.to : spread;
@@ -1054,7 +1237,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         // лист не должен сдвигаться вниз (просьба автора)
         extraBottom={
           keyboard > 0
-            ? keyboard + (selectedBlock ? toolbarHeight + 16 : 0)
+            ? keyboard + (selectedBlock ? toolbarHeight + 16 + HISTORY_ROW : 0)
             : typing
               ? Math.round(window.innerHeight * KEYBOARD_GUESS)
               : 0
@@ -1074,6 +1257,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         onLongPressEnd={onLongPressEnd}
         onPanStart={onPanStart}
         onPanEnd={restoreCaret}
+        nativeTouch={nativeTouch}
         // Пока печатают, лист без инерции — останавливается вместе с пальцем
         // (тогда и курсор встаёт на место сразу)
         inertia={focused === null}
@@ -1186,6 +1370,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               }}
               onDone={deselect}
               onHeight={setToolbarHeight}
+              history={toolbarTop}
             />
           ) : (
             <TextToolbar
@@ -1196,6 +1381,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               onEffect={effect => restyle(selectedBlock.id, { effect })}
               onMarker={marker => restyle(selectedBlock.id, { marker })}
               onCapture={captureRange}
+              rangeStyle={rangeStyle}
+              history={toolbarTop}
               onSticker={(patch, save) => patchBlock(selectedBlock.id, patch, save)}
               onOpacity={(opacity, final) => patchBlock(selectedBlock.id, { opacity: opacity < 1 ? opacity : undefined }, final)}
               onLayer={dir => reorder(selectedBlock.id, dir)}
@@ -1214,24 +1401,18 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       {!turning && !selectedBlock && (
         <>
           <div className="bottom-center">
-            <button type="button" className="round-button" aria-label="Отменить" disabled={history.current.past.length === 0} onClick={undo}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 14 4 9l5-5" />
-                <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
-              </svg>
-            </button>
-            <button type="button" className="round-button" aria-label="Вернуть" disabled={history.current.future.length === 0} onClick={redo}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m15 14 5-5-5-5" />
-                <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
-              </svg>
-            </button>
+            {historyButtons}
             <button type="button" className="round-button" aria-label="Главное меню" onClick={onMenu}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 5.5h6v6H4zM14 5.5h6v6h-6zM4 15.5h6v4H4zM14 15.5h6v4h-6z" />
               </svg>
             </button>
-            <AddMenu onPhoto={file => void addPhoto(file)} onSticker={addSticker} />
+            <AddMenu
+              onPhoto={file => void addPhoto(file)}
+              onSticker={addSticker}
+              clipLabel={clipLabel}
+              onPasteClip={() => void pasteClip()}
+            />
             <Settings />
           </div>
         </>

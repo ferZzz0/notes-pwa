@@ -49,6 +49,43 @@
   animation: settings-in 0.18s ease-out;
 }
 
+/* «Вставить скопированное» — над «Фото», с подписью, что именно */
+.add-paste {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px 14px;
+  border: 1.5px dashed var(--accent);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: 600 15px/1.25 var(--ui-font);
+  text-align: left;
+}
+
+.add-paste svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
+.add-paste small {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 250px;
+}
+
 .add-photo {
   display: flex;
   align-items: center;

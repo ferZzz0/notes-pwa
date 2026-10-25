@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import type { Block } from '../notes';
+import type { RunStyle } from '../richText';
 import {
   EFFECTS,
   FONTS,
@@ -30,8 +31,14 @@ type Props = {
   onFont: (font: FontId) => void;
   onEffect: (effect: EffectId) => void;
   onMarker: (marker: MarkerId) => void;
-  // Нажали на панель: запомнить выделение в надписи (касание его сбросит)
+  // Нажали на панель (и отпустили): запомнить выделение в надписи — касание
+  // панели может его сбросить
   onCapture: () => void;
+  // Оформление выделенного куска (нет — выделения нет): список отмечает его,
+  // а не оформление всей надписи
+  rangeStyle?: RunStyle | null;
+  // «Отменить» / «Вернуть» — над панелью
+  history?: ReactNode;
   // Стикер: форма и цвет (save = false — пока ведут пальцем по палитре);
   // слой — выше всех или ниже всех на листе
   onSticker: (patch: Partial<Block>, save?: boolean) => void;
@@ -172,13 +179,13 @@ export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => voi
 // текстом), у стикера — его форма, цвет и слой, прозрачность (ползунок),
 // удалить (с подтверждением), готово. Списки открываются над панелью, по одному.
 export function TextToolbar(props: Props) {
-  const { block, keyboard, onColor, onFont, onEffect, onMarker, onCapture, onSticker, onOpacity, onLayer, onDelete, onDone, onHeight } = props;
+  const { block, keyboard, onColor, onFont, onEffect, onMarker, onCapture, rangeStyle, history, onSticker, onOpacity, onLayer, onDelete, onDone, onHeight } = props;
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
-  const font = fontOf(block.font);
-  const effect = effectOf(block.effect);
-  const marker = markerOf(block.marker);
-  const color = inkColor(block.color);
+  const font = fontOf(rangeStyle?.font ?? block.font);
+  const effect = effectOf(rangeStyle?.effect ?? block.effect);
+  const marker = markerOf(rangeStyle?.marker ?? block.marker);
+  const color = inkColor(rangeStyle?.color ?? block.color);
   const isSticker = block.kind === 'sticker';
   const fill = stickerFill(block.sticker, block.fill);
   const room = menuRoom(keyboard);
@@ -207,10 +214,13 @@ export function TextToolbar(props: Props) {
       style={keyboard > 0 ? { bottom: keyboard + 8 } : undefined}
       onMouseDown={keepFocus}
       onPointerDownCapture={onCapture}
+      onPointerUpCapture={onCapture}
     >
+      {history && <div className="toolbar-history">{history}</div>}
+
       {menu === 'color' && (
         <div className="color-wheel-pop">
-          <ColorWheel color={block.color} size={Math.min(WHEEL_SIZE, room - 20)} onPick={onColor} />
+          <ColorWheel color={rangeStyle?.color ?? block.color} size={Math.min(WHEEL_SIZE, room - 20)} onPick={onColor} />
         </div>
       )}
 

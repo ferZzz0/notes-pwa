@@ -183,11 +183,15 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
         spellCheck={false}
         autoCorrect="off"
         onInput={read}
-        onCompositionStart={() => {
+        // Составной ввод (подсказки клавиатуры) — ещё и в атрибуте: пока он
+        // идёт, Notebook не трогает выделение
+        onCompositionStart={e => {
           composing.current = true;
+          e.currentTarget.dataset.composing = '1';
         }}
-        onCompositionEnd={() => {
+        onCompositionEnd={e => {
           composing.current = false;
+          delete e.currentTarget.dataset.composing;
           read();
         }}
         onFocus={e => onFocus?.(block.id, e.currentTarget)}

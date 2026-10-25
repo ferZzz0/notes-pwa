@@ -82,6 +82,9 @@ type Props = {
   onPanEnd?: () => void;
   // Скользит ли лист по инерции после броска (по умолчанию да)
   inertia?: boolean;
+  // Касание (цель и точка в окне) — не полотна, а браузера: например, у
+  // надписи, в которой печатают, — курсор, выделение, его ручки
+  nativeTouch?: (target: EventTarget | null, clientX: number, clientY: number) => boolean;
   children: ReactNode;
 };
 
@@ -137,6 +140,7 @@ export function Canvas({
   onPanStart,
   onPanEnd,
   inertia = true,
+  nativeTouch,
   children
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -144,8 +148,8 @@ export function Canvas({
   const insetsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<(CanvasHandle & { reclamp: () => void }) | null>(null);
   // Свежие пропсы для обработчиков, подписанных один раз
-  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd, onSwipe, onPanStart, onPanEnd, inertia });
-  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd, onSwipe, onPanStart, onPanEnd, inertia };
+  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd, onSwipe, onPanStart, onPanEnd, inertia, nativeTouch });
+  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd, onSwipe, onPanStart, onPanEnd, inertia, nativeTouch };
 
   useImperativeHandle(
     ref,
@@ -479,8 +483,10 @@ export function Canvas({
 
     const onDown = (e: PointerEvent) => {
       if (props.current.locked || matches(e.target, '[data-no-pan]')) return;
-      // Мышью по тексту — выделение текста, а не перелёт
+      // Мышью по тексту — выделение текста, а не перелёт; пальцем у надписи,
+      // в которой печатают, — тоже её (nativeTouch)
       if (e.pointerType === 'mouse' && (e.button !== 0 || isEditable(e.target))) return;
+      if (e.pointerType !== 'mouse' && props.current.nativeTouch?.(e.target, e.clientX, e.clientY)) return;
       stop();
       const p = local(e.clientX, e.clientY);
       pointers.set(e.pointerId, p);
@@ -694,6 +700,8 @@ export function Canvas({
     // отпускания пальца — где можно читать буфер обмена — уже не бывает.
     // В надписи, где печатают, касания свои (курсор, выделение, лупа)
     const onTouchStart = (e: TouchEvent) => {
+      const t = e.changedTouches[0];
+      if (t && props.current.nativeTouch?.(e.target, t.clientX, t.clientY)) return;
       if (!isEditable(e.target)) e.preventDefault();
     };
     viewport.addEventListener('touchstart', onTouchStart, { passive: false });

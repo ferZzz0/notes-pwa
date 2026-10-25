@@ -297,6 +297,20 @@ export function savePage(source: Source, n: number): void {
   if (source.kind === 'notebook') write(pageKey(source.id), n);
 }
 
+// Скопированное кнопкой «Копировать»: надпись, стикер или фото со всем
+// оформлением (без id и дат) — вставляется в любом дневнике и дне
+export type Clip = Omit<Block, 'id' | 'day' | 'edited'>;
+const CLIP_KEY = 'notes-pwa:clip';
+
+export function loadClip(): Clip | null {
+  const c = read<Clip | null>(CLIP_KEY, null);
+  return c && typeof c === 'object' && typeof c.text === 'string' ? c : null;
+}
+
+export function saveClip(clip: Clip): void {
+  write(CLIP_KEY, clip);
+}
+
 export function loadStyle(): TextStyle {
   return read<TextStyle>(STYLE_KEY, {});
 }

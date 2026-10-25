@@ -73,6 +73,16 @@ export function applyToRange(runs: Run[], range: TextRange, patch: Partial<Recor
   return normalize(out);
 }
 
+// Оформление куска, на котором стоит символ pos (для начала выделения)
+export function styleAt(runs: Run[], pos: number): RunStyle {
+  let at = 0;
+  for (const r of runs) {
+    at += r.t.length;
+    if (pos < at) return r;
+  }
+  return runs[runs.length - 1] ?? {};
+}
+
 // Свойства keys — снять со всех кусков (оформление легло на всю надпись)
 export function stripStyle(runs: Run[], keys: (keyof RunStyle)[]): Run[] {
   return normalize(
