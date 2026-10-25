@@ -13,7 +13,7 @@ import {
   type Spreads
 } from '../notes';
 import { usePortrait } from '../orientation';
-import { Canvas, type CanvasHandle, type Camera, type Fixed, type Home, type Point, type Rect, type Size } from './Canvas';
+import { Canvas, type CanvasHandle, type Fixed, type Home, type Point, type Rect } from './Canvas';
 import { Paper, type PaperDisplay, type PaperHandle } from './Paper';
 import { TextBlock } from './TextBlock';
 import './Notebook.css';
@@ -84,7 +84,6 @@ export function Notebook() {
   const [turning, setTurning] = useState(false);
   // Во время перехода видно обе страницы, и края одной страницы не мешают камере
   const [transit, setTransit] = useState(false);
-  const [farFromHome, setFarFromHome] = useState(false);
   // Прямоугольник всего, что написано на видимых страницах (мир): по нему
   // лист растёт у краёв
   const [content, setContent] = useState<Rect | null>(null);
@@ -122,7 +121,8 @@ export function Notebook() {
 
   const onDoubleTap = (p: Point) => {
     if (turning) return;
-    // По столу над листом или за краем одной страницы — к началу листа
+    // Выше верха текста (полоса под вырезом камеры) или за корешком одной
+    // страницы не пишем — просто к началу листа
     const tapSide: Side = p.x < 0 ? 'left' : 'right';
     if (p.y < 0 || (display !== 'both' && tapSide !== display)) {
       void canvas.current?.goHome();
@@ -186,12 +186,11 @@ export function Notebook() {
 
   // Меряем написанное на видимых страницах после каждой перерисовки (правка,
   // смена страницы, загрузка шрифта). Координаты элементов внутри стороны
-  // разворота — это и есть координаты мира
+  // разворота — это и есть координаты мира. Подсказки на первой странице
+  // не в счёт: лист растёт только от того, что написал человек
   useLayoutEffect(() => {
     let r: Rect | null = null;
-    for (const el of document.querySelectorAll<HTMLElement>(
-      '.canvas-world > .page-side .text-block, .canvas-world > .page-side .title-note'
-    )) {
+    for (const el of document.querySelectorAll<HTMLElement>('.canvas-world > .page-side .text-block')) {
       const x0 = el.offsetLeft;
       const y0 = el.offsetTop;
       const x1 = x0 + el.offsetWidth;
@@ -272,11 +271,6 @@ export function Notebook() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  // Кнопка «К началу листа» — когда край листа или середина начала листа
-  // далеко за экраном
-  const onSettle = (cam: Camera, size: Size) =>
-    setFarFromHome(cam.y < -size.h * 0.5 || Math.abs(cam.x + home.x * cam.scale - size.w / 2) > size.w);
-
   // Под переворачиваемым листом со стороны, откуда листаем, — разворот, куда листаем
   const underLeft = flip?.dir === 'prev' ? flip.to : spread;
   const underRight = flip?.dir === 'next' ? flip.to : spread;
@@ -310,8 +304,7 @@ export function Notebook() {
         extraBottom={keyboard}
         locked={turning}
         background={<Paper ref={paper} display={display} />}
-        onFrame={(cam, size, bounds) => paper.current?.update(cam, size, bounds)}
-        onSettle={onSettle}
+        onFrame={(cam, size) => paper.current?.update(cam, size)}
         onDoubleTap={onDoubleTap}
       >
         {display !== 'right' && pageSide(underLeft, 'left')}
@@ -343,11 +336,6 @@ export function Notebook() {
           <button type="button" className="page-arrow page-arrow-next" aria-label="Дальше" onClick={() => void go('next')}>
             <ArrowIcon dir="next" />
           </button>
-          {farFromHome && (
-            <button type="button" className="home-button" onClick={() => void canvas.current?.goHome()}>
-              ↑ К началу листа
-            </button>
-          )}
         </>
       )}
     </>

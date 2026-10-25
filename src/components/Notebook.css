@@ -382,18 +382,3 @@
 .page-arrow:active {
   transform: scale(0.94);
 }
-
-.home-button {
-  position: fixed;
-  top: calc(12px + var(--safe-top));
-  left: 50%;
-  z-index: 5;
-  transform: translateX(-50%);
-  padding: 8px 16px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  font: 15px/1.2 var(--ui-font);
-  color: var(--text);
-}

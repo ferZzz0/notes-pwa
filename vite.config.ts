@@ -29,8 +29,8 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         // Ориентацию не фиксируем: в обеих всё работает одинаково
-        background_color: '#d9c5a8',
-        theme_color: '#d9c5a8',
+        background_color: '#fffdf6',
+        theme_color: '#fffdf6',
         icons: [
           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },

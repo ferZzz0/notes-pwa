@@ -1,9 +1,9 @@
-/* Полотно на весь экран — «стол», над которым летаем */
+/* Полотно на весь экран; под миром — фон (background), у тетради — бумага */
 .canvas {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 40%, var(--desk-light), var(--desk) 75%);
+  background: var(--paper);
   /* Перелёт не должен выделять текст и вызывать меню долгого нажатия */
   -webkit-user-select: none;
   user-select: none;
