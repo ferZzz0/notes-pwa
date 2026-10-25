@@ -20,39 +20,18 @@ type Props = {
 
 // Насколько поднимается уголок на полпути — доля меньшей стороны листа
 const LIFT = 0.3;
-// Ширина тени у сгиба (px мира): на открывшейся странице и на загибе
-const CAST = 70;
-const SHADE = 0.45; // доля ширины листа
+// Ширина тени на загибе — доля ширины листа (тень на открывшейся странице —
+// в PageTurn.css)
+const SHADE = 0.45;
+// С самого начала сгиб уже чуть-чуть есть — иначе в первом кадре он нулевой
+const MIN_E = 0.002;
 
-// Плавно трогается и мягко ложится, но без долгой паузы в начале
-const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) ** 2);
+// Мягко трогается и мягко ложится, без рывка посередине
+const ease = (t: number) => 0.5 - Math.cos(Math.PI * t) / 2;
 
-// Часть многоугольника по одну сторону прямой (через m, нормаль n):
-// side = 1 — где (p − m)·n ≥ 0, side = −1 — по другую сторону
-function clipHalf(poly: Point[], m: Point, n: Point, side: 1 | -1): Point[] {
-  const f = (p: Point) => side * ((p.x - m.x) * n.x + (p.y - m.y) * n.y);
-  const out: Point[] = [];
-  poly.forEach((a, i) => {
-    const b = poly[(i + 1) % poly.length];
-    const fa = f(a);
-    const fb = f(b);
-    if (fa >= 0) out.push(a);
-    if (fa >= 0 !== fb >= 0) {
-      const k = fa / (fa - fb);
-      out.push({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
-    }
-  });
-  return out;
-}
-
-const polygon = (pts: Point[]) =>
-  pts.length < 3 ? 'polygon(0 0, 0 0, 0 0)' : `polygon(${pts.map(p => `${p.x}px ${p.y}px`).join(', ')})`;
-
-// Полоса тени вдоль прямой (через m, направление d): по центру темнее всего,
-// к краям — на нет; лишнюю половину срезает многоугольник родителя
+// Полоса тени (размер 2·half × length) вдоль прямой через m, направление d:
+// по центру темнее всего, к краям — на нет; лишнюю половину срезает окно загиба
 function placeStrip(el: HTMLElement, m: Point, d: Point, half: number, length: number) {
-  el.style.width = `${2 * half}px`;
-  el.style.height = `${length}px`;
   el.style.transform = `translate(${m.x - half}px, ${m.y - length / 2}px) rotate(${Math.atan2(-d.x, d.y)}rad)`;
 }
 
@@ -63,50 +42,72 @@ function placeStrip(el: HTMLElement, m: Point, d: Point, half: number, length: n
 // загиб — зеркало этой части через сгиб — показывает оборот страницы.
 // Оборот лежит на своём конечном месте, поэтому на него действуют два
 // отражения: через корешок и через сгиб — это поворот, одна матрица.
-// Только плоские преобразования (clip-path и matrix), без 3D: одинаково
-// выглядит при любой форме экрана и на iPhone.
+//
+// Чтобы было плавно и на iPhone, на каждом кадре меняются только transform и
+// opacity готовых слоёв — их двигает видеокарта, ничего не перерисовывая.
+// Срезать по линии сгиба помогает «окно»: квадрат с overflow: hidden, у
+// которого одна сторона лежит на сгибе (повёрнут вдоль него), а внутри —
+// обратный поворот, так что содержимое стоит на своём месте и только
+// обрезано по сгибу. Лицо (несогнутая часть) и тень на открывшейся странице —
+// в таких окнах внутри листа; загиб — в окне по эту сторону сгиба.
 export function PageTurn({ dir, sheet, front, back, duration, spine, onDone }: Props) {
-  const frontRef = useRef<HTMLDivElement>(null);
-  const castRef = useRef<HTMLDivElement>(null);
-  const castLine = useRef<HTMLDivElement>(null);
-  const flapRef = useRef<HTMLDivElement>(null);
+  const frontWin = useRef<HTMLDivElement>(null);
+  const frontInner = useRef<HTMLDivElement>(null);
+  const castWin = useRef<HTMLDivElement>(null);
+  const flapWin = useRef<HTMLDivElement>(null);
+  const flapInner = useRef<HTMLDivElement>(null);
+  const flapPage = useRef<HTMLDivElement>(null);
   const flapShade = useRef<HTMLDivElement>(null);
   const done = useRef(onDone);
   done.current = onDone;
 
+  const s = dir === 'next' ? 1 : -1;
+  const { x: X0, w: W, h: H } = sheet;
+  // Сторона окна: больше листа с запасом при любом наклоне сгиба
+  const L = 4 * Math.max(W, H);
+  // Оборот — на другой стороне корешка; его бумага — от линии корешка до края
+  const backX = s === 1 ? -W : spine / 2;
+  const pageW = W - spine / 2;
+
   useLayoutEffect(() => {
-    const s = dir === 'next' ? 1 : -1;
-    const { w: W, h: H } = sheet;
     const lift = LIFT * Math.min(W, H);
     const corner = { x: s * W, y: H };
-    const rect: Point[] = [
-      { x: sheet.x, y: 0 },
-      { x: sheet.x + W, y: 0 },
-      { x: sheet.x + W, y: H },
-      { x: sheet.x, y: H }
-    ];
     const length = 3 * Math.hypot(W, H);
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const start = performance.now();
     let frame = 0;
+    // Размер полосы тени — один раз: на кадрах меняется только её положение
+    flapShade.current!.style.width = `${2 * SHADE * W}px`;
+    flapShade.current!.style.height = `${length}px`;
 
-    const draw = (e: number) => {
+    // Окно: левая сторона — на сгибе (через m), внутрь — по направлению angle
+    const win = (el: HTMLElement, m: Point, angle: number) => {
+      el.style.transform = `translate(${m.x}px, ${m.y}px) rotate(${angle}rad) translate(0, ${-L / 2}px)`;
+    };
+    // Обратно: содержимое окна — на своём месте
+    const unwin = (el: HTMLElement, m: Point, angle: number) => {
+      el.style.transform = `translate(0, ${L / 2}px) rotate(${-angle}rad) translate(${-m.x}px, ${-m.y}px)`;
+    };
+
+    const draw = (eased: number) => {
+      const e = Math.max(eased, MIN_E);
       // Уголок: от своего места через корешок (с подъёмом) на другую сторону
       const p = { x: s * W * (1 - 2 * e), y: H - lift * Math.sin(Math.PI * e) };
       const n = { x: p.x - corner.x, y: p.y - corner.y };
       const len = Math.hypot(n.x, n.y);
-      const flat = len < 0.5;
       const m = { x: (p.x + corner.x) / 2, y: (p.y + corner.y) / 2 };
-      // Сгиб: направление вдоль него
-      const d = flat ? { x: 0, y: 1 } : { x: -n.y / len, y: n.x / len };
-      const kept = flat ? rect : clipHalf(rect, m, n, 1);
-      const turned = flat ? [] : clipHalf(rect, m, n, -1);
-
-      frontRef.current!.style.clipPath = polygon(kept);
-      castRef.current!.style.clipPath = polygon(turned);
-      // Оборот в своих координатах: загнутая часть, отражённая через корешок
-      flapRef.current!.style.clipPath = polygon(turned.map(q => ({ x: -q.x, y: q.y })));
-      // Отражение через корешок (x → −x), затем через сгиб (через m вдоль d)
+      // Внутрь листа (к корешку) — несогнутая часть; вдоль сгиба — d
+      const angle = Math.atan2(n.y, n.x);
+      const d = { x: -n.y / len, y: n.x / len };
+      // Лицо и тень — в координатах листа (его левый край — X0)
+      const local = { x: m.x - X0, y: m.y };
+      win(frontWin.current!, local, angle);
+      unwin(frontInner.current!, local, angle);
+      win(castWin.current!, local, angle + Math.PI);
+      // Загиб: окно по эту сторону сгиба, внутри — оборот, отражённый через
+      // корешок (x → −x) и затем через сгиб (через m вдоль d)
+      win(flapWin.current!, m, angle);
+      unwin(flapInner.current!, m, angle);
       const a = 1 - 2 * d.x * d.x;
       const b = -2 * d.x * d.y;
       const c = 2 * d.x * d.y;
@@ -114,15 +115,15 @@ export function PageTurn({ dir, sheet, front, back, duration, spine, onDone }: P
       // Сдвиг: m − R·m, где R — отражение через сгиб
       const rx = (2 * d.x * d.x - 1) * m.x + 2 * d.x * d.y * m.y;
       const ry = 2 * d.x * d.y * m.x + (2 * d.y * d.y - 1) * m.y;
-      flapRef.current!.style.transform = `matrix(${a}, ${b}, ${c}, ${dd}, ${m.x - rx}, ${m.y - ry})`;
+      flapPage.current!.style.transform = `matrix(${a}, ${b}, ${c}, ${dd}, ${m.x - rx}, ${m.y - ry})`;
 
-      // Тени: на открывшейся странице у сгиба и на самом загибе (сгиб в его
-      // координатах — тоже отражённый через корешок); сильнее всего на полпути
+      // Тени: на открывшейся странице у сгиба и на самом загибе (сгиб в
+      // координатах оборота — отражённый через корешок, от края его бумаги);
+      // сильнее всего на полпути
       const k = Math.sin(Math.PI * e);
-      castRef.current!.style.opacity = String(k);
-      placeStrip(castLine.current!, m, d, CAST, length);
+      castWin.current!.style.opacity = String(k);
       flapShade.current!.style.opacity = String(0.4 + 0.6 * k);
-      placeStrip(flapShade.current!, { x: -m.x, y: m.y }, { x: -d.x, y: d.y }, SHADE * W, length);
+      placeStrip(flapShade.current!, { x: -m.x - backX, y: m.y }, { x: -d.x, y: d.y }, SHADE * W, length);
     };
 
     const step = (now: number) => {
@@ -136,26 +137,34 @@ export function PageTurn({ dir, sheet, front, back, duration, spine, onDone }: P
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  // Бумага страниц — от линии корешка до края листа
-  const paper = (side: 1 | -1) => ({
-    left: side === 1 ? spine / 2 : -sheet.w,
-    width: sheet.w - spine / 2,
-    height: sheet.h
-  });
-  const s = dir === 'next' ? 1 : -1;
+  const winSize = { width: L, height: L };
   return (
     <div className="page-turn" aria-hidden="true">
-      <div ref={frontRef} className="page-turn-front">
-        <div className="page-turn-paper" style={paper(s)} />
-        {front}
+      {/* Несогнутая часть и тень на открывшейся странице — только в пределах листа */}
+      <div className="page-turn-sheet" style={{ left: X0, width: W, height: H }}>
+        <div ref={frontWin} className="page-turn-window" style={winSize}>
+          <div ref={frontInner} className="page-turn-inner">
+            <div className="page-turn-paper" style={{ left: s === 1 ? spine / 2 : 0, width: pageW, height: H }} />
+            {/* Страница — в координатах мира, а мы внутри листа (сдвиг X0) */}
+            <div className="page-turn-content" style={{ left: -X0 }}>
+              {front}
+            </div>
+          </div>
+        </div>
+        <div ref={castWin} className="page-turn-window page-turn-cast" style={winSize} />
       </div>
-      <div ref={castRef} className="page-turn-cast">
-        <div ref={castLine} className="page-turn-strip page-turn-cast-line" />
-      </div>
-      <div ref={flapRef} className="page-turn-flap">
-        <div className="page-turn-paper page-turn-back" style={paper(-s as 1 | -1)} />
-        {back}
-        <div ref={flapShade} className="page-turn-strip page-turn-flap-shade" />
+      {/* Загиб: оборот в окне по эту сторону сгиба */}
+      <div ref={flapWin} className="page-turn-window" style={winSize}>
+        <div ref={flapInner} className="page-turn-inner">
+          <div ref={flapPage} className="page-turn-flap">
+            <div className="page-turn-back" style={{ left: backX, width: pageW, height: H }}>
+              <div className="page-turn-content" style={{ left: -backX }}>
+                {back}
+              </div>
+              <div ref={flapShade} className="page-turn-strip page-turn-flap-shade" />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

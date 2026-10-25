@@ -1,9 +1,9 @@
-/* Перелистывание (PageTurn.tsx). Все слои — в точке (0, 0) мира и нулевого
-   размера: их содержимое лежит в координатах мира, а форму каждому задаёт
-   clip-path (тоже в координатах мира). */
+/* Перелистывание (PageTurn.tsx). Корень — в точке (0, 0) мира и нулевого
+   размера. На каждом кадре меняются только transform и opacity слоёв
+   (will-change) — без перерисовки. */
 .page-turn,
-.page-turn-front,
-.page-turn-cast,
+.page-turn-inner,
+.page-turn-content,
 .page-turn-flap {
   position: absolute;
   top: 0;
@@ -12,11 +12,29 @@
   pointer-events: none;
 }
 
-/* Отдельные слои: на каждом кадре меняются только их форма и положение */
-.page-turn-front,
-.page-turn-cast,
+/* Лист — то, что видно на экране от корешка до края: за его пределами
+   несогнутой части и тени не бывает */
+.page-turn-sheet {
+  position: absolute;
+  top: 0;
+  overflow: hidden;
+}
+
+/* «Окно»: квадрат больше листа, одна сторона — на сгибе; всё, что по другую
+   сторону сгиба, срезано */
+.page-turn-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  transform-origin: 0 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.page-turn-inner,
 .page-turn-flap {
-  will-change: transform, clip-path;
+  will-change: transform;
 }
 
 /* Бумага страницы под её текстом — закрывает то, что под листом */
@@ -26,10 +44,19 @@
   background: var(--paper);
 }
 
-/* Оборот загиба чуть темнее: он повёрнут от света, и край загиба виден на
-   странице под ним */
+/* Оборот загиба: его бумага (чуть темнее — он повёрнут от света, и край
+   загиба виден на странице под ним); тень у сгиба — только на нём */
 .page-turn-back {
+  position: absolute;
+  top: 0;
+  overflow: hidden;
   background: color-mix(in srgb, var(--paper) 94%, #8a7350);
+}
+
+/* Тень от поднятого уголка на открывшейся странице: окно по ту сторону
+   сгиба, тень — у его края (на самом сгибе темнее всего) */
+.page-turn-cast {
+  background: linear-gradient(to right, rgb(60 40 10 / 0.3), transparent 70px);
 }
 
 .page-turn-strip {
@@ -37,11 +64,7 @@
   top: 0;
   left: 0;
   transform-origin: center;
-}
-
-/* Тень от поднятого уголка на открывшейся странице — у самого сгиба */
-.page-turn-cast-line {
-  background: linear-gradient(to right, transparent, rgb(60 40 10 / 0.3) 50%, transparent);
+  will-change: transform;
 }
 
 /* Загиб у сгиба темнее — бумага там изгибается */

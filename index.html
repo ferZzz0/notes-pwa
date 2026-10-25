@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <!-- viewport-fit=cover: в установленном приложении рисуем под вырезом и
-       «домашней полоской» iPhone, отступы задаём через env(safe-area-inset-*) -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+       «домашней полоской» iPhone, отступы задаём через env(safe-area-inset-*).
+       maximum-scale=1: iOS не приближает страницу, когда открывается поле
+       ввода (приближает лист само приложение) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="description" content="Заметки — устанавливаемое приложение, работает офлайн" />
   <!-- Цвет строки состояния и заголовка окна, отдельно для светлой и тёмной темы -->
   <meta name="theme-color" content="#fffdf6" media="(prefers-color-scheme: light)" />

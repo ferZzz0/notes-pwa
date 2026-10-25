@@ -16,11 +16,19 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
+// Поле имени растёт по высоте вместе с текстом — как сама наклейка, а не
+// уезжает вбок в одну строку
+const fitName = (el: HTMLTextAreaElement) => {
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+};
+
 // Поле имени дневника получает фокус прямо в нажатии — иначе iOS не покажет
 // клавиатуру
 const focusName = (id: string) => {
   const input = document.getElementById(`diary-name-${id}`);
-  if (input instanceof HTMLInputElement) {
+  if (input instanceof HTMLTextAreaElement) {
+    fitName(input);
     input.focus();
     input.select();
   }
@@ -59,23 +67,24 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onDelet
             {notebooks.map(n => (
               <div key={n.id} className="diary" style={{ '--cover': n.color } as CSSProperties}>
                 {editing === n.id ? (
-                  <form
-                    className="diary-cover diary-editing"
-                    onSubmit={e => {
-                      e.preventDefault();
-                      finish(n, (e.currentTarget.elements.namedItem('name') as HTMLInputElement).value);
-                    }}
-                  >
-                    <input
+                  <div className="diary-cover diary-editing">
+                    <textarea
                       id={`diary-name-${n.id}`}
-                      name="name"
                       className="diary-label diary-input"
                       defaultValue={n.name}
+                      rows={1}
                       maxLength={40}
                       spellCheck={false}
                       autoCorrect="off"
                       enterKeyHint="done"
                       aria-label="Название дневника"
+                      onInput={e => fitName(e.currentTarget)}
+                      // Название — без переносов строк: Enter — готово
+                      onKeyDown={e => {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        finish(n, e.currentTarget.value);
+                      }}
                       onBlur={e => finish(n, e.currentTarget.value)}
                     />
                     {notebooks.length > 1 && (
@@ -92,7 +101,7 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onDelet
                         Удалить дневник
                       </button>
                     )}
-                  </form>
+                  </div>
                 ) : (
                   <>
                     <button type="button" className="diary-cover" onClick={() => onOpen(n.id)}>

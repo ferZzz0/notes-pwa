@@ -82,9 +82,13 @@
   overflow-wrap: anywhere;
 }
 
+/* Поле названия — та же наклейка: несколько строк, растёт вместе с текстом */
 .diary-input {
+  display: block;
   border: 2px solid var(--accent);
   outline: none;
+  resize: none;
+  overflow: hidden;
 }
 
 .diary-delete {
