@@ -1,52 +1,26 @@
-/* Сцена — «стол», на котором лежит тетрадь. Тетрадь подстраивается под
-   экран: от пропорций настоящего разворота A5 (1.41 : 1) до чуть более
-   широкого (1.75 : 1), чтобы на телефоне в горизонтали не пустовали края. */
-.notebook-scene {
-  --gap: clamp(8px, 3vmin, 32px);
-
-  /* Заполняет .app-root (App.css), который в вертикали повёрнут на 90° */
+/* Тетрадь на весь экран: листы от края до края. Бумага уходит и под вырез
+   камеры, а текст держится от него на расстоянии отступов --safe-*
+   (их задаёт .app-root в App.css, в вертикали он повёрнут на 90°). */
+.notebook {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  /* Отступы --safe-*: в горизонтали у iPhone вырез камеры сбоку,
-     без них тетрадь залезала бы под него. */
-  padding: max(var(--gap), var(--safe-top)) max(var(--gap), var(--safe-right))
-    max(var(--gap), var(--safe-bottom)) max(var(--gap), var(--safe-left));
-  background: radial-gradient(ellipse at 50% 40%, var(--desk-light), var(--desk) 70%);
-  /* Размер сцены — точка отсчёта для единиц cqw/cqh у тетради */
-  container-type: size;
-}
-
-.notebook {
-  --ratio-max: 1.75;
-  --ratio-min: 1.41;
-  --spread-w: min(100cqw, 100cqh * var(--ratio-max));
-
-  position: relative;
   display: flex;
-  width: var(--spread-w);
-  height: min(100cqh, var(--spread-w) / var(--ratio-min));
-  padding: 0.5%;
-  border-radius: 8px;
-  /* Обложка выглядывает по краям из-под листов */
-  background: var(--cover);
-  box-shadow:
-    0 2px 4px rgb(0 0 0 / 0.12),
-    0 18px 40px -12px rgb(0 0 0 / 0.35);
-  /* Дальше по тетради единицы cqh считаются от её собственного размера */
+  /* Единицы cqh внутри тетради считаются от её высоты */
   container-type: size;
 }
 
 .page {
-  /* Размер клетки привязан к высоте тетради, но не мельче 12px —
+  /* Размер клетки привязан к высоте экрана, но не мельче 12px —
      иначе на телефоне клетки сливаются, и не крупнее 22px. */
   --cell: clamp(12px, 100cqh / 30, 22px);
-  --margin: calc(var(--cell) * 3);
+  --pad: calc(var(--cell) * 2);
 
   position: relative;
-  flex: 1;
+  /* Ровно половина экрана, даже если отступы от выреза у листов разные —
+     иначе корешок съехал бы с границы листов */
+  width: 50%;
   overflow: hidden;
+  padding: calc(var(--pad) + var(--safe-top)) var(--pad) calc(var(--pad) + var(--safe-bottom));
   background-color: var(--paper);
   background-image:
     linear-gradient(to right, var(--grid) 1px, transparent 1px),
@@ -59,38 +33,11 @@
 }
 
 .page-left {
-  padding: calc(var(--cell) * 2) calc(var(--cell) * 2) calc(var(--cell) * 2)
-    calc(var(--margin) + var(--cell));
-  border-radius: 4px 0 0 4px;
-  /* Несколько нижних листов под верхним — толщина тетради */
-  box-shadow: -1px 1px 0 var(--paper-edge), -2px 2px 0 var(--paper-edge-2);
+  padding-left: calc(var(--pad) + var(--safe-left));
 }
 
 .page-right {
-  padding: calc(var(--cell) * 2) calc(var(--margin) + var(--cell)) calc(var(--cell) * 2)
-    calc(var(--cell) * 2);
-  border-radius: 0 4px 4px 0;
-  box-shadow: 1px 1px 0 var(--paper-edge), 2px 2px 0 var(--paper-edge-2);
-}
-
-/* Красная линия полей — у внешнего края каждого листа */
-.page::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  /* Ровно 2px: дробная толщина на обычных мониторах размывается в серый */
-  width: 2px;
-  background: var(--margin-line);
-  pointer-events: none;
-}
-
-.page-left::before {
-  left: var(--margin);
-}
-
-.page-right::before {
-  right: var(--margin);
+  padding-right: calc(var(--pad) + var(--safe-right));
 }
 
 /* Тень у сгиба: листы будто уходят в корешок */
@@ -111,8 +58,8 @@
 
 .notebook-spine {
   position: absolute;
-  top: 0.5%;
-  bottom: 0.5%;
+  top: 0;
+  bottom: 0;
   left: 50%;
   width: 2px;
   transform: translateX(-50%);
