@@ -743,7 +743,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               onFont={font => restyle(selectedBlock.id, { font })}
               onEffect={effect => patchBlock(selectedBlock.id, { effect: effect === 'none' ? undefined : effect })}
               onMarker={marker => patchBlock(selectedBlock.id, { marker: marker === 'none' ? undefined : marker })}
-              onSticker={patch => patchBlock(selectedBlock.id, patch)}
+              onSticker={(patch, save) => patchBlock(selectedBlock.id, patch, save)}
               onLayer={dir => reorder(selectedBlock.id, dir)}
               onDelete={() => {
                 removeBlock(selectedBlock.id);

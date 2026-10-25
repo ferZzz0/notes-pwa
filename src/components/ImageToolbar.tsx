@@ -40,10 +40,7 @@ export function ImageToolbar({ block, onPatch, onLayer, onDelete, onDone, onHeig
                 role="option"
                 aria-selected={f.id === frame}
                 className={`toolbar-menu-item${f.id === frame ? ' is-active' : ''}`}
-                onClick={() => {
-                  setMenu(null);
-                  onPatch({ frame: f.id === 'none' ? undefined : f.id });
-                }}
+                onClick={() => onPatch({ frame: f.id === 'none' ? undefined : f.id })}
               >
                 <span className={`toolbar-frame-preview frame-${f.id}`}>
                   <span />
@@ -64,10 +61,7 @@ export function ImageToolbar({ block, onPatch, onLayer, onDelete, onDone, onHeig
                 role="option"
                 aria-selected={f.id === filter}
                 className={`toolbar-menu-item${f.id === filter ? ' is-active' : ''}`}
-                onClick={() => {
-                  setMenu(null);
-                  onPatch({ filter: f.id === 'none' ? undefined : f.id });
-                }}
+                onClick={() => onPatch({ filter: f.id === 'none' ? undefined : f.id })}
               >
                 {url && <img className="toolbar-filter-preview" src={url} alt="" style={{ filter: f.css }} />}
                 {f.label}
@@ -79,12 +73,7 @@ export function ImageToolbar({ block, onPatch, onLayer, onDelete, onDone, onHeig
 
       {menu === 'layer' && (
         <div className="toolbar-menu" role="dialog" aria-label="Слой">
-          <LayerButtons
-            onLayer={dir => {
-              setMenu(null);
-              onLayer(dir);
-            }}
-          />
+          <LayerButtons onLayer={onLayer} />
         </div>
       )}
 

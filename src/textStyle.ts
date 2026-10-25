@@ -75,19 +75,24 @@ const hex2 = (v: number) =>
     .toString(16)
     .padStart(2, '0');
 
-// Точка палитры → цвет: оттенок h (градусы), r — доля радиуса (0 — чёрный в
-// середине, 1 — яркий на краю). Это hsl(h, 100%, 50·r%)
-export function wheelColor(h: number, r: number): string {
+// Палитра чернил — от чёрного в середине к яркому на краю; палитра стикеров —
+// от белого (стикеры обычно светлые)
+export type WheelBase = 'dark' | 'light';
+
+// Точка палитры → цвет: оттенок h (градусы), r — доля радиуса (0 — середина,
+// 1 — яркий на краю). Это hsl(h, 100%, 50·r%) от чёрного или
+// hsl(h, 100%, 100% − 50·r%) от белого
+export function wheelColor(h: number, r: number, base: WheelBase = 'dark'): string {
   const k = (n: number) => (n + h / 30) % 12;
-  const l = r / 2;
-  const a = l; // насыщенность 100%: a = l·min(1, 2 − 2l) = l при l ≤ ½
+  const l = base === 'dark' ? r / 2 : 1 - r / 2;
+  const a = Math.min(l, 1 - l); // насыщенность 100%
   const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
   return `#${hex2(f(0))}${hex2(f(8))}${hex2(f(4))}`;
 }
 
 // Где цвет на палитре: оттенок и доля радиуса (по светлоте). Цвета не с
 // палитры (поблёклые) встают на ближайший оттенок
-export function wheelPosition(color?: string): { h: number; r: number } {
+export function wheelPosition(color?: string, base: WheelBase = 'dark'): { h: number; r: number } {
   const c = inkColor(color);
   const hex = HEX.test(c) ? c : DEFAULT_INK;
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
@@ -101,12 +106,13 @@ export function wheelPosition(color?: string): { h: number; r: number } {
     else h = (r - g) / d + 4;
     h = (h * 60 + 360) % 360;
   }
-  return { h, r: Math.min(1, max + min) };
+  // max + min — удвоенная светлота
+  return { h, r: Math.min(1, base === 'dark' ? max + min : 2 - (max + min)) };
 }
 
 // Готовые стикеры, на которых можно писать (TextBlock.css: .shape-*). У
-// каждого свой цвет по умолчанию; цвет можно сменить (STICKER_FILLS или
-// круговая палитра), а надпись на стикере настраивается как любая другая
+// каждого свой цвет по умолчанию; цвет меняют на круговой палитре (от
+// белого), а надпись на стикере настраивается как любая другая
 export const STICKERS = [
   { id: 'note', label: 'Записка', fill: '#ffe45c' },
   { id: 'bubble', label: 'Реплика', fill: '#ffffff' },
@@ -117,7 +123,6 @@ export const STICKERS = [
   { id: 'tape', label: 'Скотч', fill: '#b9a7ef' }
 ] as const;
 
-export const STICKER_FILLS = ['#ffe45c', '#ffb3c7', '#a8e6a1', '#a8d8ff', '#ffc58a', '#d4b8ff', '#ffffff', '#e3c79a', '#e8566f', '#3b4a8c'];
 
 // Рамки фото (ImageItem.css: .frame-*) и фильтры (CSS filter)
 export const FRAMES = [

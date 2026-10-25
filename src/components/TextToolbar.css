@@ -225,6 +225,15 @@
   cursor: crosshair;
 }
 
+/* Палитра стикеров — от белого в середине: ровно hsl(оттенок, 100%,
+   100% − 50%·доля радиуса) */
+.color-wheel.is-light {
+  background:
+    radial-gradient(closest-side, #fff, transparent),
+    conic-gradient(from 90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+
 .color-wheel-mark {
   position: absolute;
   width: 24px;
@@ -237,9 +246,27 @@
 }
 
 /* Стикер: формы, цвета, слой */
+/* Вертикально — формы, палитра и слой друг под другом; горизонтально
+   (экран низкий) — формы и палитра рядом */
 .toolbar-sticker {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
   width: min(320px, calc(100vw - 24px));
   padding: 10px;
+}
+
+@media (orientation: landscape) {
+  .toolbar-sticker {
+    grid-template-columns: auto auto;
+    align-items: center;
+    width: max-content;
+  }
+
+  .toolbar-sticker .toolbar-layer {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
 }
 
 .toolbar-sticker-shapes {
@@ -262,31 +289,13 @@
   height: 34px;
 }
 
+.toolbar-sticker .toolbar-layer {
+  width: 100%;
+}
+
 .toolbar-sticker-shapes button.is-active,
 .toolbar-layer button:active {
   background: rgb(36 57 140 / 0.12);
-}
-
-.toolbar-sticker-fills {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin: 8px 0 10px;
-}
-
-.toolbar-sticker-fills button {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid rgb(0 0 0 / 0.15);
-  border-radius: 50%;
-}
-
-.toolbar-sticker-fills button.is-active {
-  box-shadow:
-    0 0 0 2px var(--paper),
-    0 0 0 4px var(--ink);
 }
 
 /* Наверх / вниз среди всего на листе */

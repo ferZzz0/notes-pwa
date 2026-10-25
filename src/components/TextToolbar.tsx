@@ -4,7 +4,6 @@ import {
   EFFECTS,
   FONTS,
   MARKERS,
-  STICKER_FILLS,
   STICKERS,
   effectOf,
   fontOf,
@@ -16,7 +15,8 @@ import {
   wheelPosition,
   type EffectId,
   type FontId,
-  type MarkerId
+  type MarkerId,
+  type WheelBase
 } from '../textStyle';
 import { StickerPreview } from './AddMenu';
 import './TextToolbar.css';
@@ -30,8 +30,9 @@ type Props = {
   onFont: (font: FontId) => void;
   onEffect: (effect: EffectId) => void;
   onMarker: (marker: MarkerId) => void;
-  // Стикер: форма и цвет; слой — выше всех или ниже всех на листе
-  onSticker: (patch: Partial<Block>) => void;
+  // Стикер: форма и цвет (save = false — пока ведут пальцем по палитре);
+  // слой — выше всех или ниже всех на листе
+  onSticker: (patch: Partial<Block>, save?: boolean) => void;
   onLayer: (dir: 'up' | 'down') => void;
   onDelete: () => void;
   onDone: () => void;
@@ -48,6 +49,7 @@ export const keepFocus = (e: MouseEvent) => e.preventDefault();
 // Над панелью и под верхом экрана — столько места оставляем
 const MENU_MARGIN = 96;
 const WHEEL_SIZE = 180;
+const STICKER_WHEEL_SIZE = 150;
 
 // Сколько места над панелью — с открытой клавиатурой его мало
 export const menuRoom = (keyboard: number) => Math.max(120, window.innerHeight - keyboard - MENU_MARGIN);
@@ -144,7 +146,11 @@ export function TextToolbar(props: Props) {
       style={keyboard > 0 ? { bottom: keyboard + 8 } : undefined}
       onMouseDown={keepFocus}
     >
-      {menu === 'color' && <ColorWheel color={block.color} size={Math.min(WHEEL_SIZE, room - 20)} onPick={onColor} />}
+      {menu === 'color' && (
+        <div className="color-wheel-pop">
+          <ColorWheel color={block.color} size={Math.min(WHEEL_SIZE, room - 20)} onPick={onColor} />
+        </div>
+      )}
 
       {menu === 'font' && (
         <ul className="toolbar-menu" style={{ maxHeight: room }} role="listbox" aria-label="Шрифт">
@@ -155,10 +161,7 @@ export function TextToolbar(props: Props) {
                 role="option"
                 aria-selected={f.id === font}
                 className={`toolbar-menu-item toolbar-menu-font${f.id === font ? ' is-active' : ''}`}
-                onClick={() => {
-                  setMenu(null);
-                  onFont(f.id);
-                }}
+                onClick={() => onFont(f.id)}
               >
                 <span className={`font-${f.id}`}>{f.label}</span>
               </button>
@@ -176,10 +179,7 @@ export function TextToolbar(props: Props) {
                 role="option"
                 aria-selected={e.id === effect}
                 className={`toolbar-menu-item${e.id === effect ? ' is-active' : ''}`}
-                onClick={() => {
-                  setMenu(null);
-                  onEffect(e.id);
-                }}
+                onClick={() => onEffect(e.id)}
               >
                 <span className={`toolbar-menu-preview font-${font} effect-${e.id}`} style={inkStyle}>
                   Аа
@@ -200,10 +200,7 @@ export function TextToolbar(props: Props) {
                 role="option"
                 aria-selected={m.id === marker}
                 className={`toolbar-menu-item${m.id === marker ? ' is-active' : ''}`}
-                onClick={() => {
-                  setMenu(null);
-                  onMarker(m.id);
-                }}
+                onClick={() => onMarker(m.id)}
               >
                 <span className={`toolbar-menu-preview font-${font}`} style={inkStyle}>
                   <span className={`mark-${m.id}`}>текст</span>
@@ -231,18 +228,13 @@ export function TextToolbar(props: Props) {
               </button>
             ))}
           </div>
-          <div className="toolbar-sticker-fills">
-            {STICKER_FILLS.map(c => (
-              <button
-                key={c}
-                type="button"
-                aria-label={`Цвет стикера ${c}`}
-                className={c === fill ? 'is-active' : undefined}
-                style={{ background: c }}
-                onClick={() => onSticker({ fill: c })}
-              />
-            ))}
-          </div>
+          <ColorWheel
+            color={fill}
+            base="light"
+            size={STICKER_WHEEL_SIZE}
+            label="Цвет стикера"
+            onPick={(c, final) => onSticker({ fill: c }, final)}
+          />
           <LayerButtons onLayer={onLayer} />
         </div>
       )}
@@ -308,12 +300,21 @@ function Chevron() {
   );
 }
 
-// Круговая палитра над панелью: по кругу — оттенок, от середины к краю — от
-// чёрного к яркому (textStyle.ts: wheelColor). Цвет меняется, пока ведёшь
-// пальцем; отметка — где цвет надписи сейчас.
-function ColorWheel({ color, size, onPick }: { color?: string; size: number; onPick: (color: string, final: boolean) => void }) {
+type WheelProps = {
+  color?: string;
+  // От чёрного (чернила) или от белого (стикеры) в середине
+  base?: WheelBase;
+  size: number;
+  label?: string;
+  onPick: (color: string, final: boolean) => void;
+};
+
+// Круговая палитра: по кругу — оттенок, от середины к краю — от чёрного (или
+// белого) к яркому (textStyle.ts: wheelColor). Цвет меняется, пока ведёшь
+// пальцем; отметка — где цвет сейчас.
+function ColorWheel({ color, base = 'dark', size, label = 'Цвет', onPick }: WheelProps) {
   const wheel = useRef<HTMLDivElement>(null);
-  const { h, r } = wheelPosition(color);
+  const { h, r } = wheelPosition(color, base);
   const a = (h * Math.PI) / 180;
 
   const pick = (e: PointerEvent<HTMLDivElement>, final: boolean) => {
@@ -322,33 +323,34 @@ function ColorWheel({ color, size, onPick }: { color?: string; size: number; onP
     const dx = e.clientX - (rect.left + radius);
     const dy = e.clientY - (rect.top + radius);
     const hue = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
-    onPick(wheelColor(hue, Math.min(1, Math.hypot(dx, dy) / radius)), final);
+    onPick(wheelColor(hue, Math.min(1, Math.hypot(dx, dy) / radius), base), final);
   };
 
   return (
-    <div className="color-wheel-pop">
-      <div
-        ref={wheel}
-        className="color-wheel"
-        style={{ width: size, height: size }}
-        onPointerDown={e => {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          pick(e, false);
+    <div
+      ref={wheel}
+      className={base === 'light' ? 'color-wheel is-light' : 'color-wheel'}
+      style={{ width: size, height: size }}
+      role="slider"
+      aria-label={label}
+      aria-valuetext={color}
+      onPointerDown={e => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        pick(e, false);
+      }}
+      onPointerMove={e => {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) pick(e, false);
+      }}
+      onPointerUp={e => pick(e, true)}
+    >
+      <span
+        className="color-wheel-mark"
+        style={{
+          left: `${50 + 50 * r * Math.cos(a)}%`,
+          top: `${50 + 50 * r * Math.sin(a)}%`,
+          background: base === 'light' ? color : inkColor(color)
         }}
-        onPointerMove={e => {
-          if (e.currentTarget.hasPointerCapture(e.pointerId)) pick(e, false);
-        }}
-        onPointerUp={e => pick(e, true)}
-      >
-        <span
-          className="color-wheel-mark"
-          style={{
-            left: `${50 + 50 * r * Math.cos(a)}%`,
-            top: `${50 + 50 * r * Math.sin(a)}%`,
-            background: inkColor(color)
-          }}
-        />
-      </div>
+      />
     </div>
   );
 }
