@@ -76,6 +76,21 @@ body {
   overscroll-behavior: none;
   /* Убираем серую вспышку при тапе на мобильных */
   -webkit-tap-highlight-color: transparent;
+  /* Текст интерфейса (меню, календарь, названия, панели) не выделяется
+     долгим нажатием (просьба автора) — выделяется только то, что правят */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Поля ввода и надписи — выделяются (без этого на iPhone в полях нельзя и
+   печатать) */
+input,
+textarea,
+[contenteditable]:not([contenteditable="false"]) {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 button {

@@ -1,6 +1,7 @@
 import { useImperativeHandle, useRef, type Ref } from 'react';
 import type { Block } from '../notes';
 import type { Camera } from './Canvas';
+import { LockIcon } from './TextToolbar';
 import './Selection.css';
 
 export type SelectionHandle = {
@@ -12,6 +13,9 @@ type Props = {
   ref?: Ref<SelectionHandle>;
   block: Block;
   camera: () => Camera;
+  // Ручка ширины на правом краю (надпись, стикер): сдвиг пальца от начала
+  // (экранные px) и этап жеста; нет — ручки нет
+  onResize?: (dx: number, dy: number, phase: 'start' | 'move' | 'end') => void;
 };
 
 // Запас рамки вокруг надписи (экранные px)
@@ -22,8 +26,9 @@ const PAD = 4;
 // Рамка — поверх полотна, в координатах экрана: тонкая при любом масштабе.
 // Встаёт по самой надписи (её поле ввода в .page-texts) при каждом кадре
 // камеры и после каждой перерисовки (update).
-export function Selection({ ref, block, camera }: Props) {
+export function Selection({ ref, block, camera, onResize }: Props) {
   const frame = useRef<HTMLDivElement>(null);
+  const start = useRef({ x: 0, y: 0 });
   const props = useRef({ block, camera });
   props.current = { block, camera };
 
@@ -59,7 +64,32 @@ export function Selection({ ref, block, camera }: Props) {
 
   return (
     <div className="selection-layer" aria-hidden="true">
-      <div ref={frame} className="selection" />
+      <div ref={frame} className="selection">
+        {block.locked && (
+          <span className="selection-lock">
+            <LockIcon locked />
+          </span>
+        )}
+        {onResize && (
+          <span
+            className="selection-grip"
+            role="slider"
+            aria-label="Ширина надписи"
+            onPointerDown={e => {
+              e.stopPropagation();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              start.current = { x: e.clientX, y: e.clientY };
+              onResize(0, 0, 'start');
+            }}
+            onPointerMove={e => {
+              if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+              onResize(e.clientX - start.current.x, e.clientY - start.current.y, 'move');
+            }}
+            onPointerUp={e => onResize(e.clientX - start.current.x, e.clientY - start.current.y, 'end')}
+            onPointerCancel={e => onResize(e.clientX - start.current.x, e.clientY - start.current.y, 'end')}
+          />
+        )}
+      </div>
     </div>
   );
 }

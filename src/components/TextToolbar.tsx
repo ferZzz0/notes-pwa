@@ -9,6 +9,7 @@ import {
   effectOf,
   fontOf,
   inkColor,
+  markerColorOf,
   markerOf,
   stickerFill,
   stickerOf,
@@ -31,6 +32,8 @@ type Props = {
   onFont: (font: FontId) => void;
   onEffect: (effect: EffectId) => void;
   onMarker: (marker: MarkerId) => void;
+  // Цвет маркера с палитры; final — палец отпустили (сохранить)
+  onMarkerColor: (color: string, final: boolean) => void;
   // Нажали на панель (и отпустили): запомнить выделение в надписи — касание
   // панели может его сбросить
   onCapture: () => void;
@@ -155,6 +158,36 @@ export function OpacityIcon() {
   );
 }
 
+// Замок: закрыт или открыт
+export function LockIcon({ locked }: { locked: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="5.5" y="10.5" width="13" height="9.5" rx="2" />
+      <path d={locked ? 'M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5' : 'M8.5 10.5V8a3.5 3.5 0 0 1 6.9-.8'} />
+    </svg>
+  );
+}
+
+// Панель закрытой на замок надписи, стикера или фото: с ней ничего не
+// сделать — только открыть замок (кнопка над панелью) или «Готово»
+export function LockedToolbar({ history, onDone, onHeight }: { history: ReactNode; onDone: () => void; onHeight: (h: number) => void }) {
+  const ref = useToolbarHeight(onHeight);
+  return (
+    <div ref={ref} className="text-toolbar" role="toolbar" aria-label="Закреплено" onMouseDown={keepFocus}>
+      <div className="toolbar-history">{history}</div>
+      <span className="toolbar-locked-note">
+        <LockIcon locked />
+        Закреплено
+      </span>
+      <button type="button" className="text-toolbar-done" aria-label="Готово" onClick={onDone}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 // Наверх / вниз среди всего на листе
 export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => void }) {
   return (
@@ -181,12 +214,13 @@ export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => voi
 // текстом), у стикера — его форма, цвет и слой, прозрачность (ползунок),
 // удалить (с подтверждением), готово. Списки открываются над панелью, по одному.
 export function TextToolbar(props: Props) {
-  const { block, keyboard, onColor, onFont, onEffect, onMarker, onCapture, rangeStyle, history, onMenu, onSticker, onOpacity, onLayer, onDelete, onDone, onHeight } = props;
+  const { block, keyboard, onColor, onFont, onEffect, onMarker, onMarkerColor, onCapture, rangeStyle, history, onMenu, onSticker, onOpacity, onLayer, onDelete, onDone, onHeight } = props;
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
   const font = fontOf(rangeStyle?.font ?? block.font);
   const effect = effectOf(rangeStyle?.effect ?? block.effect);
   const marker = markerOf(rangeStyle?.marker ?? block.marker);
+  const markColor = markerColorOf(rangeStyle?.marker ?? block.marker, rangeStyle?.markerColor ?? block.markerColor);
   const color = inkColor(rangeStyle?.color ?? block.color);
   const isSticker = block.kind === 'sticker';
   const fill = stickerFill(block.sticker, block.fill);
@@ -270,24 +304,28 @@ export function TextToolbar(props: Props) {
       )}
 
       {menu === 'marker' && (
-        <ul className="toolbar-menu" style={{ maxHeight: room }} role="listbox" aria-label="Маркер">
-          {MARKERS.map(m => (
-            <li key={m.id}>
+        <div className="toolbar-menu toolbar-marker" style={{ maxHeight: room }} role="dialog" aria-label="Маркер">
+          <div className="toolbar-marker-shapes" role="radiogroup" aria-label="Форма маркера">
+            {MARKERS.map(m => (
               <button
+                key={m.id}
                 type="button"
-                role="option"
-                aria-selected={m.id === marker}
-                className={`toolbar-menu-item${m.id === marker ? ' is-active' : ''}`}
+                role="radio"
+                aria-checked={m.id === marker}
+                className={m.id === marker ? 'is-active' : undefined}
                 onClick={() => onMarker(m.id)}
               >
-                <span className={`toolbar-menu-preview font-${font}`} style={inkStyle}>
-                  <span className={`mark-${m.id}`}>текст</span>
+                <span className={`toolbar-marker-sample font-${font}`} style={inkStyle}>
+                  <span className={`mark-${m.id}`} style={{ '--mark': markColor } as CSSProperties}>
+                    текст
+                  </span>
                 </span>
-                {m.label}
+                <small>{m.label}</small>
               </button>
-            </li>
-          ))}
-        </ul>
+            ))}
+          </div>
+          <ColorWheel color={markColor} base="light" size={STICKER_WHEEL_SIZE} label="Цвет маркера" onPick={onMarkerColor} />
+        </div>
       )}
 
       {menu === 'sticker' && (

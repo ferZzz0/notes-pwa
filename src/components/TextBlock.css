@@ -96,41 +96,58 @@
   -webkit-text-stroke: 1.5px var(--ink-color, var(--ink));
 }
 
-/* Маркер — фон строчного span: по строкам, под буквами */
+/* Маркер — фон строчного span: по строкам, под буквами. Цвет — --mark
+   (TextBlock / richText: выбранный, по умолчанию жёлтый), форма — класс */
 [class*='mark-'] {
+  --mark-c: var(--mark, #ffd400);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
 
-.mark-yellow {
-  background: linear-gradient(176deg, transparent 22%, rgb(255 221 0 / 0.55) 24% 88%, transparent 90%);
+/* Маркер во всю высоту строки — наискосок, как настоящий */
+.mark-highlight {
+  background: linear-gradient(176deg, transparent 22%, color-mix(in srgb, var(--mark-c) 55%, transparent) 24% 88%, transparent 90%);
 }
 
-.mark-pink {
-  background: linear-gradient(176deg, transparent 22%, rgb(255 110 180 / 0.42) 24% 88%, transparent 90%);
+/* Половина высоты — нижняя */
+.mark-half {
+  background: linear-gradient(178deg, transparent 50%, color-mix(in srgb, var(--mark-c) 55%, transparent) 52% 90%, transparent 92%);
 }
 
-.mark-green {
-  background: linear-gradient(176deg, transparent 22%, rgb(90 220 120 / 0.45) 24% 88%, transparent 90%);
+/* Широкая полоса снизу */
+.mark-under {
+  background: linear-gradient(178deg, transparent 68%, color-mix(in srgb, var(--mark-c) 75%, transparent) 70% 90%, transparent 92%);
 }
 
-.mark-blue {
-  background: linear-gradient(176deg, transparent 22%, rgb(80 190 255 / 0.42) 24% 88%, transparent 90%);
-}
-
-.mark-under-yellow {
-  background: linear-gradient(178deg, transparent 68%, rgb(255 200 0 / 0.75) 70% 90%, transparent 92%);
-}
-
-.mark-under-red {
-  background: linear-gradient(178deg, transparent 68%, rgb(230 60 50 / 0.6) 70% 88%, transparent 90%);
-}
-
-.mark-wavy {
-  text-decoration: underline wavy #e0483e;
+/* Линии под текстом */
+.mark-line,
+.mark-double,
+.mark-wavy,
+.mark-dotted,
+.mark-dashed {
+  text-decoration-line: underline;
+  text-decoration-color: var(--mark-c);
   text-decoration-thickness: 0.07em;
   text-underline-offset: 0.2em;
   text-decoration-skip-ink: none;
+}
+
+.mark-double {
+  text-decoration-style: double;
+  text-decoration-thickness: 0.05em;
+}
+
+.mark-wavy {
+  text-decoration-style: wavy;
+}
+
+.mark-dotted {
+  text-decoration-style: dotted;
+  text-decoration-thickness: 0.1em;
+}
+
+.mark-dashed {
+  text-decoration-style: dashed;
 }
 
 /* Шрифты. У каждого свои размер и высота строки — чтобы надписи выглядели

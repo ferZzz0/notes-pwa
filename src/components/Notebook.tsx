@@ -38,7 +38,7 @@ import {
   type RunStyle,
   type TextRange
 } from '../richText';
-import type { StickerId } from '../textStyle';
+import { markerOf, type StickerId } from '../textStyle';
 import { AddMenu } from './AddMenu';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Canvas, type Camera, type CanvasHandle, type Fixed, type Grab, type Home, type Point, type Rect } from './Canvas';
@@ -48,8 +48,8 @@ import { PageTurn } from './PageTurn';
 import { Paper, type PaperDisplay, type PaperHandle } from './Paper';
 import { Selection, type SelectionHandle } from './Selection';
 import { Settings } from './Settings';
-import { pendingRanges, TextBlock } from './TextBlock';
-import { TextToolbar } from './TextToolbar';
+import { BLEED_X, pendingRanges, STICKER_PAD_X, TextBlock } from './TextBlock';
+import { LockedToolbar, LockIcon, TextToolbar } from './TextToolbar';
 import './Notebook.css';
 
 type FlipDir = 'next' | 'prev';
@@ -136,9 +136,10 @@ const PHOTO_SHARE = { w: 0.55, h: 0.6 };
 const STICKER_SIZE = { w: 230, h: 210 };
 // Пузырёк «Вставить» стоит над пальцем, если над ним столько места (px экрана)
 const PASTE_ROOM = 90;
-// Столько ждём после касания пузырька, чтобы он успел исчезнуть с экрана, —
-// потом читаем буфер (и Safari показывает свою кнопку)
-const BUBBLE_GONE_MS = 60;
+// Столько ждём после касания пузырька (он прячется уже под пальцем), чтобы
+// экран точно успел перерисоваться, — потом читаем буфер (и Safari
+// показывает свою кнопку)
+const BUBBLE_GONE_MS = 200;
 // iPhone и iPad (iPad представляется компьютером Mac, но с сенсорным экраном):
 // читая буфер обмена, Safari сам показывает свою кнопку «Вставить», поэтому
 // своего пузырька там нет — буфер читаем, когда отпускают палец
@@ -221,8 +222,12 @@ const blurActive = () => {
 // Страница, на которой надпись или фото (левый край левее корешка — левая)
 const sideOfBlock = (b: Block): Side => (b.x < 0 ? 'left' : 'right');
 
-// Наибольшая ширина строк надписи: у левой страницы — не дальше корешка
-const maxWidthOf = (b: Block) => (b.x < 0 ? Math.max(MIN_TEXT_WIDTH, Math.min(TEXT_WIDTH, -b.x - SPINE_GAP)) : TEXT_WIDTH);
+// Наибольшая ширина строк надписи: у левой страницы — не дальше корешка;
+// своя ширина (ручка на рамке) — не шире этого предела
+const widthLimitOf = (b: Block) => (b.x < 0 ? Math.max(MIN_TEXT_WIDTH, Math.min(TEXT_WIDTH, -b.x - SPINE_GAP)) : TEXT_WIDTH);
+const maxWidthOf = (b: Block) => (b.kind !== 'image' && b.width ? Math.min(b.width, widthLimitOf(b)) : widthLimitOf(b));
+// Уже этого (px мира) надпись ручкой не сжать
+const MIN_WRAP_WIDTH = 120;
 
 // Сколько места надпись занимает на листе (мир) — с поворотом и размером
 // (TextBlock кладёт их в data-атрибуты); offset* — без них
@@ -870,6 +875,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
 
   // Печатать в надписи
   const edit = (id: string) => {
+    if (spreads[spread]?.blocks.find(b => b.id === id)?.locked) return;
     const el = blockElement(id);
     if (isEditor(el)) focusText(el);
   };
@@ -894,7 +900,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const grab = (screen: Point): Grab | null => {
     const b = selectedBlock;
     const el = b && blockElement(b.id);
-    if (!b || !el || turning) return null;
+    if (!b || !el || turning || b.locked) return null;
     const toWorld = (q: Point): Point => {
       const c = camera.current;
       return { x: (q.x - c.x) / c.scale, y: (q.y - c.y) / c.scale };
@@ -1309,12 +1315,57 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     </>
   );
 
-  // Ряд над панелью надписи или фото: слева отмена и возврат, справа —
-  // «Копировать» (галочка — скопировано)
+  // Ручка ширины на рамке надписи или стикера (просьба автора: вставленное
+  // длинное предложение растягивалось на весь лист и уже его было не
+  // сделать): тянут — меняется ширина строк, текст переносится. Пока тянут
+  // — только в DOM (max-width), в конце — в запись (width; отменяется)
+  const resizeFrom = useRef<number | null>(null);
+  const resizeWidth = (dx: number, dy: number, phase: 'start' | 'move' | 'end') => {
+    const b = selectedBlock;
+    const el = b && blockElement(b.id);
+    if (!b || !el) return;
+    const pad = 2 * (b.kind === 'sticker' ? STICKER_PAD_X : BLEED_X);
+    if (phase === 'start') {
+      resizeFrom.current = el.offsetWidth - pad;
+      return;
+    }
+    if (resizeFrom.current === null) return;
+    // Сдвиг пальца — вдоль строк надписи (она может быть повёрнута), в px мира
+    const a = ((b.rotate ?? 0) * Math.PI) / 180;
+    const along = (dx * Math.cos(a) + dy * Math.sin(a)) / (camera.current.scale * (b.scale ?? 1));
+    const width = Math.round(Math.min(widthLimitOf(b), Math.max(MIN_WRAP_WIDTH, resizeFrom.current + along)));
+    el.style.maxWidth = `${width + pad}px`;
+    selection.current?.update();
+    if (phase !== 'end') return;
+    resizeFrom.current = null;
+    patchBlock(b.id, { width });
+  };
+
+  // Замок на выбранной надписи, стикере или фото (просьба автора): закрытую
+  // нельзя двигать, править и удалять — панель вместо кнопок пишет
+  // «Закреплено». Закрыть и открыть — обычное действие (его можно отменить)
+  const toggleLock = () => {
+    const b = selectedBlock;
+    if (!b) return;
+    if (!b.locked) blurActive();
+    patchBlock(b.id, { locked: b.locked ? undefined : true });
+  };
+
+  // Ряд над панелью надписи или фото: слева отмена и возврат, справа — замок
+  // и «Копировать» (галочка — скопировано)
   const toolbarTop = (
     <>
       <div>{historyButtons}</div>
       <div>
+        <button
+          type="button"
+          className={selectedBlock?.locked ? 'round-button is-locked' : 'round-button'}
+          aria-label={selectedBlock?.locked ? 'Открыть замок' : 'Закрыть на замок'}
+          aria-pressed={!!selectedBlock?.locked}
+          onClick={toggleLock}
+        >
+          <LockIcon locked={!!selectedBlock?.locked} />
+        </button>
         <button type="button" className="round-button" aria-label={copied ? 'Скопировано' : 'Копировать'} onClick={copySelected}>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             {copied ? <path d="M5 12.5l4.5 4.5L19 7.5" /> : <path d="M8.5 8.5h10v11h-10zM15.5 8.5v-4h-10v11h3" />}
@@ -1449,6 +1500,16 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             // У верха экрана — под пальцем, а не над ним
             className={`paste-bubble${pasteMenu.screen.y < PASTE_ROOM ? ' is-below' : ''}`}
             style={{ left: `clamp(70px, ${pasteMenu.screen.x}px, calc(100% - 70px))`, top: pasteMenu.screen.y }}
+            // Пузырёк исчезает уже под пальцем, а буфер читаем после
+            // отпускания и паузы: пока Safari показывает свою «Вставить»,
+            // страница не перерисовывается, и наш пузырёк оставался рядом с
+            // ней (две кнопки — жалоба автора). Таймер короче секунды Safari
+            // ещё считает ответом на касание
+            onPointerDown={e => {
+              // Прозрачностью, а не visibility: скрытый так элемент не ловит
+              // касание, и «клик» доставался подложке — вставки не было
+              e.currentTarget.style.opacity = '0';
+            }}
             onClick={() => {
               const m = pasteMenu;
               flushSync(() => setPasteMenu(null));
@@ -1456,11 +1517,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
                 void insertPasted(m.data, m.world);
                 return;
               }
-              // Буфер — чуть позже, когда пузырька уже нет на экране: пока
-              // Safari показывает свою «Вставить», страница не
-              // перерисовывается, и наш пузырёк оставался рядом с ней (две
-              // кнопки — жалоба автора). Таймер короче секунды Safari ещё
-              // считает ответом на касание
               window.setTimeout(() => void pasteAt(m.world), BUBBLE_GONE_MS);
             }}
           >
@@ -1488,8 +1544,15 @@ export function Notebook({ source, onMenu, onDay }: Props) {
 
       {selectedBlock && (
         <>
-          <Selection ref={selection} block={selectedBlock} camera={() => camera.current} />
-          {selectedBlock.kind === 'image' ? (
+          <Selection
+            ref={selection}
+            block={selectedBlock}
+            camera={() => camera.current}
+            onResize={selectedBlock.kind !== 'image' && !selectedBlock.locked ? resizeWidth : undefined}
+          />
+          {selectedBlock.locked ? (
+            <LockedToolbar history={toolbarTop} onDone={deselect} onHeight={setToolbarHeight} />
+          ) : selectedBlock.kind === 'image' ? (
             <ImageToolbar
               block={selectedBlock}
               onPatch={patch => patchBlock(selectedBlock.id, patch)}
@@ -1511,6 +1574,14 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               onFont={font => restyle(selectedBlock.id, { font })}
               onEffect={effect => restyle(selectedBlock.id, { effect })}
               onMarker={marker => restyle(selectedBlock.id, { marker })}
+              onMarkerColor={(markerColor, final) =>
+                restyle(
+                  selectedBlock.id,
+                  // Цвет выбрали без формы — маркер во всю высоту
+                  markerOf(rangeStyle?.marker ?? selectedBlock.marker) === 'none' ? { markerColor, marker: 'highlight' } : { markerColor },
+                  final
+                )
+              }
               onCapture={captureRange}
               rangeStyle={rangeStyle}
               history={toolbarTop}
@@ -1534,6 +1605,14 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         <>
           <div className="bottom-center">
             {historyButtons}
+            {/* Лист — в стартовое положение: начало листа, обычный размер (просьба автора) */}
+            <button type="button" className="round-button" aria-label="К началу листа" onClick={() => void canvas.current?.goHome()}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="6.5" />
+                <circle cx="12" cy="12" r="1.6" style={{ fill: 'currentColor' }} />
+                <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" />
+              </svg>
+            </button>
             <button type="button" className="round-button" aria-label="Главное меню" onClick={onMenu}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 5.5h6v6H4zM14 5.5h6v6h-6zM4 15.5h6v4H4zM14 15.5h6v4h-6z" />

@@ -23,6 +23,26 @@
   touch-action: pan-x pan-y;
 }
 
+/* Закрытая на замок вещь: вместо кнопок — надпись «Закреплено» */
+.toolbar-locked-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--ink);
+  font: 600 15px/1 var(--ui-font);
+}
+
+.toolbar-locked-note svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* «Отменить» / «Вернуть» над панелью, у её левого края (Notebook) — видны и
    пока надпись или фото редактируют; списки панели открываются поверх них */
 .toolbar-history {
@@ -34,6 +54,12 @@
   justify-content: space-between;
   /* Между кнопками — касание листа */
   pointer-events: none;
+}
+
+/* Замок закрыт — кнопка подкрашена основным цветом */
+.toolbar-history .round-button.is-locked {
+  background: color-mix(in srgb, var(--ink) 16%, var(--paper));
+  color: var(--ink);
 }
 
 .toolbar-history > * {
@@ -268,6 +294,57 @@
 /* Стикер: формы, цвета, слой */
 /* Вертикально — формы, палитра и слой друг под другом; горизонтально
    (экран низкий) — формы и палитра рядом */
+/* Маркер: формы образцами на тексте надписи и палитра цвета; в
+   горизонтали — рядом */
+.toolbar-marker {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(340px, calc(100vw - 24px));
+  padding: 10px;
+}
+
+@media (orientation: landscape) {
+  .toolbar-marker {
+    grid-template-columns: auto auto;
+    align-items: center;
+    width: max-content;
+  }
+}
+
+.toolbar-marker-shapes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 100%;
+}
+
+.toolbar-marker-shapes button {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px 4px 4px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.toolbar-marker-shapes button.is-active {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.toolbar-marker-sample {
+  color: var(--ink-color);
+  font-size: 24px;
+  line-height: 32px;
+}
+
+.toolbar-marker-shapes small {
+  font: 11px/1.2 var(--ui-font);
+  white-space: nowrap;
+}
+
 .toolbar-sticker {
   display: grid;
   justify-items: center;

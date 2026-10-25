@@ -49,6 +49,9 @@
   animation: settings-in 0.18s ease-out;
 }
 
+/* Меню «+» — цветом приложения (--ink, настройки главного меню), а не
+   оранжевым (просьба автора) */
+
 /* «Вставить скопированное» — над «Фото», с подписью, что именно */
 .add-paste {
   display: flex;
@@ -57,7 +60,7 @@
   width: 100%;
   margin-bottom: 8px;
   padding: 8px 14px;
-  border: 1.5px dashed var(--accent);
+  border: 1.5px dashed var(--ink);
   border-radius: 10px;
   background: transparent;
   color: var(--text);
@@ -70,7 +73,7 @@
   width: 22px;
   height: 22px;
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--ink);
   stroke-width: 1.8;
   stroke-linejoin: round;
 }
@@ -95,8 +98,8 @@
   padding: 10px 14px;
   border: none;
   border-radius: 10px;
-  background: var(--accent);
-  color: var(--accent-text);
+  background: var(--ink);
+  color: #fff;
   font-weight: 600;
 }
 

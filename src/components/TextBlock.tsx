@@ -21,7 +21,7 @@ import './TextBlock.css';
 export const BLEED_X = 12;
 export const BLEED_Y = 6;
 // У стикера поля шире — это сам стикер вокруг текста (TextBlock.css: .is-sticker)
-const STICKER_PAD_X = 36;
+export const STICKER_PAD_X = 36;
 // Пустая надпись всё равно шириной с короткое слово — есть куда поставить
 // курсор; стикер — не меньше записки
 const MIN_WIDTH = 140;
@@ -78,7 +78,7 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
   const maxWidth = width + 2 * (sticker ? STICKER_PAD_X : BLEED_X);
   const minWidth = sticker ? STICKER_MIN_WIDTH : MIN_WIDTH;
   const runs = runsOf(block);
-  const key = JSON.stringify([runs, block.marker ?? null]);
+  const key = JSON.stringify([runs, block.marker ?? null, block.markerColor ?? null]);
 
   // Содержимое — из кусков, если они изменились не от набора
   useLayoutEffect(() => {
@@ -87,7 +87,7 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
     const focused = document.activeElement === el;
     const before = focused ? getRange(el) : null;
     shown.current = key;
-    renderRuns(el, runs, block.marker);
+    renderRuns(el, runs, block.marker, block.markerColor);
     const range = pendingRanges.get(block.id) ?? before;
     pendingRanges.delete(block.id);
     if (focused && range) setRange(el, range);
@@ -133,9 +133,9 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
         {shape}
         {runs.map((r, i) => {
           if (!needsSpan(r, block.marker)) return r.t;
-          const look = runLook(r, block.marker);
+          const look = runLook(r, block.marker, block.markerColor);
           return (
-            <span key={i} className={look.className} style={look.color ? ({ '--ink-color': look.color } as CSSProperties) : undefined}>
+            <span key={i} className={look.className} style={{ '--ink-color': look.color, '--mark': look.mark } as CSSProperties}>
               {r.t}
             </span>
           );
@@ -152,10 +152,10 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
     const next = parseRuns(el);
     if (needsRebuild(el)) {
       const range = getRange(el);
-      renderRuns(el, next, block.marker);
+      renderRuns(el, next, block.marker, block.markerColor);
       if (range) setRange(el, range);
     }
-    shown.current = JSON.stringify([next.length > 0 ? next : [], block.marker ?? null]);
+    shown.current = JSON.stringify([next.length > 0 ? next : [], block.marker ?? null, block.markerColor ?? null]);
     onContent?.(block.id, next);
     onInput?.(el);
   };

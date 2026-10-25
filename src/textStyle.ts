@@ -41,25 +41,49 @@ export const EFFECTS = [
 
 // Маркер на готовом тексте — готовые варианты (TextBlock.css: .mark-*):
 // выделение цветным маркером и подчёркивания. Рисуется построчно, под буквами
+// Маркер на тексте: форма (классы .mark-* — TextBlock.css) и цвет —
+// любой, с круговой палитры (просьба автора: «подробное изменение цвета и
+// формы»). Раньше были готовые маркеры с цветом в имени — они ещё
+// встречаются в записях и переводятся в форму и цвет (OLD_MARKERS)
 export const MARKERS = [
   { id: 'none', label: 'Без маркера' },
-  { id: 'yellow', label: 'Жёлтый маркер' },
-  { id: 'pink', label: 'Розовый маркер' },
-  { id: 'green', label: 'Зелёный маркер' },
-  { id: 'blue', label: 'Голубой маркер' },
-  { id: 'under-yellow', label: 'Подчеркнуть жёлтым' },
-  { id: 'under-red', label: 'Подчеркнуть красным' },
-  { id: 'wavy', label: 'Подчеркнуть волной' }
+  { id: 'highlight', label: 'Маркер' },
+  { id: 'half', label: 'Половина' },
+  { id: 'under', label: 'Полоса снизу' },
+  { id: 'line', label: 'Линия' },
+  { id: 'double', label: 'Две линии' },
+  { id: 'wavy', label: 'Волна' },
+  { id: 'dotted', label: 'Точки' },
+  { id: 'dashed', label: 'Пунктир' }
 ] as const;
+
+// Цвет маркера, если его не выбирали
+export const DEFAULT_MARKER_COLOR = '#ffd400';
+const OLD_MARKERS: Record<string, [string, string]> = {
+  yellow: ['highlight', '#ffdd00'],
+  pink: ['highlight', '#ff6eb4'],
+  green: ['highlight', '#5adc78'],
+  blue: ['highlight', '#50beff'],
+  'under-yellow': ['under', '#ffc800'],
+  'under-red': ['under', '#e63c32'],
+  wavy: ['wavy', '#e0483e']
+};
 
 export type EffectId = (typeof EFFECTS)[number]['id'];
 export type MarkerId = (typeof MARKERS)[number]['id'];
 
 // Незнакомое значение — без эффекта / без маркера
 export const effectOf = (id?: string): EffectId => EFFECTS.find(e => e.id === id)?.id ?? 'none';
-export const markerOf = (id?: string): MarkerId => MARKERS.find(m => m.id === id)?.id ?? 'none';
+export const markerOf = (id?: string): MarkerId => {
+  const old = id ? OLD_MARKERS[id]?.[0] : undefined;
+  return MARKERS.find(m => m.id === (old ?? id))?.id ?? 'none';
+};
 
 const HEX = /^#[0-9a-f]{6}$/i;
+
+// Цвет маркера: выбранный, а у старого готового маркера — его цвет
+export const markerColorOf = (id?: string, color?: string): string =>
+  color && HEX.test(color) ? color : (id && OLD_MARKERS[id]?.[1]) || DEFAULT_MARKER_COLOR;
 
 // Цвет надписи для CSS; незнакомое значение — обычные чернила
 export const inkColor = (color?: string): string =>

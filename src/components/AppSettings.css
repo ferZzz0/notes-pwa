@@ -56,12 +56,17 @@
   flex: none;
 }
 
+/* Пример — на бумаге, как на листе (и в тёмной теме) */
 .app-settings-sample {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
   min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px rgb(60 40 10 / 0.08);
 }
 
 .app-settings-sample-hand {

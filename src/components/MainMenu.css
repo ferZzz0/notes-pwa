@@ -131,6 +131,26 @@
   overflow: hidden;
 }
 
+/* Цвет обложки — кружки под названием, пока его правят */
+.diary-colors {
+  display: grid;
+  grid-template-columns: repeat(4, 18px);
+  gap: 6px;
+}
+
+.diary-colors button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid rgb(255 255 255 / 0.7);
+  border-radius: 50%;
+}
+
+.diary-colors button.is-active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.35);
+}
+
 .diary-delete {
   padding: 6px 10px;
   border: none;

@@ -6,14 +6,14 @@
 // его содержимое, прочитать обратно, найти и поставить выделение в символах.
 
 import type { Block } from './notes';
-import { effectOf, fontClass, inkColor, markerOf, type EffectId, type FontId, type MarkerId } from './textStyle';
+import { effectOf, fontClass, inkColor, markerColorOf, markerOf, type EffectId, type FontId, type MarkerId } from './textStyle';
 
-export type RunStyle = { color?: string; font?: FontId; effect?: EffectId; marker?: MarkerId };
+export type RunStyle = { color?: string; font?: FontId; effect?: EffectId; marker?: MarkerId; markerColor?: string };
 export type Run = RunStyle & { t: string };
 // Выделение в надписи: символы [start, end)
 export type TextRange = { start: number; end: number };
 
-const KEYS = ['color', 'font', 'effect', 'marker'] as const;
+const KEYS = ['color', 'font', 'effect', 'marker', 'markerColor'] as const;
 
 const hasStyle = (r: RunStyle) => KEYS.some(k => r[k] !== undefined);
 const sameStyle = (a: RunStyle, b: RunStyle) => KEYS.every(k => a[k] === b[k]);
@@ -97,14 +97,20 @@ export function stripStyle(runs: Run[], keys: (keyof RunStyle)[]): Run[] {
 // --- Вид кусков ---
 
 // Классы и встроенный стиль куска. Маркер всей надписи рисуется у каждого
-// куска (маркер — фон строчного span, он должен быть у каждого)
-export function runLook(r: RunStyle, blockMarker?: string): { className: string; color?: string } {
+// куска (маркер — фон строчного span, он должен быть у каждого); его цвет —
+// mark (CSS --mark): свой у куска или у всей надписи
+export function runLook(r: RunStyle, blockMarker?: string, blockMarkerColor?: string): { className: string; color?: string; mark?: string } {
   const classes = ['run'];
   if (r.font) classes.push(fontClass(r.font));
   if (r.effect && effectOf(r.effect) !== 'none') classes.push(`effect-${r.effect}`);
-  const marker = markerOf(r.marker ?? blockMarker);
+  const markerId = r.marker ?? blockMarker;
+  const marker = markerOf(markerId);
   if (marker !== 'none') classes.push(`mark-${marker}`);
-  return { className: classes.join(' '), color: r.color ? inkColor(r.color) : undefined };
+  return {
+    className: classes.join(' '),
+    color: r.color ? inkColor(r.color) : undefined,
+    mark: marker !== 'none' ? markerColorOf(markerId, r.markerColor ?? blockMarkerColor) : undefined
+  };
 }
 
 // Нужен ли куску свой span (иначе — просто текст)
@@ -114,7 +120,7 @@ export const needsSpan = (r: RunStyle, blockMarker?: string) => hasStyle(r) || m
 // data-атрибутах (по ним содержимое читается обратно); если текст кончается
 // переводом строки, в конце — «пустой» <br>, иначе последней пустой строки
 // не видно
-export function renderRuns(el: HTMLElement, runs: Run[], blockMarker?: string): void {
+export function renderRuns(el: HTMLElement, runs: Run[], blockMarker?: string, blockMarkerColor?: string): void {
   const nodes: Node[] = [];
   for (const r of runs) {
     if (!needsSpan(r, blockMarker)) {
@@ -122,9 +128,10 @@ export function renderRuns(el: HTMLElement, runs: Run[], blockMarker?: string): 
       continue;
     }
     const span = document.createElement('span');
-    const look = runLook(r, blockMarker);
+    const look = runLook(r, blockMarker, blockMarkerColor);
     span.className = look.className;
     if (look.color) span.style.setProperty('--ink-color', look.color);
+    if (look.mark) span.style.setProperty('--mark', look.mark);
     for (const k of KEYS) if (r[k] !== undefined) span.dataset[k] = String(r[k]);
     span.textContent = r.t;
     nodes.push(span);

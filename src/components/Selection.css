@@ -18,3 +18,57 @@
   border-radius: 8px;
   will-change: transform;
 }
+
+/* Ручка ширины надписи — на правом краю рамки, посередине: потянуть влево
+   — уже (текст переносится), вправо — шире. Её касания — её, не полотна */
+.selection-grip {
+  position: absolute;
+  top: 50%;
+  right: -16px;
+  width: 32px;
+  height: 44px;
+  margin-top: -22px;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.selection-grip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 26px;
+  margin: -13px 0 0 -4px;
+  border-radius: 4px;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1.5px var(--ink-muted),
+    0 1px 4px rgb(0 0 0 / 0.2);
+}
+
+/* Закрыта на замок — значок замка в углу рамки */
+.selection-lock {
+  position: absolute;
+  top: -13px;
+  right: -13px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+  color: var(--ink);
+}
+
+.selection-lock svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

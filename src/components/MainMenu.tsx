@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
-import type { NotebookInfo } from '../notes';
+import { COVER_COLORS, type NotebookInfo } from '../notes';
 import { Calendar } from './Calendar';
 import { ConfirmDialog } from './ConfirmDialog';
 import { AppSettings } from './AppSettings';
@@ -14,6 +14,8 @@ type Props = {
   // Новый дневник; возвращает его id — сразу даём его назвать
   onCreate: () => string;
   onRename: (id: string, name: string) => void;
+  // Другой цвет обложки
+  onRecolor: (id: string, color: string) => void;
   onDelete: (id: string) => void;
 };
 
@@ -38,7 +40,7 @@ const focusName = (id: string) => {
 // Главное меню: дневники (обложки с именами; новый, переименовать,
 // удалить) и календарь — касание по дню открывает лист этого дня.
 // Горизонтально — две колонки, вертикально — одна под другой.
-export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onDelete }: Props) {
+export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecolor, onDelete }: Props) {
   // Дневник, который сейчас называют, и тот, который хотят удалить
   const [editing, setEditing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<NotebookInfo | null>(null);
@@ -101,6 +103,22 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onDelet
                       }}
                       onBlur={e => finish(n, e.currentTarget.value)}
                     />
+                    {/* Цвет обложки (просьба автора); нажатие не закрывает поле названия */}
+                    <div className="diary-colors" role="radiogroup" aria-label="Цвет обложки">
+                      {COVER_COLORS.map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          role="radio"
+                          aria-checked={c === n.color}
+                          aria-label={`Цвет ${c}`}
+                          className={c === n.color ? 'is-active' : undefined}
+                          style={{ background: c }}
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => onRecolor(n.id, c)}
+                        />
+                      ))}
+                    </div>
                     {notebooks.length > 1 && (
                       <button
                         type="button"
