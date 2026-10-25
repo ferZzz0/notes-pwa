@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { deleteImage, importImage } from '../images';
+import { importImage, keepImages } from '../images';
 import {
+  allImageIds,
   isBlank,
   loadPage,
   loadSpreads,
@@ -15,6 +16,7 @@ import {
   spreadOf,
   type Block,
   type Source,
+  type Spread,
   type Spreads,
   type TextStyle
 } from '../notes';
@@ -100,6 +102,14 @@ const PHOTO_SHARE = { w: 0.55, h: 0.6 };
 const STICKER_SIZE = { w: 230, h: 210 };
 // Пузырёк «Вставить» стоит над пальцем, если над ним столько места (px экрана)
 const PASTE_ROOM = 90;
+// iPhone и iPad (iPad представляется компьютером Mac, но с сенсорным экраном):
+// читая буфер обмена, Safari сам показывает свою кнопку «Вставить», так что
+// своего пузырька там нет — иначе кнопок две
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// «Отменить»: столько последних действий помним; набор в одной надписи с
+// паузами короче MERGE_MS — одно действие
+const HISTORY_SIZE = 100;
+const MERGE_MS = 1500;
 
 const dateFormat = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long' });
 const dayFormat = new Intl.DateTimeFormat('ru', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -113,6 +123,58 @@ function formatDay(iso: string): string {
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   return dateFormat.format(new Date(y, m - 1, d));
+}
+
+// Дни с a по b (ГГГГ-ММ-ДД): «25 октября», «с 25 по 27 октября»,
+// «с 30 октября по 2 ноября», в разные годы — с годами
+function formatDays(a: string, b: string): string {
+  if (a === b) return formatDate(a);
+  const [ya, ma, da] = a.split('-').map(Number);
+  const [yb, mb] = b.split('-').map(Number);
+  if (ya !== yb) return `с ${formatDate(a)} ${ya} по ${formatDate(b)} ${yb}`;
+  return ma === mb ? `с ${da} по ${formatDate(b)}` : `с ${formatDate(a)} по ${formatDate(b)}`;
+}
+
+// Дата страницы side разворота: с первого по последний день, когда на ней
+// что-то появлялось или менялось (day / edited у блоков; у старых записей —
+// день разворота). Пустая страница — без даты
+function pageDate(sp: Spread | undefined, side: Side): string | null {
+  let first = '';
+  let last = '';
+  for (const b of sp?.blocks ?? []) {
+    if (b.x < 0 !== (side === 'left') || isBlank(b)) continue;
+    const from = b.day ?? sp?.created;
+    if (!from) continue;
+    const to = b.edited ?? from;
+    if (!first || from < first) first = from;
+    if (to > last) last = to;
+  }
+  return first ? formatDays(first, last) : null;
+}
+
+// Блок без дат — для сравнения: изменилось ли в нём что-то, кроме них
+const undated = (b: Block) => JSON.stringify({ ...b, day: undefined, edited: undefined });
+
+// Даты блоков перед записью: новый или изменённый блок — день, когда
+// появился (day), и сегодня как день последнего изменения (edited, если не
+// тот же); остальные — как в прежней записи old
+function stampDates(next: Spreads, old: Spreads): Spreads {
+  const today = localDate();
+  const before = new Map<string, { block: Block; created?: string }>();
+  for (const sp of Object.values(old)) for (const block of sp.blocks) before.set(block.id, { block, created: sp.created });
+  const out: Spreads = {};
+  for (const [key, sp] of Object.entries(next)) {
+    const blocks = sp.blocks.map(b => {
+      const o = before.get(b.id);
+      if (o && undated(o.block) === undated(b)) {
+        return b.day === o.block.day && b.edited === o.block.edited ? b : { ...b, day: o.block.day, edited: o.block.edited };
+      }
+      const day = o?.block.day ?? b.day ?? o?.created ?? today;
+      return { ...b, day, edited: day < today ? today : undefined };
+    });
+    out[Number(key)] = { ...sp, blocks };
+  }
+  return out;
 }
 
 const blurActive = () => {
@@ -224,6 +286,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Пузырёк «Вставить» после долгого нажатия: куда вставлять (мир) и где он
   // (экран)
   const [pasteMenu, setPasteMenu] = useState<{ world: Point; screen: Point } | null>(null);
+  // iPhone: куда вставить, когда отпустят палец после долгого нажатия
+  const pasteOnRelease = useRef<Point | null>(null);
   // Открытая страница; на развороте — любая из двух его страниц
   const [page, setPage] = useState(() => loadPage(source));
   const portrait = usePortrait();
@@ -252,10 +316,73 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   );
   const selectedBlock = turning ? undefined : visibleBlocks.find(b => b.id === selected);
 
-  const commit = (next: Spreads) => {
-    setSpreads(next);
-    saveSpreads(source, next);
+  // То, что сейчас записано в память, — от него считаются история и даты
+  const saved = useRef<{ spreads: Spreads; json: string } | null>(null);
+  saved.current ??= { spreads, json: JSON.stringify(spreads) };
+  // «Отменить» / «Вернуть»: записи до и после действий (JSON) — только на
+  // открытом развороте (перелистнули — история с начала, иначе отмена
+  // меняла бы невидимую страницу). key и at — последнее действие: набор в
+  // одной надписи подряд сливается в одно
+  const history = useRef({ spread, past: [] as string[], future: [] as string[], key: '', at: 0 });
+  if (history.current.spread !== spread) history.current = { spread, past: [], future: [], key: '', at: 0 };
+
+  // Записать в память. Новые и изменённые блоки получают даты (stampDates),
+  // прежняя запись уходит в историю; key — что за действие (одинаковые
+  // подряд, с паузами короче MERGE_MS, — одно). Возвращает то, что записано
+  const persist = (next: Spreads, key = ''): Spreads => {
+    const prev = saved.current!;
+    const stamped = stampDates(next, prev.spreads);
+    const json = JSON.stringify(stamped);
+    if (json === prev.json) return prev.spreads;
+    const h = history.current;
+    const now = Date.now();
+    if (!key || key !== h.key || now - h.at > MERGE_MS) {
+      h.past.push(prev.json);
+      if (h.past.length > HISTORY_SIZE) h.past.shift();
+    }
+    h.key = key;
+    h.at = now;
+    h.future = [];
+    saved.current = { spreads: stamped, json };
+    saveSpreads(source, stamped);
+    return stamped;
   };
+
+  const commit = (next: Spreads, key?: string) => setSpreads(persist(next, key));
+
+  // Вернуть запись из истории (отмена / возврат)
+  const restore = (json: string) => {
+    const next = JSON.parse(json) as Spreads;
+    saved.current = { spreads: next, json };
+    history.current.key = '';
+    saveSpreads(source, next);
+    setSpreads(next);
+  };
+
+  const undo = () => {
+    deselect();
+    const h = history.current;
+    const prev = h.past.pop();
+    if (prev === undefined) return;
+    h.future.push(saved.current!.json);
+    restore(prev);
+  };
+
+  const redo = () => {
+    deselect();
+    const h = history.current;
+    const next = h.future.pop();
+    if (next === undefined) return;
+    h.past.push(saved.current!.json);
+    restore(next);
+  };
+
+  // Картинки убранных фото стираются не сразу (удаление можно отменить), а
+  // при следующем открытии тетради — все, которых нет ни на одном листе
+  useEffect(() => {
+    const ids = allImageIds();
+    if (ids) void keepImages(ids);
+  }, []);
 
   // Набранное в надписи — её куски (текст — их сумма)
   const setRuns = (id: string, runs: Run[]) => {
@@ -263,16 +390,14 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     if (!cur) return;
     const text = runsText(runs);
     const blocks = cur.blocks.map(b => (b.id === id ? { ...b, text, runs: compactRuns(runs) } : b));
-    commit({ ...spreads, [spread]: { created: cur.created ?? (text ? localDate() : undefined), blocks } });
+    commit({ ...spreads, [spread]: { created: cur.created ?? (text ? localDate() : undefined), blocks } }, `text:${id}`);
   };
 
-  // Убрать надпись, стикер или фото с листа (у фото — и саму картинку);
-  // пустой разворот не храним
+  // Убрать надпись, стикер или фото с листа (картинку фото — потом, см.
+  // keepImages); пустой разворот не храним
   const removeBlock = (id: string) => {
     const cur = spreads[spread];
     if (!cur) return;
-    const gone = cur.blocks.find(b => b.id === id);
-    if (gone?.image) void deleteImage(gone.image);
     const blocks = cur.blocks.filter(b => b.id !== id);
     const next = { ...spreads };
     if (blocks.some(b => !isBlank(b))) next[spread] = { ...cur, blocks };
@@ -300,9 +425,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       const b = cur?.blocks.find(x => x.id === id);
       if (!cur || !b) return prev;
       const rest = cur.blocks.filter(x => x.id !== id);
-      const next = { ...prev, [spread]: { ...cur, blocks: dir === 'up' ? [...rest, b] : [b, ...rest] } };
-      saveSpreads(source, next);
-      return next;
+      return persist({ ...prev, [spread]: { ...cur, blocks: dir === 'up' ? [...rest, b] : [b, ...rest] } });
     });
 
   // Добавить на открытый разворот (стикер или фото) и выбрать
@@ -384,7 +507,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
 
   // «Вставить» после долгого нажатия: картинка из буфера обмена — фото,
   // текст — надпись, в точку нажатия p. Буфер читаем прямо в нажатии на
-  // кнопку — иначе браузер не даст (iOS ещё покажет свою кнопку «Вставить»)
+  // кнопку (на iPhone — в отпускании пальца) — иначе браузер не даст; iOS
+  // ещё покажет свою кнопку «Вставить», если скопировано не здесь
   const pasteAt = async (p: Point) => {
     setPasteMenu(null);
     const clip = navigator.clipboard;
@@ -411,21 +535,14 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     }
   };
 
-  // Изменить надпись открытого разворота. Пока её тащат пальцами — без записи в
-  // память (save = false), в конце — saveNow
+  // Изменить надпись открытого разворота. Пока ведут пальцем по палитре —
+  // без записи в память (save = false), в конце — с записью
   const patchBlock = (id: string, patch: Partial<Block>, save = true) =>
     setSpreads(prev => {
       const cur = prev[spread];
       if (!cur) return prev;
       const next = { ...prev, [spread]: { ...cur, blocks: cur.blocks.map(b => (b.id === id ? { ...b, ...patch } : b)) } };
-      if (save) saveSpreads(source, next);
-      return next;
-    });
-
-  const saveNow = () =>
-    setSpreads(prev => {
-      saveSpreads(source, prev);
-      return prev;
+      return save ? persist(next) : next;
     });
 
   // Куда можно поставить надпись шириной w (текст, мир) с левым верхним углом
@@ -463,8 +580,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         nb = { ...b, ...whole, runs: compactRuns(stripStyle(runsOf(b), keys)) };
       }
       const next = { ...prev, [spread]: { ...cur, blocks: cur.blocks.map(x => (x.id === id ? nb : x)) } };
-      if (save) saveSpreads(source, next);
-      return next;
+      return save ? persist(next) : next;
     });
     // Выделение вернётся после того, как надпись построится заново
     if (range) pendingRanges.set(id, range);
@@ -539,10 +655,32 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     // Поля вокруг текста: от (x, y) блока до угла его рамки (у фото — 0)
     const padX = b.x - el.offsetLeft;
     const padY = b.y - el.offsetTop;
+    // Пока жест идёт, двигается только сам элемент (и форма стикера под ним) —
+    // прямо в DOM, без перерисовки всей тетради на каждое движение пальца (на
+    // iPhone их до 120 в секунду — перенос дёргался); в состояние и память —
+    // один раз, в конце
+    const decor = el.previousElementSibling instanceof HTMLElement && el.previousElementSibling.classList.contains('text-decor') ? el.previousElementSibling : null;
+    let moved: Partial<Block> | null = null;
+    const show = (m: Pick<Block, 'x' | 'y' | 'rotate' | 'scale'>) => {
+      const rotate = m.rotate ?? 0;
+      const scale = m.scale ?? 1;
+      for (const node of decor ? [el, decor] : [el]) {
+        node.style.left = `${m.x}px`;
+        node.style.top = `${m.y}px`;
+        node.style.transform = rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : '';
+      }
+      // По ним меряют место на листе и ставят рамку
+      if (rotate) el.dataset.rotate = String(rotate);
+      else delete el.dataset.rotate;
+      if (scale !== 1) el.dataset.scale = String(scale);
+      else delete el.dataset.scale;
+      selection.current?.update();
+    };
     // Надпись и пальцы (мир), когда жест начался или пальцев стало больше/меньше
     let base: { pts: Point[]; block: Block } | null = null;
     const begin = (pts: Point[]) => {
-      base = { pts: pts.map(toWorld), block: spreadsRef.current[spread]?.blocks.find(x => x.id === b.id) ?? b };
+      const now = spreadsRef.current[spread]?.blocks.find(x => x.id === b.id) ?? b;
+      base = { pts: pts.map(toWorld), block: { ...now, ...moved } };
     };
     return {
       begin,
@@ -573,9 +711,13 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         const cx = to.x + k * (dx * Math.cos(t) - dy * Math.sin(t));
         const cy = to.y + k * (dx * Math.sin(t) + dy * Math.cos(t));
         const pos = place(w - 2 * padX, cx - w / 2 + padX, cy - h / 2 + padY);
-        patchBlock(b.id, { ...pos, rotate: rotate || undefined, scale: scale !== 1 ? scale : undefined }, false);
+        moved = { ...pos, rotate: rotate || undefined, scale: scale !== 1 ? scale : undefined };
+        show({ ...pos, rotate, scale });
       },
-      end: saveNow
+      end: () => {
+        if (moved) patchBlock(b.id, moved);
+        moved = null;
+      }
     };
   };
 
@@ -600,11 +742,21 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     edit(block.id);
   };
 
-  // Долгое нажатие на пустое место листа — пузырёк «Вставить»
-  const onLongPress = (p: Point, screen: Point) => {
+  // Долгое нажатие на пустое место листа — пузырёк «Вставить». На iPhone
+  // своего пузырька нет: буфер читаем, как только палец отпустят, и Safari
+  // покажет свою кнопку «Вставить» (одну)
+  const onLongPress = (p: Point, screen: Point, touch: boolean) => {
+    pasteOnRelease.current = null;
     if (turning || blockAt(p)) return;
     deselect();
-    setPasteMenu({ world: p, screen });
+    if (IOS && touch) pasteOnRelease.current = p;
+    else setPasteMenu({ world: p, screen });
+  };
+
+  const onLongPressEnd = () => {
+    const p = pasteOnRelease.current;
+    pasteOnRelease.current = null;
+    if (p) void pasteAt(p);
   };
 
   // Повернули экран — пузырёк уже не там, где нажимали
@@ -783,10 +935,18 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     onDay(dir === 'next' ? 1 : -1);
   };
 
-  // Стрелки и PageUp/PageDown на клавиатуре, когда не печатаем
+  // Стрелки и PageUp/PageDown на клавиатуре, когда не печатаем; Ctrl/⌘+Z —
+  // отменить, Ctrl/⌘+Shift+Z и Ctrl+Y — вернуть (в надписи — её собственные)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]:not([contenteditable="false"])')) return;
+      if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyZ' || e.code === 'KeyY')) {
+        e.preventDefault();
+        if (turning) return;
+        if (e.code === 'KeyY' || e.shiftKey) redo();
+        else undo();
+        return;
+      }
       if (e.key === 'ArrowRight' || e.key === 'PageDown') turn('next');
       else if (e.key === 'ArrowLeft' || e.key === 'PageUp') turn('prev');
     };
@@ -797,8 +957,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Под переворачиваемым листом со стороны, откуда листаем, — разворот, куда листаем
   const underLeft = flip?.dir === 'prev' ? flip.to : spread;
   const underRight = flip?.dir === 'next' ? flip.to : spread;
-  // Дата разворота — на правой странице; на одной левой странице — на ней
-  const dateSide: Side = display === 'left' ? 'left' : 'right';
 
   // Сторона разворота; надписи на ней — только «картинкой», пока лист
   // перелистывается, а так они в своём слое (ниже)
@@ -807,8 +965,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       spread={s}
       side={sd}
       blocks={flip ? (spreads[s]?.blocks ?? []) : []}
-      created={spreads[s]?.created}
-      showDate={sd === dateSide}
+      date={pageDate(spreads[s], sd)}
       day={dayDate}
     />
   );
@@ -841,6 +998,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         onTap={onTap}
         onDoubleTap={onDoubleTap}
         onLongPress={onLongPress}
+        onLongPressEnd={onLongPressEnd}
         grab={grab}
       >
         {display !== 'right' && pageSide(underLeft, 'left')}
@@ -966,6 +1124,18 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       {!turning && !selectedBlock && (
         <>
           <div className="bottom-center">
+            <button type="button" className="round-button" aria-label="Отменить" disabled={history.current.past.length === 0} onClick={undo}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 14 4 9l5-5" />
+                <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+              </svg>
+            </button>
+            <button type="button" className="round-button" aria-label="Вернуть" disabled={history.current.future.length === 0} onClick={redo}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m15 14 5-5-5-5" />
+                <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+              </svg>
+            </button>
             <button type="button" className="round-button" aria-label="Главное меню" onClick={onMenu}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 5.5h6v6H4zM14 5.5h6v6h-6zM4 15.5h6v4H4zM14 15.5h6v4h-6z" />
@@ -1011,8 +1181,8 @@ type PageSideProps = {
   side: Side;
   // Надписи «картинкой» (пока лист перелистывается); иначе пусто
   blocks: Block[];
-  created?: string;
-  showDate: boolean;
+  // Дата страницы (pageDate); null — пустая, без даты
+  date: string | null;
   // Лист дня (ГГГГ-ММ-ДД): вместо номера страницы — дата
   day: string | null;
 };
@@ -1020,7 +1190,7 @@ type PageSideProps = {
 // Одна сторона разворота: номер страницы у корешка, дата, когда на развороте
 // начали писать (на пустом — ничего: на новых листах только номер, просьба
 // автора), надписи этой стороны (левая — x < 0). У листа дня вверху — его дата
-function PageSide({ spread, side, blocks, created, showDate, day }: PageSideProps) {
+function PageSide({ spread, side, blocks, date, day }: PageSideProps) {
   const number = 2 * spread + (side === 'left' ? 1 : 2);
   return (
     <div className="page-side">
@@ -1029,7 +1199,7 @@ function PageSide({ spread, side, blocks, created, showDate, day }: PageSideProp
       ) : (
         <>
           <span className={`page-number page-number-${side}`}>{number}</span>
-          {showDate && created && <span className={`page-date page-date-${side}`}>{formatDate(created)}</span>}
+          {date && <span className={`page-date page-date-${side}`}>{date}</span>}
         </>
       )}
       {blocks

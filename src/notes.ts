@@ -43,6 +43,11 @@ export type Block = {
   ratio?: number;
   frame?: FrameId;
   filter?: FilterId;
+  // Когда появился на листе и когда его меняли последний раз (ГГГГ-ММ-ДД,
+  // edited — только если не в тот же день): по ним дата страницы. У старых
+  // записей их нет — тогда день разворота (created)
+  day?: string;
+  edited?: string;
 };
 
 // Пустая надпись (без текста, или только пробелы и переводы строки) — её
@@ -230,6 +235,23 @@ export function daysWithNotes(): Set<string> {
       .filter(([, s]) => s.blocks.some(b => !isBlank(b)))
       .map(([d]) => d)
   );
+}
+
+// id всех фото на всех листах (дневники и дни): остальные картинки в
+// IndexedDB никому не нужны. null — память не прочитать, и тогда ничего не
+// стираем
+export function allImageIds(): Set<string> | null {
+  const ids = new Set<string>();
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key !== SPREADS_KEY && !key.startsWith(`${SPREADS_KEY}:`) && key !== DAYS_KEY) continue;
+      const spreads = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, Spread>;
+      for (const s of Object.values(spreads)) for (const b of s.blocks ?? []) if (b.image) ids.add(b.image);
+    }
+  } catch {
+    return null;
+  }
+  return ids;
 }
 
 export function loadSpreads(source: Source): Spreads {

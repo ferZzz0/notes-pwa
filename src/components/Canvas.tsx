@@ -65,9 +65,12 @@ type Props = {
   // Палец лёг в точку p (экранные px полотна): если там то, что можно
   // двигать, — его жест (Grab), иначе null — тогда двигается камера
   grab?: (p: Point) => Grab | null;
-  // Долгое нажатие на мир (палец стоит LONG_PRESS_MS) или правый клик —
-  // точка мира и точка экрана (px полотна); тапа после него нет
-  onLongPress?: (world: Point, screen: Point) => void;
+  // Долгое нажатие на мир (палец стоит LONG_PRESS_MS; touch = true) или
+  // правый клик — точка мира и точка экрана (px полотна); тапа после него нет
+  onLongPress?: (world: Point, screen: Point, touch: boolean) => void;
+  // Палец после долгого нажатия отпустили — это ещё «жест пользователя»
+  // (touchend): в нём браузер даёт читать буфер обмена
+  onLongPressEnd?: () => void;
   children: ReactNode;
 };
 
@@ -111,6 +114,7 @@ export function Canvas({
   onDoubleTap,
   grab,
   onLongPress,
+  onLongPressEnd,
   children
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -118,8 +122,8 @@ export function Canvas({
   const insetsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<(CanvasHandle & { reclamp: () => void }) | null>(null);
   // Свежие пропсы для обработчиков, подписанных один раз
-  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress });
-  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress };
+  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd });
+  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd };
 
   useImperativeHandle(
     ref,
@@ -397,9 +401,11 @@ export function Canvas({
     let swallowMouse = false;
     let samples: { t: number; x: number; y: number }[] = [];
     let lastTap = { t: 0, x: 0, y: 0 };
-    // Долгое нажатие: его таймер и сработало ли оно (тогда отпускание — не тап)
+    // Долгое нажатие: его таймер, сработало ли оно (тогда отпускание — не
+    // тап) и сообщили ли уже, что палец отпустили
     let pressTimer = 0;
     let pressed = false;
+    let pressEnded = false;
 
     const firstTwo = () => [...pointers.values()].slice(0, 2) as [Point, Point];
 
@@ -433,6 +439,7 @@ export function Canvas({
         flush(); // предмет ищут по уже применённой камере
         grabbed = props.current.grab?.(p) ?? null;
         pressed = false;
+        pressEnded = false;
         clearTimeout(pressTimer);
         // Мышью долгое нажатие — правый клик (ниже)
         if (!grabbed && e.pointerType !== 'mouse' && !isInteractive(e.target)) {
@@ -440,7 +447,7 @@ export function Canvas({
             if (pointers.size !== 1 || moving || props.current.locked) return;
             pressed = true;
             flush();
-            props.current.onLongPress?.(toWorld(downAt), downAt);
+            props.current.onLongPress?.(toWorld(downAt), downAt, true);
           }, LONG_PRESS_MS);
         }
       } else {
@@ -497,11 +504,9 @@ export function Canvas({
       viewport.classList.remove('is-panning');
       clearTimeout(pressTimer);
 
-      // После долгого нажатия отпускание — не тап
+      // После долгого нажатия отпускание — не тап (его touchend — ниже)
       if (pressed) {
-        pressed = false;
         grabbed = null;
-        if (e.pointerType !== 'mouse') swallowMouse = true;
         return;
       }
 
@@ -582,7 +587,7 @@ export function Canvas({
       if (pointers.size > 0 || props.current.locked || isInteractive(e.target)) return;
       const p = local(e.clientX, e.clientY);
       flush();
-      props.current.onLongPress?.(toWorld(p), p);
+      props.current.onLongPress?.(toWorld(p), p, false);
     };
 
     resize();
@@ -593,7 +598,14 @@ export function Canvas({
     viewport.addEventListener('pointerup', onUp);
     viewport.addEventListener('pointercancel', onUp);
     const onTouchEnd = (e: TouchEvent) => {
-      if (!swallowMouse || e.touches.length > 0) return;
+      if (e.touches.length > 0) return;
+      if (pressed && !pressEnded) {
+        pressEnded = true;
+        e.preventDefault();
+        props.current.onLongPressEnd?.();
+        return;
+      }
+      if (!swallowMouse) return;
       swallowMouse = false;
       e.preventDefault();
     };

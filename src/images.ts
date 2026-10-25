@@ -57,6 +57,14 @@ export async function deleteImage(id: string): Promise<void> {
   await run('readwrite', s => s.delete(id)).catch(() => {});
 }
 
+// Стереть картинки, которых нет ни на одном листе: фото с листа убирают
+// сразу, а картинку — потом (Notebook при открытии), чтобы удаление можно
+// было отменить
+export async function keepImages(ids: Set<string>): Promise<void> {
+  const keys = await run<IDBValidKey[]>('readonly', s => s.getAllKeys()).catch((): IDBValidKey[] => []);
+  for (const key of keys) if (typeof key === 'string' && !ids.has(key)) await deleteImage(key);
+}
+
 // Стереть все картинки (настройки → «Стереть все данные»)
 export function clearImages(): Promise<void> {
   dbPromise?.then(d => d.close()).catch(() => {});

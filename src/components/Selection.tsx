@@ -39,7 +39,10 @@ export function Selection({ ref, block, camera }: Props) {
           return;
         }
         const cam = props.current.camera();
-        const { rotate = 0, scale = 1 } = props.current.block;
+        // Поворот и размер — с самой надписи: пока её тащат пальцами, они
+        // меняются прямо в DOM (Notebook.grab), раньше, чем в block
+        const rotate = Number(el.dataset.rotate ?? 0);
+        const scale = Number(el.dataset.scale ?? 1);
         // Середина надписи на экране; рамка — её размер с учётом масштаба
         const cx = cam.x + (el.offsetLeft + el.offsetWidth / 2) * cam.scale;
         const cy = cam.y + (el.offsetTop + el.offsetHeight / 2) * cam.scale;

@@ -5,6 +5,8 @@
   inset: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Вбок меню не ездит — вбок листается только лента дневников */
+  overflow-x: hidden;
   background: var(--paper);
   color: var(--ink);
   padding: calc(16px + var(--safe-top)) calc(20px + var(--safe-right)) calc(90px + var(--safe-bottom)) calc(20px + var(--safe-left));
@@ -24,6 +26,13 @@
   }
 }
 
+/* Колонка не шире экрана: иначе она растягивалась по всей ленте дневников
+   (её ширине «по содержимому») — лента не листалась, а «Новый дневник»
+   уходил за край */
+.main-menu-section {
+  min-width: 0;
+}
+
 .main-menu-section h1 {
   margin: 0 0 14px;
   font-family: 'Caveat Variable', cursive;
@@ -33,21 +42,31 @@
 }
 
 /* --- Дневники: обложки школьных тетрадей с наклейкой-названием --- */
-/* Дневники — лента, которая прокручивается вбок (просьба автора); тень
-   обложек не обрезаем — снизу и по бокам запас */
+/* Дневники — лента, которая прокручивается вбок (просьба автора), от края
+   до края экрана; тень обложек не обрезаем — снизу и по бокам запас. Слева
+   у первого дневника отступ — и в начале, и после прокрутки (обложки
+   прилипают к отступу, а не к краю экрана: scroll-padding) */
 .diaries {
   display: flex;
   gap: 16px;
   margin: 0 -20px;
-  padding: 4px 20px 18px;
+  padding: 4px 0 18px 20px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
+  scroll-padding-inline: 20px;
   scrollbar-width: none;
 }
 
 .diaries::-webkit-scrollbar {
   display: none;
+}
+
+/* Отступ справа после «Нового дневника» (вместе с gap — 20px): поле справа
+   у прокручиваемого ряда Safari не учитывает */
+.diaries::after {
+  content: '';
+  flex: 0 0 4px;
 }
 
 .diary,

@@ -15,6 +15,12 @@
   background: rgb(60 40 10 / 0.06);
 }
 
+/* Картинка есть — без подложки: сквозь прозрачные места PNG видно бумагу,
+   а не темноватый прямоугольник */
+.item-image-photo:has(> img) {
+  background: none;
+}
+
 .item-image-photo img {
   display: block;
   width: 100%;
