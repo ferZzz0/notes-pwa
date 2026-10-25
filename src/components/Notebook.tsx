@@ -117,6 +117,9 @@ const TYPING_RESERVE_MS = 1000;
 const CARET_SETTLE_MS = 120;
 // Ряд «Отменить» / «Вернуть» над панелью надписи: кнопка 40 + отступ 8 (px экрана)
 const HISTORY_ROW = 48;
+// Скопировали стикер (или надпись) без текста — в буфер обмена кладём эту
+// невидимую метку: по ней вставка узнаёт скопированное
+const EMPTY_CLIP_MARK = '\u2063';
 // Буфер обмена прочитан быстрее (мс) — Safari не показывал свою кнопку
 // «Вставить» (скопировано здесь же)
 const SILENT_READ_MS = 150;
@@ -568,7 +571,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     const { id: _id, day: _day, edited: _edited, ...rest } = b;
     saveClip(rest);
     setClip(rest);
-    if (b.kind !== 'image' && b.text.trim()) void navigator.clipboard?.writeText(b.text).catch(() => {});
+    if (b.kind !== 'image') void navigator.clipboard?.writeText(b.text.trim() ? b.text : EMPTY_CLIP_MARK).catch(() => {});
     // Фото: картинку — в буфер обмена (вставка долгим нажатием тоже его
     // найдёт; запись — прямо в нажатии, картинка дочитывается потом), а её
     // размер — в скопированное, чтобы узнать её при вставке
@@ -639,6 +642,10 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // это скопированное кнопкой «Копировать» (тот же текст / картинка того же
   // размера) — оно само, со всем оформлением
   const insertPasted = async (data: Pasted, p: Point) => {
+    if ('text' in data && data.text === EMPTY_CLIP_MARK) {
+      if (clip) await pasteClip(p);
+      return;
+    }
     if ('text' in data) {
       pasteText(data.text, p);
       return;
