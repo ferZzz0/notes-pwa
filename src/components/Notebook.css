@@ -344,9 +344,7 @@
    тоже (бумага там светлая) */
 .page-arrow {
   position: fixed;
-  /* Над плашкой обновления, если она видна (--prompt-space из UpdatePrompt) */
-  bottom: calc(16px + var(--safe-bottom) + var(--prompt-space, 0px));
-  transition: bottom 0.2s ease-out;
+  bottom: calc(16px + var(--safe-bottom));
   z-index: 5;
   display: grid;
   place-items: center;
