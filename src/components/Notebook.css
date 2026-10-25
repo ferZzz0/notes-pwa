@@ -20,6 +20,10 @@
      иначе корешок съехал бы с границы листов */
   width: 50%;
   overflow: hidden;
+  /* Содержимое страницы — столбиком; последний блок может растянуться
+     до низа листа (например, поле заметки) */
+  display: flex;
+  flex-direction: column;
   padding: calc(var(--pad) + var(--safe-top)) var(--pad) calc(var(--pad) + var(--safe-bottom));
   background-color: var(--paper);
   background-image:

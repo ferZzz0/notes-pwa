@@ -1,0 +1,50 @@
+/* Поле ввода (горизонталь) и текст для чтения (вертикаль) выглядят
+   одинаково — рукописью по клетке, поэтому смена режима незаметна. */
+.note-text {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  appearance: none;
+  background: transparent;
+  color: inherit;
+  caret-color: var(--ink);
+  font: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  resize: none;
+}
+
+.note-text::placeholder,
+.note-empty {
+  color: var(--ink-muted);
+  opacity: 1;
+}
+
+/* Подсказка внизу правой страницы, когда пытаются писать в вертикали */
+.note-hint {
+  position: absolute;
+  left: var(--pad);
+  right: calc(var(--pad) + var(--safe-right));
+  bottom: calc(var(--pad) + var(--safe-bottom));
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font: 15px/1.4 var(--ui-font);
+  animation: note-hint-in 0.2s ease-out;
+}
+
+@keyframes note-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}

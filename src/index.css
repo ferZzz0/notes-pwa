@@ -17,9 +17,11 @@
   --accent: #f28a2e;
   --accent-text: #ffffff;
   --shadow: 0 8px 24px rgb(60 40 10 / 0.12);
+  /* Шрифт интерфейса (плашки, подсказки); на страницах — рукописный */
+  --ui-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
   color-scheme: light dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--ui-font);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   /* iOS Safari сам увеличивает шрифт при повороте в горизонталь — запрещаем */
