@@ -9,10 +9,9 @@
   overflow-x: hidden;
   background: var(--paper);
   color: var(--ink);
-  /* Снизу — место под шестерёнкой (App.css: .bottom-center — 20 + 40 px) и
-     12 px до неё; больше — и меню, где всё видно, уже немного прокручивалось
-     (жалоба автора) */
-  padding: calc(16px + var(--safe-top)) calc(20px + var(--safe-right)) calc(72px + var(--safe-bottom)) calc(20px + var(--safe-left));
+  /* Снизу кнопок нет (отладка — в настройках): небольшое поле; больше — и
+     меню, где всё видно, уже немного прокручивалось (жалоба автора) */
+  padding: calc(16px + var(--safe-top)) calc(20px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(20px + var(--safe-left));
 }
 
 .main-menu-content {

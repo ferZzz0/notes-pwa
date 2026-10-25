@@ -103,3 +103,24 @@
 .app-settings-reset:disabled {
   opacity: 0.45;
 }
+
+/* Отладка — свёрнута под цветом приложения */
+.app-settings-debug {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.app-settings-debug summary {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Панель с открытой отладкой не выше экрана */
+.app-settings-panel {
+  max-height: calc(100dvh - 74px - var(--safe-top) - var(--safe-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}

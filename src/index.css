@@ -132,3 +132,11 @@ button {
   color: inherit;
   cursor: pointer;
 }
+
+/* Панели и меню появляются чуть снизу */
+@keyframes settings-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}

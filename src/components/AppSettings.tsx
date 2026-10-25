@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { loadStyle, saveStyle } from '../notes';
 import { DEFAULT_BRAND, applyBrand, loadBrand, saveBrand } from '../theme';
+import { DebugSection } from './Settings';
 import { ColorWheel } from './TextToolbar';
 import './AppSettings.css';
 
 // Размер палитры (px)
 const WHEEL_SIZE = 150;
 
-// Настройки приложения — шестерёнка справа вверху главного меню (та, что
-// внизу, — только для отладки). Пока в них цвет приложения: круговая
+// Настройки приложения — шестерёнка справа вверху главного меню. В них цвет
+// приложения (внизу — свёрнутая отладка: версия, «Обновить», стереть
+// данные): круговая
 // палитра, как у надписей; цвет меняется во всём приложении, пока ведёшь
 // пальцем, и запоминается, когда отпустил. «Как было» — снова синий.
 // Выбранный цвет — ещё и цвет новых надписей (с ним начинается следующая;
@@ -56,6 +58,10 @@ export function AppSettings() {
             <button type="button" className="app-settings-reset" disabled={brand === DEFAULT_BRAND} onClick={() => pick(DEFAULT_BRAND, true)}>
               Как было
             </button>
+            <details className="app-settings-debug">
+              <summary>Версия и отладка</summary>
+              <DebugSection />
+            </details>
           </div>
         </>
       )}

@@ -4,7 +4,6 @@ import type { NotebookInfo } from '../notes';
 import { Calendar } from './Calendar';
 import { ConfirmDialog } from './ConfirmDialog';
 import { AppSettings } from './AppSettings';
-import { Settings } from './Settings';
 import { ColorWheel } from './TextToolbar';
 import './MainMenu.css';
 
@@ -174,12 +173,8 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecol
         </section>
       </div>
 
-      {/* Настройки приложения — справа вверху; шестерёнка внизу — отладка */}
+      {/* Настройки приложения — справа вверху */}
       <AppSettings />
-
-      <div className="bottom-center">
-        <Settings />
-      </div>
 
       {colored && (
         <>

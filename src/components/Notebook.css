@@ -64,40 +64,6 @@
   white-space: nowrap;
 }
 
-/* Шестерёнка настроек листа — во внешнем верхнем углу страницы (px мира:
-   страница — 850) */
-.page-gear {
-  position: absolute;
-  top: 14px;
-  display: grid;
-  place-items: center;
-  width: 76px;
-  height: 76px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--page-ink-muted);
-}
-
-.page-gear-left {
-  left: -834px;
-}
-
-.page-gear-right {
-  left: 758px;
-}
-
-.page-gear svg {
-  width: 40px;
-  height: 40px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 /* Копия страницы для экспорта картинкой — сдвинута за экран (transform: на
    картинке его снимают, exportPage.ts; left снять не вышло — копируется и
    inset-inline, а он главнее); начало мира — в origin */

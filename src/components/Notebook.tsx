@@ -52,7 +52,6 @@ import { PageSettings } from './PageSettings';
 import { PageTurn } from './PageTurn';
 import { Paper, type PaperDisplay, type PaperHandle } from './Paper';
 import { Selection, type SelectionHandle } from './Selection';
-import { Settings } from './Settings';
 import { BLEED_X, pendingRanges, STICKER_PAD_X, TextBlock } from './TextBlock';
 import { LockedToolbar, LockIcon, TextToolbar } from './TextToolbar';
 import './Notebook.css';
@@ -1507,7 +1506,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     };
   }, [darkPaper]);
 
-  // Шестерёнка настроек — только на неподвижном листе
   const pageSide = (s: number, sd: Side) => (
     <PageSide
       spread={s}
@@ -1516,14 +1514,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       date={pageDate(spreads[s], sd)}
       day={dayDate}
       look={spreads[s]?.looks?.[sd]}
-      onSettings={
-        flip
-          ? undefined
-          : () => {
-              deselect();
-              setPageMenu(2 * s + (sd === 'left' ? 1 : 2));
-            }
-      }
     />
   );
   // Цвет бумаги — у страниц, что лежат на экране (и под переворачиваемой)
@@ -1649,7 +1639,11 @@ export function Notebook({ source, onMenu, onDay }: Props) {
 
       {pageMenu !== null && (
         <PageSettings
+          key={pageMenu}
           page={dayDate ? null : pageMenu}
+          pair={dayDate || single ? null : [2 * spread + 1, 2 * spread + 2]}
+          onPage={setPageMenu}
+          history={historyButtons}
           look={lookOf(spreads, pageMenu)}
           pages={toPages(spreads).length}
           onLook={(patch, final) => setLook(pageMenu, patch, final)}
@@ -1772,7 +1766,22 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               onSticker={addSticker}
               onPaste={() => window.setTimeout(() => void pasteFromMenu(), MENU_GONE_MS)}
             />
-            <Settings />
+            {/* Настройки открытого листа (просьба автора: на месте отладочной
+                шестерёнки — отладка теперь в настройках главного меню) */}
+            <button
+              type="button"
+              className="round-button"
+              aria-label="Настройки листа"
+              onClick={() => {
+                deselect();
+                setPageMenu(page);
+              }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="3.2" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.4-1.51 1z" />
+              </svg>
+            </button>
           </div>
         </>
       )}
@@ -1791,15 +1800,12 @@ type PageSideProps = {
   day: string | null;
   // Оформление страницы (настройки листа)
   look?: PageLook;
-  // Шестерёнка настроек листа; нет — без неё (лист перелистывается)
-  onSettings?: () => void;
 };
 
 // Одна сторона разворота: номер страницы у корешка, дата, когда на развороте
 // начали писать (на пустом — ничего: на новых листах только номер, просьба
-// автора), надписи этой стороны (левая — x < 0). У листа дня вверху — его дата.
-// Во внешнем верхнем углу — шестерёнка настроек этой страницы
-function PageSide({ spread, side, blocks, date, day, look, onSettings }: PageSideProps) {
+// автора), надписи этой стороны (левая — x < 0). У листа дня вверху — его дата
+function PageSide({ spread, side, blocks, date, day, look }: PageSideProps) {
   const number = 2 * spread + (side === 'left' ? 1 : 2);
   // Свой цвет номера и даты: номер — бледнее, как обычно. На тёмном листе
   // без своего цвета — светлые
@@ -1823,21 +1829,6 @@ function PageSide({ spread, side, blocks, date, day, look, onSettings }: PageSid
             </span>
           )}
         </>
-      )}
-      {onSettings && (
-        <button
-          type="button"
-          className={`page-gear page-gear-${side}`}
-          style={muted}
-          aria-label={day ? 'Настройки листа' : `Настройки листа ${number}`}
-          data-no-pan
-          onClick={onSettings}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="3.2" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.4-1.51 1z" />
-          </svg>
-        </button>
       )}
       <div className="item-clip" data-clip={side}>
         {blocks

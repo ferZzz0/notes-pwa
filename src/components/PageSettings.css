@@ -26,9 +26,48 @@
   animation: settings-in 0.18s ease-out;
 }
 
+/* Вверху: какой лист (на развороте — два на выбор) и «Отменить» / «Вернуть» */
+.page-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .page-settings-title {
-  margin: 0 0 10px;
+  margin: 0;
   font-weight: 600;
+}
+
+.page-settings-pages {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.page-settings-pages button {
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: 600 13px/1.2 var(--ui-font);
+}
+
+.page-settings-pages button.is-active {
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+
+.page-settings-history {
+  display: flex;
+  gap: 6px;
+}
+
+.page-settings-history .round-button {
+  width: 36px;
+  height: 36px;
 }
 
 /* Что красим: бумагу или номер и дату */

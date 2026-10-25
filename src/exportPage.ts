@@ -2,7 +2,7 @@
 // рисуется в PNG через html-to-image (SVG с foreignObject → canvas), без
 // элементов управления — Notebook отдаёт сюда отдельную копию страницы.
 
-import { toBlob } from 'html-to-image';
+import { toSvg } from 'html-to-image';
 
 // Больше пикселей холст в iOS Safari не выдержит (~16.7 млн)
 const MAX_PIXELS = 16_000_000;
@@ -69,19 +69,46 @@ function fontCSS(): Promise<string> {
   return fonts;
 }
 
-// Картинка узла node (width × height px мира). Safari рисует картинки и
-// шрифты внутри SVG не с первого раза — первый проход прогревочный
+// Safari (на iPhone — любой браузер) догружает картинки внутри SVG уже после
+// того, как его нарисовали: в первый раз фото на листе не было (жалоба
+// автора). Поэтому SVG рисуем на холст несколько раз с паузами — то же
+// изображение, уже с догруженными фото
+const WEBKIT = /AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium|Edg|Android/.test(navigator.userAgent);
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const DRAWS = WEBKIT || IOS ? 5 : 1;
+const DRAW_PAUSE_MS = 250;
+
+const loadImage = (src: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Не получилось нарисовать лист'));
+    img.src = src;
+  });
+
+// Картинка узла node (width × height px мира): html-to-image собирает SVG
+// (стили, шрифты и фото внутри), рисуем его сами
 export async function pageImage(node: HTMLElement, width: number, height: number): Promise<Blob> {
-  const options = {
+  const ratio = Math.min(PIXEL_RATIO, Math.sqrt(MAX_PIXELS / (width * height)));
+  const svg = await toSvg(node, {
     width,
     height,
-    pixelRatio: Math.min(PIXEL_RATIO, Math.sqrt(MAX_PIXELS / (width * height))),
     fontEmbedCSS: await fontCSS(),
     // Сама копия страницы спрятана за экраном — на картинке она на месте
     style: { position: 'relative', transform: 'none' }
-  };
-  await toBlob(node, options);
-  const blob = await toBlob(node, options);
+  });
+  const img = await loadImage(svg);
+  await img.decode().catch(() => {});
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  const g = canvas.getContext('2d')!;
+  for (let i = 0; i < DRAWS; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, DRAW_PAUSE_MS));
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    g.drawImage(img, 0, 0, canvas.width, canvas.height);
+  }
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('Не получилось нарисовать лист');
   return blob;
 }

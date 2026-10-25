@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { saveImage } from '../exportPage';
 import type { PageLook } from '../notes';
 import type { WheelBase } from '../textStyle';
@@ -12,6 +12,12 @@ const WHEEL_SIZE = 150;
 type Props = {
   // Номер листа; у листа дня — null
   page: number | null;
+  // На развороте — его две страницы: какую настраивать, выбирают вверху
+  pair: [number, number] | null;
+  onPage: (page: number) => void;
+  // «Отменить» и «Вернуть» — те же, что внизу: оформление отменяется, как
+  // любая правка (просьба автора)
+  history: ReactNode;
   look: PageLook;
   // Сколько листов в дневнике (для «как на листе…»)
   pages: number;
@@ -31,12 +37,12 @@ type Confirm = 'clear' | 'delete' | null;
 // Экспорт: рисуем; готово (картинка и её адрес для превью); не вышло
 type Shot = 'busy' | 'error' | { file: File; url: string } | null;
 
-// Настройки листа — шестерёнка в углу каждой страницы (просьба автора):
+// Настройки листа — шестерёнка в нижнем ряду (просьба автора):
 // цвет бумаги и цвет надписей листа (номер, дата) на круговой палитре,
 // «как у приложения», оформление как у другого листа; очистить лист, удалить
 // его (следующие сдвигаются назад), добавить пустой после (следующие —
 // вперёд). У листа дня — только цвета и очистка
-export function PageSettings({ page, look, pages, onLook, onCopyFrom, onClear, onDelete, onInsertAfter, onExport, onClose }: Props) {
+export function PageSettings({ page, pair, onPage, history, look, pages, onLook, onCopyFrom, onClear, onDelete, onInsertAfter, onExport, onClose }: Props) {
   const [target, setTarget] = useState<Target>('paper');
   const [shot, setShot] = useState<Shot>(null);
   // Превью больше не нужно — его адрес освобождаем
@@ -74,7 +80,20 @@ export function PageSettings({ page, look, pages, onLook, onCopyFrom, onClear, o
     <>
       <div className="page-settings-backdrop" onClick={onClose} />
       <div className="page-settings-panel" role="dialog" aria-label={page ? `Настройки листа ${page}` : 'Настройки листа'}>
-        <p className="page-settings-title">{page ? `Лист ${page}` : 'Лист дня'}</p>
+        <div className="page-settings-head">
+          {pair ? (
+            <div className="page-settings-pages" role="tablist" aria-label="Какой лист">
+              {pair.map(n => (
+                <button key={n} type="button" role="tab" aria-selected={n === page} className={n === page ? 'is-active' : undefined} onClick={() => onPage(n)}>
+                  Лист {n}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="page-settings-title">{page ? `Лист ${page}` : 'Лист дня'}</p>
+          )}
+          <div className="page-settings-history">{history}</div>
+        </div>
 
         <div className="page-settings-tabs" role="tablist">
           <button
