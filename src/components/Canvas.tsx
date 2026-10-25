@@ -1,4 +1,4 @@
-import { useImperativeHandle, useLayoutEffect, useRef, type ReactNode, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, type ReactNode, type Ref } from 'react';
 import './Canvas.css';
 
 // «Камера»: точка мира (wx, wy) видна на экране в (x + wx·scale, y + wy·scale)
@@ -7,13 +7,12 @@ export type Point = { x: number; y: number };
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Size = { w: number; h: number };
 
-// Стартовый вид: точка мира (x, y) — посередине по горизонтали и на top
-// экранных px ниже верха экрана (под вырезом камеры); по ширине помещается
-// width px мира, но масштаб не мельче minScale
-export type Home = { x: number; y: number; top: number; width: number; minScale: number };
-// Края мира (координаты мира): дальше доли MAX_EDGE_GAP экрана внутрь
-// экрана их не затащить. Без края — в ту сторону мир бесконечен
-export type Edges = { top?: number; left?: number; right?: number };
+// Стартовый вид: по ширине экрана помещается width px мира (но масштаб не
+// мельче minScale); точка мира (x, y) — у верха экрана (под вырезом камеры)
+// и по горизонтали посередине, у левого или у правого края экрана (align)
+export type Home = { x: number; y: number; width: number; minScale: number; align: 'center' | 'left' | 'right' };
+// Какие края листа не растут вслед за текстом (верх листа, корешок)
+export type Fixed = { top?: boolean; left?: boolean; right?: boolean };
 
 export type CanvasHandle = {
   // Плавно перелететь к стартовому виду (или к указанному); промис — когда долетели
@@ -27,13 +26,22 @@ export type CanvasHandle = {
 type Props = {
   ref?: Ref<CanvasHandle>;
   home: Home;
-  edges?: Edges;
+  // Лист: сначала ровно то, что видно в стартовом виде (экран). Если
+  // содержимое (content — его прямоугольник) подошло к краю ближе EDGE_ZONE
+  // экрана, в эту сторону открывается ещё целый экран листа. Края из fixed
+  // не растут. Без bounded камера летает свободно (переходы)
+  content?: Rect | null;
+  fixed?: Fixed;
+  bounded?: boolean;
+  // Временно добавить снизу столько экранных px (открытая клавиатура:
+  // строку должно быть можно поднять над ней)
+  extraBottom?: number;
   // Пока true, жесты не двигают камеру (например, во время переворота листа)
   locked?: boolean;
   // Рисуется под миром, в координатах экрана (например, бумага)
   background?: ReactNode;
-  // Каждый кадр, когда камера сдвинулась
-  onFrame?: (cam: Camera, size: Size) => void;
+  // Каждый кадр, когда камера сдвинулась; bounds — лист (null — без границ)
+  onFrame?: (cam: Camera, size: Size, bounds: Rect | null) => void;
   // Когда камера замерла
   onSettle?: (cam: Camera, size: Size) => void;
   // Двойное касание по миру (не по полю ввода или кнопке) — точка мира
@@ -41,11 +49,9 @@ type Props = {
   children: ReactNode;
 };
 
-const FIT_PADDING = 16; // отступ от краёв экрана для стартового вида
 const MIN_SCALE = 0.12;
 const MAX_SCALE = 2.5; // до 2.5 экранных px на px мира
-// Край мира нельзя затащить внутрь экрана дальше этой доли экрана
-const MAX_EDGE_GAP = 0.4;
+const EDGE_ZONE = 0.2; // содержимое ближе этой доли экрана к краю — лист растёт на экран
 const TAP_SLOP = 8; // сдвиг пальца, после которого это уже не тап, а перелёт
 const DOUBLE_TAP_MS = 300;
 const FRICTION = 0.94; // инерция: доля скорости, остающаяся за 16 мс
@@ -61,20 +67,34 @@ const isEditable = (t: EventTarget | null) => matches(t, 'textarea, input, [cont
 // По таким элементам тап и двойной тап — их собственные
 const isInteractive = (t: EventTarget | null) => matches(t, 'textarea, input, button, a, [contenteditable="true"]');
 
-// Бесконечное полотно, над которым «летают»: одним пальцем (или мышью)
-// мир двигается, после броска скользит по инерции; щипок, Ctrl/⌘ + колесо
-// или щипок на тачпаде — масштаб. Мир ограничен только краями из edges.
-// Все жесты обрабатываем сами (touch-action: none), а камеру пишем прямо в
-// стиль — без перерисовки React на каждом кадре. Элементы с [data-no-pan]
-// полотно не трогает: нажатие на них — их собственное.
-export function Canvas({ ref, home, edges = {}, locked = false, background, onFrame, onSettle, onDoubleTap, children }: Props) {
+// Полотно, над которым «летают»: одним пальцем (или мышью) мир двигается,
+// после броска скользит по инерции; щипок, Ctrl/⌘ + колесо или щипок на
+// тачпаде — масштаб. Камера не выходит за лист (bounds): он всегда
+// закрывает экран (кроме полос под вырезом и «домашней полоской»), отдалить
+// дальше листа нельзя. Все жесты обрабатываем сами (touch-action: none), а
+// камеру пишем прямо в стиль — без перерисовки React на каждом кадре.
+// Элементы с [data-no-pan] полотно не трогает: нажатие на них — их собственное.
+export function Canvas({
+  ref,
+  home,
+  content = null,
+  fixed = {},
+  bounded = true,
+  extraBottom = 0,
+  locked = false,
+  background,
+  onFrame,
+  onSettle,
+  onDoubleTap,
+  children
+}: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const insetsRef = useRef<HTMLDivElement>(null);
-  const apiRef = useRef<CanvasHandle | null>(null);
+  const apiRef = useRef<(CanvasHandle & { reclamp: () => void }) | null>(null);
   // Свежие пропсы для обработчиков, подписанных один раз
-  const props = useRef({ home, edges, locked, onFrame, onSettle, onDoubleTap });
-  props.current = { home, edges, locked, onFrame, onSettle, onDoubleTap };
+  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onSettle, onDoubleTap });
+  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onSettle, onDoubleTap };
 
   useImperativeHandle(
     ref,
@@ -94,6 +114,9 @@ export function Canvas({ ref, home, edges = {}, locked = false, background, onFr
     let cam: Camera = { x: 0, y: 0, scale: 1 };
     let size: Size = { w: 0, h: 0 };
     let origin: Point = { x: 0, y: 0 };
+    // Отступы от выреза камеры и «домашней полоски»
+    let ins = { top: 0, right: 0, bottom: 0, left: 0 };
+    let bounds: Rect | null = null;
     let frame = 0;
     let writeFrame = 0;
     let settleTimer = 0;
@@ -106,7 +129,7 @@ export function Canvas({ ref, home, edges = {}, locked = false, background, onFr
     const write = () => {
       writeFrame = 0;
       world.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.scale})`;
-      props.current.onFrame?.(cam, size);
+      props.current.onFrame?.(cam, size, bounds);
     };
 
     const flush = () => {
@@ -136,42 +159,92 @@ export function Canvas({ ref, home, edges = {}, locked = false, background, onFr
       settleTimer = window.setTimeout(settle, 200);
     };
 
-    // Отступы от выреза камеры и «домашней полоски»: env() есть только в
-    // CSS, поэтому читаем их с невидимого элемента
-    const insets = () => {
+    // Размер экрана и отступы прямо сейчас (а не из последнего
+    // ResizeObserver): при повороте телефона событие ориентации приходит
+    // раньше, чем он. env() есть только в CSS — отступы читаем с невидимого
+    // элемента
+    const measure = () => {
+      const prev = size;
+      size = { w: viewport.clientWidth, h: viewport.clientHeight };
+      const r = viewport.getBoundingClientRect();
+      origin = { x: r.left, y: r.top };
       const s = getComputedStyle(insetsProbe);
-      return {
+      ins = {
         top: parseFloat(s.paddingTop),
         right: parseFloat(s.paddingRight),
         bottom: parseFloat(s.paddingBottom),
         left: parseFloat(s.paddingLeft)
       };
+      return prev;
     };
 
-    const homeCamera = (home = props.current.home): Camera => {
-      const { x, y, top, width, minScale } = home;
-      const i = insets();
-      const aw = size.w - i.left - i.right - 2 * FIT_PADDING;
-      const scale = clamp(aw / width, minScale, MAX_SCALE);
-      return { scale, x: size.w / 2 - x * scale, y: i.top + top - y * scale };
+    const avail = () => ({ w: size.w - ins.left - ins.right, h: size.h - ins.top - ins.bottom });
+
+    const homeCamera = (h = props.current.home): Camera => {
+      const { x, y, width, minScale, align } = h;
+      const scale = clamp(avail().w / width, minScale, MAX_SCALE);
+      const anchorX = align === 'left' ? ins.left : align === 'right' ? size.w - ins.right : size.w / 2;
+      return { scale, x: anchorX - x * scale, y: ins.top - y * scale };
     };
 
-    const clampScale = (s: number) => clamp(s, MIN_SCALE, MAX_SCALE);
+    // Сколько целых шагов step нужно отодвинуть край edge, чтобы до
+    // содержимого (его край — reach) оставалось не меньше EDGE_ZONE шага
+    const steps = (edge: number, reach: number, step: number) =>
+      Math.max(0, Math.ceil((reach + step * EDGE_ZONE - edge) / step));
 
-    // Края мира (edges) — не дальше MAX_EDGE_GAP экрана внутрь экрана
+    // Лист: то, что видно в стартовом виде (экран без полос под вырезом);
+    // в незакреплённые стороны — на столько экранов больше, чтобы
+    // содержимое не подходило к краю ближе EDGE_ZONE экрана
+    const computeBounds = (): Rect | null => {
+      const { bounded, content, fixed, extraBottom } = props.current;
+      if (!bounded || size.w === 0) return null;
+      const h = homeCamera();
+      const a = avail();
+      const w = a.w / h.scale;
+      const hh = a.h / h.scale;
+      let x0 = (ins.left - h.x) / h.scale;
+      let y0 = (ins.top - h.y) / h.scale;
+      let x1 = x0 + w;
+      let y1 = y0 + hh;
+      if (content) {
+        if (!fixed.left) x0 -= w * steps(-x0, -content.x, w);
+        if (!fixed.right) x1 += w * steps(x1, content.x + content.w, w);
+        if (!fixed.top) y0 -= hh * steps(-y0, -content.y, hh);
+        y1 += hh * steps(y1, content.y + content.h, hh);
+      }
+      y1 += extraBottom / cam.scale;
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    };
+
+    // Отдалить можно, пока лист закрывает экран
+    const minScale = () => {
+      if (!bounds) return MIN_SCALE;
+      const a = avail();
+      return Math.max(MIN_SCALE, a.w / bounds.w, a.h / bounds.h);
+    };
+
+    const clampScale = (s: number) => clamp(s, minScale(), Math.max(MAX_SCALE, minScale()));
+
+    // Камера не выходит за лист: его края не заходят внутрь экрана дальше
+    // полос под вырезом и «домашней полоской»
     const set = (c: Camera) => {
-      const { top, left, right } = props.current.edges;
       let { x, y } = c;
-      if (top !== undefined) y = Math.min(y, size.h * MAX_EDGE_GAP - top * c.scale);
-      if (left !== undefined) x = Math.min(x, size.w * MAX_EDGE_GAP - left * c.scale);
-      if (right !== undefined) x = Math.max(x, size.w * (1 - MAX_EDGE_GAP) - right * c.scale);
-      cam = { scale: c.scale, x, y };
+      const scale = bounds ? clampScale(c.scale) : c.scale;
+      if (bounds) {
+        const minX = size.w - ins.right - (bounds.x + bounds.w) * scale;
+        const maxX = ins.left - bounds.x * scale;
+        x = minX > maxX ? (minX + maxX) / 2 : clamp(x, minX, maxX);
+        const minY = size.h - ins.bottom - (bounds.y + bounds.h) * scale;
+        const maxY = ins.top - bounds.y * scale;
+        y = minY > maxY ? maxY : clamp(y, minY, maxY);
+      }
+      cam = { scale, x, y };
       apply();
     };
 
     // Масштаб вокруг точки экрана p: точка мира под ней остаётся на месте
     const zoomAt = (p: Point, scale: number) => {
-      const s = clampScale(scale);
+      const s = bounds ? clampScale(scale) : clamp(scale, MIN_SCALE, MAX_SCALE);
       set({ scale: s, x: p.x - ((p.x - cam.x) / cam.scale) * s, y: p.y - ((p.y - cam.y) / cam.scale) * s });
     };
 
@@ -229,27 +302,31 @@ export function Canvas({ ref, home, edges = {}, locked = false, background, onFr
     const toWorld = (p: Point): Point => ({ x: (p.x - cam.x) / cam.scale, y: (p.y - cam.y) / cam.scale });
 
     apiRef.current = {
-      goHome: home => {
+      goHome: h => {
         measure();
-        return animateTo(homeCamera(home));
+        bounds = computeBounds();
+        return animateTo(homeCamera(h));
       },
       visibleRect: () => ({ x: -cam.x / cam.scale, y: -cam.y / cam.scale, w: size.w / cam.scale, h: size.h / cam.scale }),
-      panBy: (dx, dy) => void animateTo({ ...cam, x: cam.x + dx, y: cam.y + dy }, 250)
-    };
-
-    // Размер экрана прямо сейчас (а не из последнего ResizeObserver): при
-    // повороте телефона событие ориентации приходит раньше, чем он
-    const measure = () => {
-      const prev = size;
-      size = { w: viewport.clientWidth, h: viewport.clientHeight };
-      const r = viewport.getBoundingClientRect();
-      origin = { x: r.left, y: r.top };
-      return prev;
+      panBy: (dx, dy) => void animateTo({ ...cam, x: cam.x + dx, y: cam.y + dy }, 250),
+      // Лист изменился (вырос, уменьшился, закрылась клавиатура, переход
+      // закончился) — камера плавно возвращается внутрь листа
+      reclamp: () => {
+        bounds = computeBounds();
+        const from = cam;
+        set(cam);
+        const to = cam;
+        if (Math.abs(to.x - from.x) + Math.abs(to.y - from.y) + Math.abs(to.scale - from.scale) * 100 > 2) {
+          cam = from;
+          void animateTo(to, 250);
+        }
+      }
     };
 
     const resize = () => {
       const prev = measure();
       if (size.w === prev.w && size.h === prev.h) return;
+      bounds = computeBounds();
       if (prev.w === 0) {
         // Первый показ — начало листа, сразу, до первой отрисовки
         set(homeCamera());
@@ -419,6 +496,12 @@ export function Canvas({ ref, home, edges = {}, locked = false, background, onFr
       viewport.removeEventListener('gesturechange', onGestureChange);
     };
   }, []);
+
+  // Лист изменился — пересчитываем его и возвращаем камеру внутрь
+  const boundsKey = JSON.stringify({ home, content, fixed, bounded, extraBottom });
+  useEffect(() => {
+    apiRef.current?.reclamp();
+  }, [boundsKey]);
 
   return (
     <div ref={viewportRef} className="canvas">

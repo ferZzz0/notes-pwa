@@ -2,6 +2,8 @@
   position: fixed;
   left: 50%;
   bottom: calc(16px + var(--safe-bottom));
+  /* Над тетрадью и кнопками листания (они поднимаются над плашкой) */
+  z-index: 6;
   transform: translateX(-50%);
   width: max-content;
   max-width: calc(100% - 32px);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import {
   loadPage,
@@ -13,7 +13,7 @@ import {
   type Spreads
 } from '../notes';
 import { usePortrait } from '../orientation';
-import { Canvas, type CanvasHandle, type Camera, type Edges, type Home, type Point, type Rect, type Size } from './Canvas';
+import { Canvas, type CanvasHandle, type Camera, type Fixed, type Home, type Point, type Rect, type Size } from './Canvas';
 import { Paper, type PaperDisplay, type PaperHandle } from './Paper';
 import { TextBlock } from './TextBlock';
 import './Notebook.css';
@@ -25,18 +25,19 @@ type Side = 'left' | 'right';
 // низа экрана
 type Flip = { dir: FlipDir; from: number; to: number; sheet: Rect };
 
-// Начало листа. Разворот: корешок посередине, по ширине — две страницы по
-// 850 px мира (как у настоящей тетради, 170 мм). Одна страница: её середина
-// посередине экрана. Край листа — на 64 px ниже верха экрана при любом
-// масштабе. На узком экране масштаб не мельче 0.4 — чтобы текст читался.
+// Начало листа, оно же исходный размер листа — ровно экран (Canvas). По
+// ширине экрана: разворот — две страницы по 850 px мира (как у настоящей
+// тетради, 170 мм), корешок посередине; одна страница — 850 px, корешок у
+// края экрана. Верх листа — у верха экрана. На узком экране масштаб не
+// мельче 0.4 — чтобы текст читался.
 const PAGE_WIDTH = 850;
 const homeOf = (display: PaperDisplay): Home =>
   display === 'both'
-    ? { x: 0, y: 0, top: 64, width: 2 * PAGE_WIDTH, minScale: 0.4 }
-    : { x: display === 'left' ? -PAGE_WIDTH / 2 : PAGE_WIDTH / 2, y: 0, top: 64, width: PAGE_WIDTH + 50, minScale: 0.4 };
-// У одной страницы есть край у корешка, у разворота — только верхний
-const edgesOf = (display: PaperDisplay): Edges =>
-  display === 'both' ? { top: 0 } : display === 'left' ? { top: 0, right: 0 } : { top: 0, left: 0 };
+    ? { x: 0, y: 0, width: 2 * PAGE_WIDTH, minScale: 0.4, align: 'center' }
+    : { x: 0, y: 0, width: PAGE_WIDTH, minScale: 0.4, align: display === 'left' ? 'right' : 'left' };
+// Верх листа не растёт; у одной страницы не растёт и край у корешка
+const fixedOf = (display: PaperDisplay): Fixed =>
+  display === 'both' ? { top: true } : display === 'left' ? { top: true, right: true } : { top: true, left: true };
 
 const TEXT_WIDTH = 640;
 const MIN_TEXT_WIDTH = 200;
@@ -83,6 +84,12 @@ export function Notebook() {
   // Во время перехода видно обе страницы, и края одной страницы не мешают камере
   const [transit, setTransit] = useState(false);
   const [farFromHome, setFarFromHome] = useState(false);
+  // Прямоугольник всего, что написано на видимых страницах (мир): по нему
+  // лист растёт у краёв
+  const [content, setContent] = useState<Rect | null>(null);
+  // Загрузился шрифт — тексты перестроились: перерисовка, и замер ниже
+  // проходит заново
+  const [, setFontsLoaded] = useState(0);
 
   const spread = spreadOf(page);
   const side = sideOf(page);
@@ -148,16 +155,52 @@ export function Notebook() {
     else if (r.top < top) canvas.current?.panBy(0, top - r.top);
   };
 
+  // Высота открытой клавиатуры (экранные px): на неё лист временно
+  // удлиняется снизу, чтобы строку можно было поднять над клавиатурой
+  const [keyboard, setKeyboard] = useState(0);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const onResize = () => {
-      const el = document.activeElement;
-      if (el instanceof HTMLTextAreaElement && el.classList.contains('text-block')) keepVisible(el);
+    const onChange = () => setKeyboard(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+    vv.addEventListener('resize', onChange);
+    vv.addEventListener('scroll', onChange);
+    return () => {
+      vv.removeEventListener('resize', onChange);
+      vv.removeEventListener('scroll', onChange);
     };
-    vv.addEventListener('resize', onResize);
-    return () => vv.removeEventListener('resize', onResize);
   }, []);
+
+  // Клавиатура открылась (лист уже удлинён) — поднимаем строку над ней
+  useEffect(() => {
+    const el = document.activeElement;
+    if (keyboard > 0 && el instanceof HTMLTextAreaElement && el.classList.contains('text-block')) keepVisible(el);
+  }, [keyboard]);
+
+  useEffect(() => {
+    const onLoad = () => setFontsLoaded(n => n + 1);
+    document.fonts.addEventListener('loadingdone', onLoad);
+    void document.fonts.ready.then(onLoad);
+    return () => document.fonts.removeEventListener('loadingdone', onLoad);
+  }, []);
+
+  // Меряем написанное на видимых страницах после каждой перерисовки (правка,
+  // смена страницы, загрузка шрифта). Координаты элементов внутри стороны
+  // разворота — это и есть координаты мира
+  useLayoutEffect(() => {
+    let r: Rect | null = null;
+    for (const el of document.querySelectorAll<HTMLElement>(
+      '.canvas-world > .page-side .text-block, .canvas-world > .page-side .title-note'
+    )) {
+      const x0 = el.offsetLeft;
+      const y0 = el.offsetTop;
+      const x1 = x0 + el.offsetWidth;
+      const y1 = y0 + el.offsetHeight;
+      r = r
+        ? { x: Math.min(r.x, x0), y: Math.min(r.y, y0), w: Math.max(r.x + r.w, x1) - Math.min(r.x, x0), h: Math.max(r.y + r.h, y1) - Math.min(r.y, y0) }
+        : { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    }
+    setContent(prev => (JSON.stringify(prev) === JSON.stringify(r) ? prev : r));
+  });
 
   // Повернули телефон: одна страница ↔ разворот. Ждём кадр, чтобы полотно
   // узнало новый размер экрана, и летим к началу нового вида
@@ -260,10 +303,13 @@ export function Notebook() {
       <Canvas
         ref={canvas}
         home={home}
-        edges={edgesOf(display)}
+        content={content}
+        fixed={fixedOf(display)}
+        bounded={!transit}
+        extraBottom={keyboard}
         locked={turning}
         background={<Paper ref={paper} display={display} />}
-        onFrame={(cam, size) => paper.current?.update(cam, size)}
+        onFrame={(cam, size, bounds) => paper.current?.update(cam, size, bounds)}
         onSettle={onSettle}
         onDoubleTap={onDoubleTap}
       >

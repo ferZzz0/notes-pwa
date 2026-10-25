@@ -1,5 +1,5 @@
-/* Бесконечный лист — в координатах экрана, под миром полотна. Каждый слой
-   отдельный (will-change), камера их только двигает. */
+/* Лист — в координатах экрана, под миром полотна. Каждый слой отдельный
+   (will-change) и размером с экран; камера их только двигает и растягивает. */
 .paper {
   position: absolute;
   inset: 0;
@@ -13,23 +13,23 @@
   position: absolute;
   top: 0;
   left: 0;
+  height: 100%;
+  transform-origin: 0 0;
   will-change: transform;
 }
 
 .paper-sheet {
-  width: 200%;
-  height: 200%;
+  width: 100%;
   background: var(--paper);
-  /* Тень края листа на столе — сверху, а для одной страницы и у корешка */
+  /* Тень края листа на столе */
   box-shadow: 0 0 10px -2px rgb(0 0 0 / 0.25);
 }
 
 /* Тень у сгиба: 150 px мира по обе стороны корешка; ширину задаёт масштаб
-   камеры через scaleX вокруг середины полосы */
+   камеры через scaleX от середины полосы */
 .paper-fold {
   left: -150px;
   width: 300px;
-  height: 100%;
   transform-origin: 150px 0;
   background: linear-gradient(to right, transparent, var(--fold-shadow) 50%, transparent);
 }
@@ -46,7 +46,6 @@
 .paper-spine {
   left: -1px;
   width: 2px;
-  height: 100%;
   background: var(--fold-line);
 }
 

@@ -1,10 +1,15 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { Block } from '../notes';
 import './TextBlock.css';
 
+// Поля вокруг текста (px мира): завитки рукописных букв выступают за
+// границы строки, и поле ввода обрезало бы их. Блок сдвинут на эти поля
+// назад (TextBlock.css), так что сам текст стоит ровно в (x, y)
+const BLEED_X = 12;
+
 type Props = {
   block: Block;
-  // Ширина в px мира (у левой страницы — чтобы текст не заходил за корешок)
+  // Ширина строк в px мира (у левой страницы — чтобы текст не заходил за корешок)
   width: number;
   // Текст «картинкой» (на листе, который переворачивается): без поля ввода
   face?: boolean;
@@ -14,19 +19,29 @@ type Props = {
   onInput?: (el: HTMLTextAreaElement) => void;
 };
 
-// Текст в любом месте бесконечного листа — рукописью, без рамок. Поле
-// растёт вниз вместе с текстом; строки переносятся по ширине width.
+// Текст в любом месте листа — рукописью, без рамок. Поле растёт вниз
+// вместе с текстом; строки переносятся по ширине width.
 export function TextBlock({ block, width, face = false, onText, onBlur, onFocus, onInput }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  useLayoutEffect(() => {
+  const fit = () => {
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
-  }, [block.text, width]);
+  };
 
-  const style = { left: block.x, top: block.y, width };
+  useLayoutEffect(fit, [block.text, width]);
+
+  // Высоту, посчитанную до загрузки рукописного шрифта, пересчитываем:
+  // со шрифтом строки переносятся иначе, и низ текста обрезался бы
+  useEffect(() => {
+    document.fonts.addEventListener('loadingdone', fit);
+    void document.fonts.ready.then(fit);
+    return () => document.fonts.removeEventListener('loadingdone', fit);
+  }, []);
+
+  const style = { left: block.x, top: block.y, width: width + 2 * BLEED_X };
 
   if (face) {
     return (

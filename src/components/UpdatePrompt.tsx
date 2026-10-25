@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import './UpdatePrompt.css';
 
@@ -21,8 +22,21 @@ export function UpdatePrompt() {
       }
     }
   });
+  const shown = offlineReady || needRefresh;
+  const box = useRef<HTMLDivElement>(null);
 
-  if (!offlineReady && !needRefresh) return null;
+  // Пока плашка видна, её высота с отступом — в --prompt-space: кнопки внизу
+  // экрана (стрелки листания) поднимаются над ней, а не закрывают её
+  useLayoutEffect(() => {
+    const root = document.documentElement.style;
+    if (shown && box.current) root.setProperty('--prompt-space', `${box.current.offsetHeight + 12}px`);
+    else root.removeProperty('--prompt-space');
+    return () => {
+      root.removeProperty('--prompt-space');
+    };
+  }, [shown, needRefresh]);
+
+  if (!shown) return null;
 
   const close = () => {
     setOfflineReady(false);
@@ -30,7 +44,7 @@ export function UpdatePrompt() {
   };
 
   return (
-    <div className="update-prompt" role="status">
+    <div ref={box} className="update-prompt" role="status">
       <span className="update-prompt-text">
         {needRefresh ? 'Доступна новая версия' : 'Приложение готово к работе офлайн'}
       </span>
