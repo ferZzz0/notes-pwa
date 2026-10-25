@@ -1,0 +1,140 @@
+/* Сцена — «стол», на котором лежит тетрадь. Тетрадь подстраивается под
+   экран: от пропорций настоящего разворота A5 (1.41 : 1) до чуть более
+   широкого (1.75 : 1), чтобы на телефоне в горизонтали не пустовали края. */
+.notebook-scene {
+  --gap: clamp(8px, 3vmin, 32px);
+
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  /* Отступы env(safe-area-inset-*): в горизонтали у iPhone вырез камеры
+     сбоку, без них тетрадь залезала бы под него. */
+  padding: max(var(--gap), env(safe-area-inset-top)) max(var(--gap), env(safe-area-inset-right))
+    max(var(--gap), env(safe-area-inset-bottom)) max(var(--gap), env(safe-area-inset-left));
+  background: radial-gradient(ellipse at 50% 40%, var(--desk-light), var(--desk) 70%);
+  /* Размер сцены — точка отсчёта для единиц cqw/cqh у тетради */
+  container-type: size;
+}
+
+.notebook {
+  --ratio-max: 1.75;
+  --ratio-min: 1.41;
+  --spread-w: min(100cqw, 100cqh * var(--ratio-max));
+
+  position: relative;
+  display: flex;
+  width: var(--spread-w);
+  height: min(100cqh, var(--spread-w) / var(--ratio-min));
+  padding: 0.5%;
+  border-radius: 8px;
+  /* Обложка выглядывает по краям из-под листов */
+  background: var(--cover);
+  box-shadow:
+    0 2px 4px rgb(0 0 0 / 0.12),
+    0 18px 40px -12px rgb(0 0 0 / 0.35);
+  /* Дальше по тетради единицы cqh считаются от её собственного размера */
+  container-type: size;
+}
+
+.page {
+  /* Размер клетки привязан к высоте тетради, но не мельче 12px —
+     иначе на телефоне клетки сливаются, и не крупнее 22px. */
+  --cell: clamp(12px, 100cqh / 30, 22px);
+  --margin: calc(var(--cell) * 3);
+
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: var(--cell) var(--cell);
+  color: var(--ink);
+  font-family: 'Caveat Variable', cursive;
+  font-size: calc(var(--cell) * 1.6);
+  line-height: calc(var(--cell) * 2);
+}
+
+.page-left {
+  padding: calc(var(--cell) * 2) calc(var(--cell) * 2) calc(var(--cell) * 2)
+    calc(var(--margin) + var(--cell));
+  border-radius: 4px 0 0 4px;
+  /* Несколько нижних листов под верхним — толщина тетради */
+  box-shadow: -1px 1px 0 var(--paper-edge), -2px 2px 0 var(--paper-edge-2);
+}
+
+.page-right {
+  padding: calc(var(--cell) * 2) calc(var(--margin) + var(--cell)) calc(var(--cell) * 2)
+    calc(var(--cell) * 2);
+  border-radius: 0 4px 4px 0;
+  box-shadow: 1px 1px 0 var(--paper-edge), 2px 2px 0 var(--paper-edge-2);
+}
+
+/* Красная линия полей — у внешнего края каждого листа */
+.page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* Ровно 2px: дробная толщина на обычных мониторах размывается в серый */
+  width: 2px;
+  background: var(--margin-line);
+  pointer-events: none;
+}
+
+.page-left::before {
+  left: var(--margin);
+}
+
+.page-right::before {
+  right: var(--margin);
+}
+
+/* Тень у сгиба: листы будто уходят в корешок */
+.page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.page-left::after {
+  background: linear-gradient(to left, var(--fold-shadow), transparent 9%);
+}
+
+.page-right::after {
+  background: linear-gradient(to right, var(--fold-shadow), transparent 9%);
+}
+
+.notebook-spine {
+  position: absolute;
+  top: 0.5%;
+  bottom: 0.5%;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--fold-line);
+  pointer-events: none;
+}
+
+/* Две скрепки на сгибе, как у тонкой школьной тетради */
+.staple {
+  position: absolute;
+  left: 50%;
+  width: 4px;
+  height: 7%;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: linear-gradient(to right, #8d949c, #e9edf1 45%, #a1a8b0);
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.25);
+}
+
+.staple:first-child {
+  top: 26%;
+}
+
+.staple:last-child {
+  bottom: 26%;
+}

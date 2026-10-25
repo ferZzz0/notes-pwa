@@ -13,7 +13,11 @@ export default defineConfig({
       // чтобы страница не перезагрузилась посреди набора заметки.
       registerType: 'prompt',
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}']
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // Расширенные наборы символов шрифта (латиница с диакритикой и т.п.)
+        // заранее не кэшируем: для русского и английского они не нужны,
+        // браузер скачает их сам, только если такие символы встретятся.
+        globIgnores: ['**/*-ext-*.woff2']
       },
       manifest: {
         id: '/',
@@ -24,8 +28,11 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        background_color: '#fbf8f3',
-        theme_color: '#fbf8f3',
+        // Только горизонтально. Работает в установленном приложении на
+        // Android; iOS ключ игнорирует — там вертикаль закрывает RotateHint.
+        orientation: 'landscape',
+        background_color: '#d9c5a8',
+        theme_color: '#d9c5a8',
         icons: [
           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },

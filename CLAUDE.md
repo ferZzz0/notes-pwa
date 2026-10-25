@@ -14,6 +14,10 @@ A notes app as an installable, offline-capable PWA: React 19 + TypeScript + Vite
 
 Not fixable on the Cloudflare free plan. User-side fix: turn off the browser's Secure DNS (or pick "use current service provider") and fully restart the browser. To diagnose, check DevTools → Remote Address, or test each IP: `curl --resolve notes-polik.sokolovpk.ru:443:<ip> https://notes-polik.sokolovpk.ru/assets/<bundle>.js` — a stall at ~24 KB means throttling, not a deploy bug.
 
+## Workflow: always deploy
+
+The user reviews every change on their phone (iPhone) against the deployed site, not locally. So after each finished change, without asking: run `npm run check` and `npm run build`, and if both pass, commit and push to `main` — Cloudflare deploys it. Never push a failing build. Then confirm the new version is live on https://notes-polik.sokolovpk.ru. Remind the user that the installed app picks it up via the «Доступна новая версия» → «Обновить» banner.
+
 ## Commands
 
 ```powershell
@@ -26,6 +30,14 @@ npm run icons      # regenerate PNG icons + favicon.ico from public/icon.svg (pw
 ```
 
 There are no tests yet.
+
+## UI
+
+- **Landscape only.** The manifest sets `orientation: 'landscape'`, which only an installed Android PWA honors; iOS ignores it and offers no web API to lock orientation, so [src/components/RotateHint.tsx](src/components/RotateHint.tsx) covers the whole UI under `(orientation: portrait) and (pointer: coarse)`. Narrow desktop windows are deliberately not covered. Don't design portrait layouts.
+- **Main screen = open school notebook** ([src/components/Notebook.tsx](src/components/Notebook.tsx), takes `left`/`right` page content; the content itself lives in [src/App.tsx](src/App.tsx)). Squared paper, red margin lines on the OUTER edge of each page, fold shadow and two staples on the spine, cover peeking out around the pages.
+- Sizing uses container query units: `.notebook-scene` (full screen minus safe-area insets) is a size container, and the spread is clamped between A5 proportions (1.41:1) and 1.75:1 so phones in landscape don't waste the sides. `.notebook` is itself a size container, so the grid cell `--cell: clamp(12px, 100cqh / 30, 22px)` on `.page` follows the notebook height. Page text sizes and line-heights are multiples of `--cell` so text sits on the grid — keep it that way, and only use `--cell` inside `.page` (its cq units resolve against the nearest container).
+- Handwriting font: Caveat via `@fontsource-variable/caveat`, bundled so it works offline; its `-ext` subsets are excluded from precache (`globIgnores` in vite.config.ts).
+- Colors are tokens in [src/index.css](src/index.css) (desk, cover, paper, grid, margin line, ink, fold), with dark-mode variants (dark desk, dimmed paper). `body` doesn't scroll (`overflow: hidden`) — scrolling, when needed, belongs inside pages.
 
 ## PWA notes
 

@@ -1,0 +1,68 @@
+.rotate-hint {
+  display: none;
+}
+
+/* Только вертикаль на сенсорном экране: телефон или планшет.
+   Узкое окно браузера на компьютере сюда не попадает. */
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-hint {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 32px;
+    background: var(--desk);
+    color: var(--desk-text);
+    text-align: center;
+  }
+}
+
+.rotate-hint-phone {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  animation: rotate-hint-turn 2.4s ease-in-out infinite;
+}
+
+.rotate-hint-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.rotate-hint-text {
+  margin: 0;
+  max-width: 280px;
+  font-size: 15px;
+  opacity: 0.7;
+}
+
+/* Телефон поворачивается на бок, держится и возвращается */
+@keyframes rotate-hint-turn {
+  0%,
+  20% {
+    transform: rotate(0deg);
+  }
+  50%,
+  80% {
+    transform: rotate(-90deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotate-hint-phone {
+    animation: none;
+    transform: rotate(-90deg);
+  }
+}
