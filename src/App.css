@@ -9,3 +9,48 @@
   position: fixed;
   inset: 0;
 }
+
+/* Кнопки внизу посередине (между стрелками перелистывания): меню, «+»,
+   шестерёнка. Ряд сам касаний не ловит — только кнопки; их панели
+   (position: fixed) открываются от экрана, а не от ряда */
+.bottom-center {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(20px + var(--safe-bottom));
+  z-index: 7;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.bottom-center > * {
+  pointer-events: auto;
+}
+
+/* Круглая светлая кнопка — как стрелки перелистывания (Notebook.css) */
+.round-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgb(60 40 10 / 0.08);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgb(60 40 10 / 0.12);
+  color: var(--ink-muted);
+}
+
+.round-button svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

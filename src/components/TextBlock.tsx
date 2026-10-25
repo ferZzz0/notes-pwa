@@ -147,8 +147,10 @@ export function TextBlock({ block, width, face = false, editing = false, onText,
         data-block={block.id}
         {...data}
         rows={1}
-        // Ошибки не подчёркиваем (просьба автора)
+        // Ошибки не подчёркиваем (просьба автора). iPhone подчёркивает ещё и
+        // слова для автоисправления — его тоже выключаем
         spellCheck={false}
+        autoCorrect="off"
         value={block.text}
         aria-label="Запись"
         onChange={e => {

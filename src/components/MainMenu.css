@@ -1,0 +1,230 @@
+/* Главное меню: бумага во весь экран, прокручивается; горизонтально —
+   дневники и календарь рядом, вертикально — друг под другом. */
+.main-menu {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--paper);
+  color: var(--ink);
+  padding: calc(16px + var(--safe-top)) calc(20px + var(--safe-right)) calc(90px + var(--safe-bottom)) calc(20px + var(--safe-left));
+}
+
+.main-menu-content {
+  display: grid;
+  gap: 28px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+@media (orientation: landscape) {
+  .main-menu-content {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.main-menu-section h1 {
+  margin: 0 0 14px;
+  font-family: 'Caveat Variable', cursive;
+  font-size: 40px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+/* --- Дневники: обложки школьных тетрадей с наклейкой-названием --- */
+.diaries {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 140px));
+  gap: 16px;
+}
+
+.diary {
+  position: relative;
+}
+
+.diary-cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  padding: 12px 10px 12px 18px;
+  border: none;
+  border-radius: 4px 10px 10px 4px;
+  /* Корешок — тёмная полоса слева */
+  background:
+    linear-gradient(to right, rgb(0 0 0 / 0.28) 0 9px, rgb(255 255 255 / 0.12) 9px 11px, transparent 11px),
+    var(--cover);
+  box-shadow:
+    0 6px 14px rgb(40 30 10 / 0.22),
+    inset 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+
+.diary-cover:active {
+  transform: scale(0.97);
+}
+
+/* Наклейка с названием */
+.diary-label {
+  width: 100%;
+  padding: 8px 6px;
+  border-radius: 6px;
+  background: #fffdf4;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
+  color: var(--ink);
+  font-family: 'Caveat Variable', cursive;
+  font-size: 24px;
+  line-height: 1.05;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.diary-input {
+  border: 2px solid var(--accent);
+  outline: none;
+}
+
+.diary-delete {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.9);
+  color: #c0392b;
+  font: 600 13px/1.2 var(--ui-font);
+}
+
+/* Карандаш — переименовать — в углу обложки */
+.diary-rename {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.85);
+  color: var(--ink);
+}
+
+.diary-rename svg,
+.diary-new svg,
+.calendar-head svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.diary-new {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  aspect-ratio: 3 / 4;
+  border: 2px dashed var(--ink-muted);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-muted);
+  font: 600 14px/1.2 var(--ui-font);
+}
+
+.diary-new svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* --- Календарь --- */
+.calendar {
+  padding: 12px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--paper) 70%, #fff);
+  box-shadow: 0 4px 14px rgb(40 30 10 / 0.12);
+}
+
+.calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.calendar-head button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+}
+
+.calendar-title {
+  font-family: 'Caveat Variable', cursive;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  text-align: center;
+}
+
+.calendar-weekday {
+  padding: 4px 0;
+  color: var(--ink-muted);
+  font: 600 12px/1.2 var(--ui-font);
+}
+
+.calendar-day {
+  position: relative;
+  aspect-ratio: 1;
+  max-height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  font: 500 16px/1 var(--ui-font);
+}
+
+.calendar-weekday.is-weekend,
+.calendar-day.is-weekend {
+  color: #c0392b;
+}
+
+.calendar-day:active {
+  background: rgb(36 57 140 / 0.12);
+}
+
+.calendar-day.is-today {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+}
+
+/* Точка под числом — на листе этого дня есть записи */
+.calendar-day.has-notes::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+}

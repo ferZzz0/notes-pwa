@@ -14,6 +14,7 @@ import {
   sideOf,
   spreadOf,
   type Block,
+  type Source,
   type Spreads,
   type TextStyle
 } from '../notes';
@@ -79,6 +80,13 @@ const PHOTO_SHARE = { w: 0.55, h: 0.6 };
 const STICKER_SIZE = { w: 230, h: 210 };
 
 const dateFormat = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long' });
+const dayFormat = new Intl.DateTimeFormat('ru', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+// Дата листа дня: «суббота, 25 октября 2026 г.» → без «г.»
+function formatDay(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return dayFormat.format(new Date(y, m - 1, d)).replace(/\s*г\.$/, '');
+}
 
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -150,13 +158,24 @@ const snapAngle = (deg: number) => {
 // через корешок (PageTurn). На одной странице
 // к соседней странице того же разворота камера перелетает через корешок, а к
 // другому развороту — переворот листа и перелёт вслед за ним.
-export function Notebook() {
+// Лист дня (source — день из календаря) — одна страница в любой ориентации,
+// вверху — дата; стрелки листают дни (onDay), а не страницы.
+type Props = {
+  source: Source;
+  // Выйти в главное меню
+  onMenu: () => void;
+  // Лист дня: на день назад / вперёд
+  onDay: (delta: number) => void;
+};
+
+export function Notebook({ source, onMenu, onDay }: Props) {
+  const dayDate = source.kind === 'day' ? source.date : null;
   const canvas = useRef<CanvasHandle>(null);
   const paper = useRef<PaperHandle>(null);
   const selection = useRef<SelectionHandle>(null);
   const camera = useRef<Camera>({ x: 0, y: 0, scale: 1 });
   const flipDone = useRef<(() => void) | null>(null);
-  const [spreads, setSpreads] = useState(loadSpreads);
+  const [spreads, setSpreads] = useState(() => loadSpreads(source));
   // Записи прямо сейчас — для жеста, который длится дольше одной перерисовки
   const spreadsRef = useRef(spreads);
   spreadsRef.current = spreads;
@@ -172,10 +191,12 @@ export function Notebook() {
   // Надпись с текстом стёрли целиком: спрашиваем, удалить ли её
   const [erased, setErased] = useState<{ id: string; text: string } | null>(null);
   // Открытая страница; на развороте — любая из двух его страниц
-  const [page, setPage] = useState(loadPage);
+  const [page, setPage] = useState(() => loadPage(source));
   const portrait = usePortrait();
-  // Вид меняется вслед за ориентацией, но после перелёта (см. эффект ниже)
-  const [single, setSingle] = useState(portrait);
+  // Вид меняется вслед за ориентацией, но после перелёта (см. эффект ниже);
+  // у листа дня всегда одна страница
+  const [singleView, setSingle] = useState(portrait);
+  const single = dayDate !== null || singleView;
   const [flip, setFlip] = useState<Flip | null>(null);
   const [turning, setTurning] = useState(false);
   // Во время перехода видно обе страницы, и края одной страницы не мешают камере
@@ -199,7 +220,7 @@ export function Notebook() {
 
   const commit = (next: Spreads) => {
     setSpreads(next);
-    saveSpreads(next);
+    saveSpreads(source, next);
   };
 
   const setText = (id: string, text: string) => {
@@ -243,7 +264,7 @@ export function Notebook() {
       if (!cur || !b) return prev;
       const rest = cur.blocks.filter(x => x.id !== id);
       const next = { ...prev, [spread]: { ...cur, blocks: dir === 'up' ? [...rest, b] : [b, ...rest] } };
-      saveSpreads(next);
+      saveSpreads(source, next);
       return next;
     });
 
@@ -306,13 +327,13 @@ export function Notebook() {
       const cur = prev[spread];
       if (!cur) return prev;
       const next = { ...prev, [spread]: { ...cur, blocks: cur.blocks.map(b => (b.id === id ? { ...b, ...patch } : b)) } };
-      if (save) saveSpreads(next);
+      if (save) saveSpreads(source, next);
       return next;
     });
 
   const saveNow = () =>
     setSpreads(prev => {
-      saveSpreads(prev);
+      saveSpreads(source, prev);
       return prev;
     });
 
@@ -521,7 +542,7 @@ export function Notebook() {
   // экрана — здесь ещё раз, уже с новым видом). Ждём кадр: flushSync нельзя
   // звать из эффекта
   useEffect(() => {
-    if (portrait === single) return;
+    if (portrait === singleView) return;
     const frame = requestAnimationFrame(() => {
       flushSync(() => setSingle(portrait));
       canvas.current?.showHome();
@@ -565,19 +586,29 @@ export function Notebook() {
     }
     // На одной странице — вслед за листом, к началу новой страницы
     if (single) await canvas.current?.goHome(targetHome);
-    savePage(target);
+    savePage(source, target);
     flushSync(() => {
       setTransit(false);
       setTurning(false);
     });
   };
 
+  // Стрелка: в дневнике — перелистнуть, на листе дня — соседний день
+  const turn = (dir: FlipDir) => {
+    if (dayDate === null) {
+      void go(dir);
+      return;
+    }
+    deselect();
+    onDay(dir === 'next' ? 1 : -1);
+  };
+
   // Стрелки и PageUp/PageDown на клавиатуре, когда не печатаем
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable="true"]')) return;
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') void go('next');
-      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') void go('prev');
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') turn('next');
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') turn('prev');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -598,6 +629,7 @@ export function Notebook() {
       blocks={flip ? (spreads[s]?.blocks ?? []) : []}
       created={spreads[s]?.created}
       showDate={sd === dateSide}
+      day={dayDate}
     />
   );
 
@@ -724,17 +756,34 @@ export function Notebook() {
         </>
       )}
 
-      {/* Пока надпись выбрана, внизу — её панель: стрелки и шестерёнку прячем */}
+      {/* Пока надпись выбрана, внизу — её панель: стрелки и кнопки прячем */}
       {!turning && !selectedBlock && (
         <>
-          <AddMenu onPhoto={file => void addPhoto(file)} onSticker={addSticker} />
-          <Settings />
-          {page > (single ? 1 : 2) && (
-            <button type="button" className="page-arrow page-arrow-prev" aria-label="Назад" onClick={() => void go('prev')}>
+          <div className="bottom-center">
+            <button type="button" className="round-button" aria-label="Главное меню" onClick={onMenu}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5.5h6v6H4zM14 5.5h6v6h-6zM4 15.5h6v4H4zM14 15.5h6v4h-6z" />
+              </svg>
+            </button>
+            <AddMenu onPhoto={file => void addPhoto(file)} onSticker={addSticker} />
+            <Settings />
+          </div>
+          {(dayDate !== null || page > (single ? 1 : 2)) && (
+            <button
+              type="button"
+              className="page-arrow page-arrow-prev"
+              aria-label={dayDate ? 'Предыдущий день' : 'Назад'}
+              onClick={() => turn('prev')}
+            >
               <ArrowIcon dir="prev" />
             </button>
           )}
-          <button type="button" className="page-arrow page-arrow-next" aria-label="Дальше" onClick={() => void go('next')}>
+          <button
+            type="button"
+            className="page-arrow page-arrow-next"
+            aria-label={dayDate ? 'Следующий день' : 'Дальше'}
+            onClick={() => turn('next')}
+          >
             <ArrowIcon dir="next" />
           </button>
         </>
@@ -758,27 +807,24 @@ type PageSideProps = {
   blocks: Block[];
   created?: string;
   showDate: boolean;
+  // Лист дня (ГГГГ-ММ-ДД): вместо номера страницы — дата
+  day: string | null;
 };
 
-// Одна сторона разворота: номер страницы у корешка, дата, надписи этой
-// стороны (левая — x < 0), а на самой первой странице — подсказки
-function PageSide({ spread, side, blocks, created, showDate }: PageSideProps) {
+// Одна сторона разворота: номер страницы у корешка, дата, когда на развороте
+// начали писать (на пустом — ничего: на новых листах только номер, просьба
+// автора), надписи этой стороны (левая — x < 0). У листа дня вверху — его дата
+function PageSide({ spread, side, blocks, created, showDate, day }: PageSideProps) {
   const number = 2 * spread + (side === 'left' ? 1 : 2);
   return (
     <div className="page-side">
-      <span className={`page-number page-number-${side}`}>{number}</span>
-      {showDate && (
-        <span className={`page-date page-date-${side}${created ? '' : ' page-date-empty'}`}>
-          {formatDate(created ?? localDate())}
-        </span>
-      )}
-      {spread === 0 && side === 'left' && (
-        <div className="title-note">
-          <h1>Мои заметки</h1>
-          <p>Двойное касание по бумаге — написать в этом месте.</p>
-          <p>Коснитесь надписи — её можно двигать, поворачивать, менять цвет и шрифт.</p>
-          <p>«+» внизу — фото и стикеры. Стрелки — перелистнуть.</p>
-        </div>
+      {day ? (
+        <span className="page-day">{formatDay(day)}</span>
+      ) : (
+        <>
+          <span className={`page-number page-number-${side}`}>{number}</span>
+          {showDate && created && <span className={`page-date page-date-${side}`}>{formatDate(created)}</span>}
+        </>
       )}
       {blocks
         .filter(b => (side === 'left' ? b.x < 0 : b.x >= 0))

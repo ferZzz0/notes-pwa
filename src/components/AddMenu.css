@@ -1,31 +1,9 @@
-/* «+» — внизу посередине, слева от шестерёнки (Settings.css), такой же светлый */
-.add-button {
-  position: fixed;
-  left: 50%;
-  bottom: calc(20px + var(--safe-bottom));
-  z-index: 7;
-  transform: translateX(calc(-100% - 6px));
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 1px solid rgb(60 40 10 / 0.08);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--paper) 72%, transparent);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 2px 8px rgb(60 40 10 / 0.12);
-  color: var(--ink-muted);
-}
-
+/* «+» — круглая кнопка в ряду внизу посередине (App.css: .bottom-center,
+   .round-button) */
 .add-button svg {
   width: 22px;
   height: 22px;
-  fill: none;
-  stroke: currentColor;
   stroke-width: 2.2;
-  stroke-linecap: round;
   transition: transform 0.2s ease-out;
 }
 

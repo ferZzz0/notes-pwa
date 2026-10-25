@@ -45,7 +45,7 @@ export function Settings() {
     <>
       <button
         type="button"
-        className={open ? 'settings-button is-open' : 'settings-button'}
+        className={open ? 'settings-button round-button is-open' : 'settings-button round-button'}
         aria-label="Настройки"
         aria-expanded={open}
         onClick={() => toggle(!open)}

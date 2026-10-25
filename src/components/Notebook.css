@@ -28,7 +28,7 @@
   left: 40px;
 }
 
-/* Дата, когда на развороте начали писать (на пустом — сегодня, бледно):
+/* Дата, когда на развороте начали писать (на пустом её нет):
    на правой странице, а если видна одна левая — на ней, тоже у корешка */
 .page-date {
   font-size: 36px;
@@ -44,32 +44,17 @@
   right: 120px;
 }
 
-.page-date-empty {
-  opacity: 0.4;
-}
-
-/* Подсказки на самой первой странице */
-.title-note {
+/* Лист дня: вверху — его дата, крупно */
+.page-day {
   position: absolute;
-  top: 110px;
-  right: 40px;
-  width: 480px;
+  top: 22px;
+  left: 60px;
   font-family: 'Caveat Variable', cursive;
-  font-size: 40px;
-  line-height: 52px;
-  color: var(--ink-muted);
-}
-
-.title-note h1 {
-  margin: 0 0 20px;
-  font-size: 64px;
-  line-height: 72px;
+  font-size: 44px;
   font-weight: 700;
+  line-height: 1;
   color: var(--ink);
-}
-
-.title-note p {
-  margin: 0 0 20px;
+  white-space: nowrap;
 }
 
 /* --- Поверх полотна, в координатах экрана --- */

@@ -4,7 +4,7 @@
   position: fixed;
   inset: 0;
   z-index: 20;
-  background: rgb(40 30 10 / 0.18);
+  background: rgb(20 15 5 / 0.4);
 }
 
 .confirm-dialog {
@@ -14,11 +14,11 @@
   z-index: 21;
   transform: translate(-50%, -50%);
   width: min(300px, calc(100% - 32px));
-  padding: 16px;
-  border: 1px solid var(--border);
+  padding: 18px 16px 16px;
+  border: 2px solid #d64545;
   border-radius: 16px;
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.35);
   color: var(--text);
   font: 15px/1.35 var(--ui-font);
   text-align: center;
@@ -26,7 +26,8 @@
 
 .confirm-title {
   margin: 0 0 4px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
 }
 
 .confirm-note {

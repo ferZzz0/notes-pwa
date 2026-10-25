@@ -76,11 +76,15 @@ const RESET_KEY = 'notes-pwa:reset';
 // Все ключи приложения, включая прежние форматы и убранные настройки
 const ALL_KEYS = [SPREADS_KEY, PAGE_KEY, OLD_SPREAD_KEY, OLD_PAGES_KEY, OLD_DRAFT_KEY, STYLE_KEY, 'notes-pwa:settings'];
 
-// Стереть все записи и настройки на этом устройстве (кнопка в настройках).
-// Отметку о разовой очистке не трогаем — иначе она прошла бы ещё раз
+// Стереть все записи и настройки на этом устройстве (кнопка в настройках):
+// все ключи приложения — и известные, и с id дневника. Отметку о разовой
+// очистке не трогаем — иначе она прошла бы ещё раз
 export function clearAll(): void {
   try {
     for (const key of ALL_KEYS) localStorage.removeItem(key);
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('notes-pwa:') && key !== RESET_KEY) localStorage.removeItem(key);
+    }
   } catch {
     // Память недоступна — стирать нечего
   }
@@ -161,29 +165,109 @@ function migrate(spreads: Spreads): void {
   }
 }
 
-export function loadSpreads(): Spreads {
-  const spreads = read<Spreads>(SPREADS_KEY, {});
-  migrate(spreads);
+// --- Дневники и листы дней ---
+// Тетрадь открывает либо дневник (их несколько, у каждого имя), либо лист
+// одного дня из календаря. У дневника свои развороты и открытая страница;
+// у первого дневника — прежние ключи (записи, сделанные до дневников).
+// Листы дней — все в одном ключе: { 'ГГГГ-ММ-ДД': разворот }, у дня один
+// лист — правая страница разворота 0.
+export type Source = { kind: 'notebook'; id: string } | { kind: 'day'; date: string };
+// Что открыто: меню или тетрадь
+export type View = { kind: 'menu' } | Source;
+export type NotebookInfo = { id: string; name: string; color: string };
+
+const NOTEBOOKS_KEY = 'notes-pwa:notebooks';
+const DAYS_KEY = 'notes-pwa:days';
+const VIEW_KEY = 'notes-pwa:view';
+export const FIRST_NOTEBOOK = 'default';
+// Страница листа дня (правая страница разворота 0)
+export const DAY_PAGE = 2;
+// Цвета обложек — по кругу для новых дневников
+export const COVER_COLORS = ['#3b4a8c', '#b5523b', '#3f7d5c', '#8a5aa8', '#c48a2c', '#2f7f95', '#a8435f', '#5b5f66'];
+
+const spreadsKey = (id: string) => (id === FIRST_NOTEBOOK ? SPREADS_KEY : `${SPREADS_KEY}:${id}`);
+const pageKey = (id: string) => (id === FIRST_NOTEBOOK ? PAGE_KEY : `${PAGE_KEY}:${id}`);
+
+export function loadNotebooks(): NotebookInfo[] {
+  const list = read<NotebookInfo[] | null>(NOTEBOOKS_KEY, null);
+  return Array.isArray(list) && list.length > 0 ? list : [{ id: FIRST_NOTEBOOK, name: 'Мой дневник', color: COVER_COLORS[0] }];
+}
+
+export function saveNotebooks(list: NotebookInfo[]): void {
+  write(NOTEBOOKS_KEY, list);
+}
+
+// Стереть записи дневника; возвращает id его фото — их стирает images.ts
+export function deleteNotebookData(id: string): string[] {
+  const spreads = read<Spreads>(spreadsKey(id), {});
+  try {
+    localStorage.removeItem(spreadsKey(id));
+    localStorage.removeItem(pageKey(id));
+  } catch {
+    // Память недоступна — стирать нечего
+  }
+  return Object.values(spreads).flatMap(s => s.blocks.map(b => b.image).filter((x): x is string => !!x));
+}
+
+export function loadView(): View {
+  const v = read<View | null>(VIEW_KEY, null);
+  return v && (v.kind === 'menu' || v.kind === 'notebook' || v.kind === 'day') ? v : { kind: 'notebook', id: FIRST_NOTEBOOK };
+}
+
+export function saveView(view: View): void {
+  write(VIEW_KEY, view);
+}
+
+const readDays = () => read<Record<string, Spread>>(DAYS_KEY, {});
+
+// Дни, на листах которых что-то есть (для отметок в календаре)
+export function daysWithNotes(): Set<string> {
+  return new Set(
+    Object.entries(readDays())
+      .filter(([, s]) => s.blocks.some(b => !isBlank(b)))
+      .map(([d]) => d)
+  );
+}
+
+export function loadSpreads(source: Source): Spreads {
+  let spreads: Spreads;
+  if (source.kind === 'day') {
+    const day = readDays()[source.date];
+    spreads = day ? { 0: day } : {};
+  } else {
+    spreads = read<Spreads>(spreadsKey(source.id), {});
+    if (source.id === FIRST_NOTEBOOK) migrate(spreads);
+  }
   // Пустые блоки могли остаться, если приложение закрыли, ничего не написав
   for (const s of Object.values(spreads)) s.blocks = s.blocks.filter(b => !isBlank(b));
   return spreads;
 }
 
-export function saveSpreads(spreads: Spreads): void {
-  write(SPREADS_KEY, spreads);
+export function saveSpreads(source: Source, spreads: Spreads): void {
+  if (source.kind === 'notebook') {
+    write(spreadsKey(source.id), spreads);
+    return;
+  }
+  const days = readDays();
+  const day = spreads[0];
+  if (day && day.blocks.some(b => !isBlank(b))) days[source.date] = day;
+  else delete days[source.date];
+  write(DAYS_KEY, days);
 }
 
 // Открытая страница (с 1) — чтобы после перезапуска вернуться туда же.
-// Раньше хранили открытый разворот: разворот s — это страница 2s+1.
-export function loadPage(): number {
-  const page = read<number | null>(PAGE_KEY, null);
+// Раньше хранили открытый разворот: разворот s — это страница 2s+1. У дня
+// страница одна
+export function loadPage(source: Source): number {
+  if (source.kind === 'day') return DAY_PAGE;
+  const page = read<number | null>(pageKey(source.id), null);
   if (Number.isInteger(page) && page! >= 1) return page!;
-  const spread = read<number>(OLD_SPREAD_KEY, 0);
+  const spread = source.id === FIRST_NOTEBOOK ? read<number>(OLD_SPREAD_KEY, 0) : 0;
   return Number.isInteger(spread) && spread >= 0 ? 2 * spread + 1 : 1;
 }
 
-export function savePage(n: number): void {
-  write(PAGE_KEY, n);
+export function savePage(source: Source, n: number): void {
+  if (source.kind === 'notebook') write(pageKey(source.id), n);
 }
 
 export function loadStyle(): TextStyle {

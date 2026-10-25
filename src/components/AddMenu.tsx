@@ -17,7 +17,7 @@ export function AddMenu({ onPhoto, onSticker }: Props) {
     <>
       <button
         type="button"
-        className={open ? 'add-button is-open' : 'add-button'}
+        className={open ? 'add-button round-button is-open' : 'add-button round-button'}
         aria-label="Добавить"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
