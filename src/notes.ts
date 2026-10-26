@@ -77,9 +77,13 @@ export const isBlank = (b: Block) => !b.kind && !b.text.trim();
 // Цвет и шрифт, выбранные последними, — с ними начинается новая надпись
 export type TextStyle = { color?: string; font?: FontId };
 
+// Брелок под островком iPhone (настройки листа, Charm.tsx): наклейка (id из
+// DECALS), сколько на ней блёсток (0–1) и её размер (px экрана)
+export type Charm = { decal: string; glitter: number; size: number };
+
 // Оформление страницы (настройки листа): цвет бумаги и цвет её номера и
-// даты (#rrggbb); нет — как у приложения
-export type PageLook = { paper?: string; labels?: string };
+// даты (#rrggbb), брелок; нет — как у приложения
+export type PageLook = { paper?: string; labels?: string; charm?: Charm };
 // История оформления страницы — для «Отменить» / «Вернуть» в настройках
 // листа (только этой страницы; хранится вместе с ней — просьба автора)
 export type LookLog = { past: PageLook[]; future: PageLook[] };

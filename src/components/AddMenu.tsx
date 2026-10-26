@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { loadAddSection, loadGlitter, saveAddSection, saveGlitter, type AddSection } from '../notes';
 import { DECAL_GROUPS, DECALS, DEFAULT_GLITTER, STICKERS, decalSrc, type DecalId, type StickerId } from '../textStyle';
 import { Glitter } from './Glitter';
@@ -15,6 +15,8 @@ type Props = {
   onPaste?: () => void;
   // Есть ли что вставить: false — буфер точно пуст (тогда пункта нет)
   canPaste?: () => Promise<boolean>;
+  // Меню открылось или закрылось (пока открыто, другие нижние кнопки не нажимаются)
+  onOpen?: (open: boolean) => void;
 };
 
 // Выбор фото: на каждое нажатие — новое поле выбора файла (в документе —
@@ -42,8 +44,9 @@ function pickPhoto(onPhoto: (file: File) => void) {
 
 // «+» внизу экрана (рядом с шестерёнкой): добавить на лист фото из галереи
 // (или снять) либо готовый стикер, на котором сразу можно писать.
-export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste }: Props) {
+export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste, onOpen }: Props) {
   const [open, setOpen] = useState(false);
+  useEffect(() => onOpen?.(open), [open]);
   // Буфер точно пуст — пункта «Вставить» нет (просьба автора); узнаём при
   // каждом открытии меню, а пока не узнали — пункт есть
   const [empty, setEmpty] = useState(false);

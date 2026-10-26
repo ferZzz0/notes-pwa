@@ -161,19 +161,28 @@ export function OpacitySlider({ value = 1, onPick }: { value?: number; onPick: (
 }
 
 // Сколько блёсток на наклейке (просьба автора: ползунком от «мало» к
-// «много»): 0–1 шагом 5%, как прозрачность — свой ползунок на касаниях
-export function GlitterSlider({ value, onPick }: { value: number; onPick: (v: number, final: boolean) => void }) {
+// «много»): 0–1 шагом 5%, как прозрачность — свой ползунок на касаниях.
+// Тот же ползунок, с другими подписями, — размер брелка (size)
+export function GlitterSlider({
+  value,
+  onPick,
+  size = false
+}: {
+  value: number;
+  onPick: (v: number, final: boolean) => void;
+  size?: boolean;
+}) {
   const pick = (e: PointerEvent<HTMLDivElement>, final: boolean) => {
     onPick(Math.round(trackShare(e) * 20) / 20, final);
   };
   return (
     <div className="toolbar-glitter">
-      <span>мало</span>
+      <span>{size ? 'меньше' : 'мало'}</span>
       <div
-        className="glitter-track"
+        className={size ? 'glitter-track size-track' : 'glitter-track'}
         role="slider"
         tabIndex={0}
-        aria-label="Блёстки"
+        aria-label={size ? 'Размер' : 'Блёстки'}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(value * 100)}
@@ -188,7 +197,7 @@ export function GlitterSlider({ value, onPick }: { value: number; onPick: (v: nu
       >
         <span className="opacity-thumb" style={{ left: thumbLeft(value) }} />
       </div>
-      <span>много</span>
+      <span>{size ? 'больше' : 'много'}</span>
     </div>
   );
 }

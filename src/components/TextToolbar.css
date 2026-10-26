@@ -673,6 +673,20 @@
   outline: none;
 }
 
+/* Размер брелка — дорожка без искорок, клином от узкой к широкой (клин —
+   отдельным слоем: обрезка самой дорожки обрезала бы и бегунок) */
+.glitter-track.size-track {
+  background: none;
+}
+
+.glitter-track.size-track::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, color-mix(in srgb, var(--ink) 18%, var(--chrome)), color-mix(in srgb, var(--ink) 45%, var(--chrome)));
+  clip-path: polygon(0 38%, 100% 0, 100% 100%, 0 62%);
+}
+
 /* Разделы плашки (у наклейки — «Блёстки» и «Прозрачность») */
 .toolbar-opacity-pop {
   display: flex;

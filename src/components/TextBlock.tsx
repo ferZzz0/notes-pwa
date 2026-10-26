@@ -132,7 +132,7 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
 
   if (face) {
     return (
-      <div className={`${className} text-face`} style={style} {...data}>
+      <div className={`${className} text-face`} style={style} {...data} data-face={block.id}>
         {shape}
         {runs.map((r, i) => {
           if (!needsSpan(r, block.marker)) return r.t;
@@ -145,8 +145,10 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
         })}
         {/* Текст кончается переносом — пустая последняя строка, как у
             живой надписи (там её держит <br data-ghost>): без неё стикер на
-            перевороте листа был на строку ниже (жалоба автора) */}
-        {block.text.endsWith('\n') && <br />}
+            перевороте листа был на строку ниже (жалоба автора). У пустого
+            стикера — тоже строка: у поля ввода она есть всегда (под курсор),
+            без неё пустой стикер на время переворота становился ниже */}
+        {(block.text === '' || block.text.endsWith('\n')) && <br />}
       </div>
     );
   }

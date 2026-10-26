@@ -19,6 +19,7 @@ import {
   sideOf,
   spreadOf,
   type Block,
+  type Charm,
   type Clip,
   type LookLog,
   type PageLook,
@@ -45,7 +46,8 @@ import {
 import { decalSrc, markerOf, type DecalId, type StickerId } from '../textStyle';
 import { isDark } from '../theme';
 import { AddMenu } from './AddMenu';
-import { ConfirmDialog } from './ConfirmDialog';
+import { Charm as CharmItem } from './Charm';
+import { ConfirmDialog, NoticeDialog } from './ConfirmDialog';
 import { Canvas, type Camera, type CanvasHandle, type Fixed, type Grab, type Home, type Point, type Rect } from './Canvas';
 import { DECAL_SIZE, DecalItem, ImageItem } from './ImageItem';
 import { ImageToolbar } from './ImageToolbar';
@@ -110,6 +112,17 @@ const SNAP_SCALE = 0.06;
 // быстрее прежних 850, потом вдвое медленнее этого), вертикально
 // за ним ещё летит камера к новой странице
 const TURN_MS = { spread: 340, single: 850 };
+
+// Сообщение посреди экрана в оформлении приложения (NoticeDialog)
+type Notice = { icon: 'clipboard' | 'photo'; title: string; note?: string };
+// Брелок прячется, если от его страницы на экране меньше этого (px)
+const CHARM_ROOM_X = 90;
+
+const EMPTY_CLIPBOARD: Notice = {
+  icon: 'clipboard',
+  title: 'В буфере обмена пусто',
+  note: 'Там нет ни текста, ни картинки. Скопируй что-нибудь и вставь ещё раз.'
+};
 // Перелёт к началу листа перед перелистыванием (если лист приближен)
 const TURN_HOME_MS = 200;
 // Смахивание листает, если начато в этой доле экрана у края, к которому
@@ -270,6 +283,7 @@ function cleanLook(look: PageLook): PageLook {
   const clean: PageLook = {};
   if (look.paper) clean.paper = look.paper;
   if (look.labels) clean.labels = look.labels;
+  if (look.charm) clean.charm = look.charm;
   return clean;
 }
 const sameLook = (a: PageLook, b: PageLook) => JSON.stringify(cleanLook(a)) === JSON.stringify(cleanLook(b));
@@ -280,7 +294,7 @@ const sameLook = (a: PageLook, b: PageLook) => JSON.stringify(cleanLook(a)) === 
 function withLook(all: Spreads, s: number, side: Side, look: PageLook, log?: LookLog | null): Spreads {
   const cur = all[s] ?? { blocks: [] };
   const clean = cleanLook(look);
-  const looks = { ...cur.looks, [side]: clean.paper || clean.labels ? clean : undefined };
+  const looks = { ...cur.looks, [side]: clean.paper || clean.labels || clean.charm ? clean : undefined };
   const logs = log === undefined ? cur.lookLog : { ...cur.lookLog, [side]: log ?? undefined };
   const sp: Spread = {
     ...cur,
@@ -439,6 +453,12 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const single = dayDate !== null || singleView;
   const [flip, setFlip] = useState<Flip | null>(null);
   const [turning, setTurning] = useState(false);
+  // Сообщение посреди экрана (NoticeDialog — вместо системного alert)
+  const [notice, setNotice] = useState<Notice | null>(null);
+  // Открыто меню «+»: шестерёнка листа и «×» наклеивания не нажимаются
+  const [addOpen, setAddOpen] = useState(false);
+  // Сколько раз перелистывали — от каждого раза брелок качается
+  const [kick, setKick] = useState(0);
   // Во время перехода видно обе страницы, и края одной страницы не мешают камере
   const [transit, setTransit] = useState(false);
   // Прямоугольник всего, что написано на видимых страницах (мир): по нему
@@ -457,6 +477,19 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     b => display === 'both' || (display === 'left' ? b.x < 0 : b.x >= 0)
   );
   const selectedBlock = turning ? undefined : visibleBlocks.find(b => b.id === selected);
+  // Брелоки (настройки листа): у каждой видимой страницы — свой, вертикально
+  // — только у открытой. Пока листаем — прежние, до конца перелистывания
+  // (иначе брелок пропадал в самом начале)
+  const pageCharms = useRef<Partial<Record<Side, Charm>>>({});
+  if (!turning) {
+    const sides: Side[] = !portrait && display === 'both' ? ['left', 'right'] : [side];
+    pageCharms.current = {};
+    for (const sd of sides) {
+      const c = spreads[spread]?.looks?.[sd]?.charm;
+      if (c) pageCharms.current[sd] = c;
+    }
+  }
+  const charms = pageCharms.current;
 
   // То, что сейчас записано в память, — от него считаются история и даты
   const saved = useRef<{ spreads: Spreads; json: string } | null>(null);
@@ -640,7 +673,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     try {
       ({ ratio, width: natural } = await importImage(file, id));
     } catch {
-      alert('Не получилось открыть это фото');
+      setNotice({ icon: 'photo', title: 'Не получилось открыть фото', note: 'Попробуй выбрать другое.' });
       return;
     }
     const v = canvas.current!.visibleRect();
@@ -677,7 +710,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const pasteText = (text: string, p: Point) => {
     const t = text.replace(/\r\n?/g, '\n');
     if (!t.trim()) {
-      alert('В буфере обмена нет ни текста, ни картинки');
+      setNotice(EMPTY_CLIPBOARD);
       return;
     }
     const plain = newText(p, t);
@@ -729,7 +762,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     if (c.kind === 'image' && c.image) {
       image = newBlockId();
       if (!(await copyImage(c.image, image))) {
-        alert('Картинки скопированного фото уже нет');
+        setNotice({ icon: 'photo', title: 'Этого фото уже нет', note: 'Его картинка удалена — скопируй фото ещё раз.' });
         return;
       }
     }
@@ -780,7 +813,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // «Вставить») — решение самого человека, о нём не говорим
   const clipboardFailed = (e: unknown) => {
     if (e instanceof DOMException && e.name === 'NotAllowedError') return;
-    alert('Не получилось прочитать буфер обмена');
+    setNotice({ icon: 'clipboard', title: 'Не получилось прочитать буфер обмена', note: 'Попробуй вставить ещё раз.' });
   };
 
   // «+» → «Вставить» (просьба автора: вставка только так, долгое нажатие на
@@ -793,7 +826,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     try {
       const data = await readClipboard();
       if (data) await insertPasted(data, p);
-      else alert('В буфере обмена нет ни текста, ни картинки');
+      else setNotice(EMPTY_CLIPBOARD);
     } catch (e) {
       if (e instanceof DOMException && e.name === 'NotAllowedError') return;
       if (clip) await pasteClip(p);
@@ -1334,6 +1367,26 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // перенос, поворот, шрифт); при движении камеры — в onFrame
   useLayoutEffect(() => selection.current?.update());
 
+  // Брелоки — посередине той части своей страницы, что на экране (корешок —
+  // на x камеры; левая страница левее него, правая — правее). Видно от
+  // страницы меньше CHARM_ROOM_X — брелок прячется. После каждой перерисовки
+  // и при движении камеры (onFrame); меняется только transform
+  const charmEls = useRef<Partial<Record<Side, HTMLDivElement | null>>>({});
+  const viewWidth = useRef(window.innerWidth);
+  const placeCharms = () => {
+    const w = viewWidth.current;
+    const spineX = camera.current.x;
+    for (const sd of ['left', 'right'] as const) {
+      const el = charmEls.current[sd];
+      if (!el) continue;
+      const from = sd === 'left' ? 0 : Math.max(0, spineX);
+      const to = sd === 'left' ? Math.min(w, spineX) : w;
+      el.style.transform = `translateX(${(from + to) / 2}px)`;
+      el.style.visibility = to - from < CHARM_ROOM_X ? 'hidden' : '';
+    }
+  };
+  useLayoutEffect(placeCharms);
+
   // Повернули телефон: одна страница ↔ разворот, и новый вид сразу с начала
   // листа в стандартном размере (полотно и само так делает при смене размера
   // экрана — здесь ещё раз, уже с новым видом). Ждём кадр: flushSync нельзя
@@ -1371,6 +1424,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     flushSync(() => {
       setTurning(true);
       setTransit(true);
+      setKick(k => k + 1);
     });
 
     if (targetSpread !== spread) {
@@ -1675,6 +1729,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           camera.current = cam;
           paper.current?.update(cam, size);
           selection.current?.update();
+          viewWidth.current = size.w;
+          placeCharms();
           if (moved) followCaret();
         }}
         onTap={onTap}
@@ -1770,6 +1826,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         />
       )}
 
+      {notice && <NoticeDialog {...notice} onClose={() => setNotice(null)} />}
+
       {pageMenu !== null && (
         <PageSettings
           key={pageMenu}
@@ -1781,6 +1839,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           onUndo={() => lookUndo(pageMenu)}
           onRedo={() => lookRedo(pageMenu)}
           look={lookOf(spreads, pageMenu)}
+          charmShown={portrait && pageMenu === page && !!charms[side]}
           pages={toPages(spreads).length}
           onLook={(patch, final) => setLook(pageMenu, patch, final)}
           onCopyFrom={from => copyLook(pageMenu, from)}
@@ -1882,6 +1941,24 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         </>
       )}
 
+      {/* Брелоки — сверху посередине видимой части своей страницы (просьба
+          автора): вертикально это середина экрана, под островком */}
+      {(['left', 'right'] as const).map(sd => {
+        const c = charms[sd];
+        return (
+          c && (
+            <CharmItem
+              key={sd}
+              ref={el => {
+                charmEls.current[sd] = el;
+              }}
+              charm={c}
+              kick={kick}
+            />
+          )
+        );
+      })}
+
       {/* Пока надпись выбрана, внизу — её панель: кнопки прячем */}
       {/* Пока лист перелистывается, кнопки плавно гаснут и потом так же
           появляются (просьба автора; App.css: .is-faded) */}
@@ -1912,12 +1989,18 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               }}
               onPaste={() => window.setTimeout(() => void pasteFromMenu(), MENU_GONE_MS)}
               canPaste={clipboardMayHaveContent}
+              onOpen={setAddOpen}
             />
           </div>
           {/* Идёт наклеивание — «×» над «+» и шестерёнкой, крупнее них
               (просьба автора); на ней — какая наклейка */}
           {stamp && (
-            <button type="button" className={turning ? 'round-button stamp-cancel is-faded' : 'round-button stamp-cancel'} aria-label="Закончить наклеивать" onClick={() => setStamp(null)}>
+            <button
+              type="button"
+              className={`round-button stamp-cancel${turning ? ' is-faded' : ''}${addOpen ? ' is-blocked' : ''}`}
+              aria-label="Закончить наклеивать"
+              onClick={() => setStamp(null)}
+            >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 6l12 12M18 6 6 18" />
               </svg>
@@ -1928,7 +2011,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               углу (просьба автора; отладка — в настройках главного меню) */}
           <button
             type="button"
-            className={turning ? 'round-button page-settings-button is-faded' : 'round-button page-settings-button'}
+            className={`round-button page-settings-button${turning ? ' is-faded' : ''}${addOpen ? ' is-blocked' : ''}`}
             aria-label="Настройки листа"
             onClick={() => {
               deselect();
