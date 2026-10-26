@@ -11,8 +11,8 @@ import type { EffectId, FilterId, FontId, FrameId, MarkerId, StickerId } from '.
 
 export type Block = {
   id: string;
-  // Что это: надпись (kind нет), стикер с надписью или фото
-  kind?: 'sticker' | 'image';
+  // Что это: надпись (kind нет), стикер с надписью, фото или наклейка
+  kind?: 'sticker' | 'image' | 'decal';
   // Левый верхний угол в координатах мира (px; верх листа — y = 0): у
   // надписи и стикера — начало текста, у фото — угол рамки
   x: number;
@@ -51,6 +51,8 @@ export type Block = {
   // строк (по ней текст переносится; ручка на рамке), нет — по тексту, до
   // предела страницы
   image?: string;
+  // Наклейка: какая (textStyle.ts: DECALS); её размер — width (px мира)
+  decal?: string;
   width?: number;
   ratio?: number;
   frame?: FrameId;

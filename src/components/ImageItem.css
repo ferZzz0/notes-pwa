@@ -86,3 +86,13 @@
 .frame-circle .item-image-photo {
   border-radius: 50%;
 }
+
+/* Наклейка: эмодзи посередине квадрата */
+.item-decal {
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}

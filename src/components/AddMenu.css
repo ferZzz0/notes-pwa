@@ -164,3 +164,25 @@
   transform: scale(0.5);
   transform-origin: 0 0;
 }
+
+/* Наклейки — эмодзи по шесть в ряд */
+.add-decals {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.add-decal {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  font: 28px/1 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+.add-decal:active {
+  background: var(--border);
+}

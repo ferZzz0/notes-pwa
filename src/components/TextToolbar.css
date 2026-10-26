@@ -636,3 +636,8 @@
   min-width: 0;
   padding: 4px 6px;
 }
+
+/* Прозрачность наклейки — одна плашка с ползунком над панелью */
+.toolbar-menu.toolbar-opacity-pop {
+  width: min(300px, calc(100vw - 24px));
+}

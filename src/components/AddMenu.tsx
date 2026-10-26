@@ -1,10 +1,12 @@
 import { useState, type CSSProperties } from 'react';
-import { STICKERS, type StickerId } from '../textStyle';
+import { DECALS, STICKERS, type DecalId, type StickerId } from '../textStyle';
 import './AddMenu.css';
 
 type Props = {
   onPhoto: (file: File) => void;
   onSticker: (sticker: StickerId) => void;
+  // Выбрали наклейку — дальше её наклеивают касаниями по листу
+  onDecal?: (decal: DecalId) => void;
   // «Вставить» из буфера обмена (зовётся сразу после того, как меню закрыли)
   onPaste?: () => void;
   // Есть ли что вставить: false — буфер точно пуст (тогда пункта нет)
@@ -36,7 +38,7 @@ function pickPhoto(onPhoto: (file: File) => void) {
 
 // «+» внизу экрана (рядом с шестерёнкой): добавить на лист фото из галереи
 // (или снять) либо готовый стикер, на котором сразу можно писать.
-export function AddMenu({ onPhoto, onSticker, onPaste, canPaste }: Props) {
+export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste }: Props) {
   const [open, setOpen] = useState(false);
   // Буфер точно пуст — пункта «Вставить» нет (просьба автора); узнаём при
   // каждом открытии меню, а пока не узнали — пункт есть
@@ -129,6 +131,29 @@ export function AddMenu({ onPhoto, onSticker, onPaste, canPaste }: Props) {
                 </button>
               ))}
             </div>
+            {/* Наклейки (просьба автора): выбрали — и касания по листу её
+                наклеивают, пока не нажмут «×» над «+» */}
+            {onDecal && (
+              <>
+                <p className="add-section">Наклейки</p>
+                <div className="add-decals">
+                  {DECALS.map(d => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      className="add-decal"
+                      aria-label={`Наклейка «${d.label}»`}
+                      onClick={() => {
+                        setOpen(false);
+                        onDecal(d.id);
+                      }}
+                    >
+                      {d.char}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

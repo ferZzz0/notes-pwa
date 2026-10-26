@@ -169,6 +169,26 @@ export const FILTERS = [
   { id: 'fade', label: 'Блёклый', css: 'saturate(0.6) brightness(1.1) contrast(0.9)' }
 ] as const;
 
+// Наклейки (просьба автора): выбирают в «+» и наклеивают касаниями по листу,
+// пока не нажмут «×». Это эмодзи — на iPhone они рисуются яркими картинками
+export const DECALS = [
+  { id: 'star', char: '⭐', label: 'Звезда' },
+  { id: 'heart', char: '❤️', label: 'Сердце' },
+  { id: 'smile', char: '😊', label: 'Улыбка' },
+  { id: 'flower', char: '🌸', label: 'Цветок' },
+  { id: 'check', char: '✅', label: 'Галочка' },
+  { id: 'fire', char: '🔥', label: 'Огонь' },
+  { id: 'like', char: '👍', label: 'Класс' },
+  { id: 'party', char: '🎉', label: 'Праздник' },
+  { id: 'sun', char: '☀️', label: 'Солнце' },
+  { id: 'rainbow', char: '🌈', label: 'Радуга' },
+  { id: 'clover', char: '🍀', label: 'Клевер' },
+  { id: 'pin', char: '📌', label: 'Кнопка' }
+] as const;
+export type DecalId = (typeof DECALS)[number]['id'];
+// Незнакомое значение — звезда
+export const decalOf = (id?: string) => DECALS.find(d => d.id === id) ?? DECALS[0];
+
 export type StickerId = (typeof STICKERS)[number]['id'];
 export type FrameId = (typeof FRAMES)[number]['id'];
 export type FilterId = (typeof FILTERS)[number]['id'];

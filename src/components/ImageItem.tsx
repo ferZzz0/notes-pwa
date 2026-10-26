@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { imageUrl, knownImageUrl } from '../images';
 import type { Block } from '../notes';
-import { filterCss, frameOf } from '../textStyle';
+import { decalOf, filterCss, frameOf } from '../textStyle';
 import './ImageItem.css';
 
 // Ширина фото по умолчанию (px мира), если её почему-то нет
@@ -52,6 +52,41 @@ export function ImageItem({ block }: { block: Block }) {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+// Размер новой наклейки (px мира при обычном размере листа)
+export const DECAL_SIZE = 140;
+
+// Наклейка на листе — эмодзи в квадрате width; выбирают, двигают,
+// поворачивают и меняют размер её, как фото (тот же класс .item-image — по
+// нему её меряют и находят)
+export function DecalItem({ block }: { block: Block }) {
+  const rotate = block.rotate ?? 0;
+  const scale = block.scale ?? 1;
+  const size = block.width ?? DECAL_SIZE;
+  const decal = decalOf(block.decal);
+  const style = {
+    left: block.x,
+    top: block.y,
+    width: size,
+    height: size,
+    fontSize: size * 0.8,
+    transform: rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : undefined,
+    opacity: block.opacity
+  } as CSSProperties;
+  return (
+    <div
+      className="item-image item-decal"
+      style={style}
+      data-block={block.id}
+      data-rotate={rotate || undefined}
+      data-scale={scale !== 1 ? scale : undefined}
+      role="img"
+      aria-label={decal.label}
+    >
+      {decal.char}
     </div>
   );
 }

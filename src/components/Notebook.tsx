@@ -42,12 +42,12 @@ import {
   type RunStyle,
   type TextRange
 } from '../richText';
-import { markerOf, type StickerId } from '../textStyle';
+import { decalOf, markerOf, type DecalId, type StickerId } from '../textStyle';
 import { isDark } from '../theme';
 import { AddMenu } from './AddMenu';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Canvas, type Camera, type CanvasHandle, type Fixed, type Grab, type Home, type Point, type Rect } from './Canvas';
-import { ImageItem } from './ImageItem';
+import { DECAL_SIZE, DecalItem, ImageItem } from './ImageItem';
 import { ImageToolbar } from './ImageToolbar';
 import { PageSettings } from './PageSettings';
 import { PageTurn } from './PageTurn';
@@ -322,7 +322,7 @@ const widthLimitOf = (b: Block) => {
   const own = TEXT_WIDTH * (b.textSize ?? 1);
   return b.x < 0 ? Math.max(Math.min(MIN_TEXT_WIDTH, own), Math.min(own, -b.x - SPINE_GAP)) : own;
 };
-const maxWidthOf = (b: Block) => (b.kind !== 'image' && b.width ? Math.min(b.width, widthLimitOf(b)) : widthLimitOf(b));
+const maxWidthOf = (b: Block) => (!b.kind || b.kind === 'sticker') && b.width ? Math.min(b.width, widthLimitOf(b)) : widthLimitOf(b);
 // Уже этого (px мира) надпись ручкой не сжать
 const MIN_WRAP_WIDTH = 120;
 
@@ -733,8 +733,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         return;
       }
     }
-    const w = c.kind === 'image' ? (c.width ?? 500) : c.kind === 'sticker' ? STICKER_SIZE.w : PASTE_TEXT_WIDTH;
-    const h = c.kind === 'image' ? w * (c.ratio ?? 0.75) : STICKER_SIZE.h;
+    const w = c.kind === 'image' ? (c.width ?? 500) : c.kind === 'decal' ? (c.width ?? DECAL_SIZE) : c.kind === 'sticker' ? STICKER_SIZE.w : PASTE_TEXT_WIDTH;
+    const h = c.kind === 'image' ? w * (c.ratio ?? 0.75) : c.kind === 'decal' ? w : STICKER_SIZE.h;
     addBlock({ ...c, id: newBlockId(), image, ...place(w, at.x - w / 2, at.y - h / 2) });
   };
 
@@ -1002,12 +1002,29 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // касание по выбранной открывает клавиатуру
   const onTap = (p: Point) => {
     if (turning) return;
+    if (stamp) {
+      placeDecal(stamp, p);
+      return;
+    }
     const hits = blocksAt(p);
     const i = hits.findIndex(b => b.id === selected);
     if (hits.length === 0) setSelected(null);
     else if (i < 0) setSelected(hits[0].id);
     else if (hits.length > 1) setSelected(hits[(i + 1) % hits.length].id);
     else edit(hits[0].id);
+  };
+
+  // Режим наклеивания (просьба автора): выбрали наклейку в «+» — каждое
+  // касание листа ставит её туда (не выбирая), пока не нажмут «×» над «+».
+  // Размер — по зуму, как у новой надписи: на экране всегда одинаковая
+  const [stamp, setStamp] = useState<DecalId | null>(null);
+  const placeDecal = (decal: DecalId, p: Point) => {
+    // Выше верха листа и за корешком одной страницы — не наклеиваем
+    if (p.y < 0 || (display !== 'both' && (p.x < 0 ? 'left' : 'right') !== display)) return;
+    const w = Math.round(DECAL_SIZE / (canvas.current?.zoom() ?? 1));
+    const cur = spreads[spread] ?? { blocks: [] };
+    const block: Block = { id: newBlockId(), kind: 'decal', decal, text: '', width: w, ...place(w, p.x - w / 2, p.y - w / 2) };
+    commit({ ...spreads, [spread]: { ...cur, created: cur.created ?? localDate(), blocks: [...cur.blocks, block] } });
   };
 
   // Жест на выбранной надписи двигает её: один палец — перенос, два —
@@ -1092,7 +1109,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           const [a, c] = p;
           from = midpoint(a0, c0);
           to = midpoint(a, c);
-          const minScale = b.kind === 'image' ? MIN_PHOTO_SCALE : MIN_TEXT_SCALE;
+          const minScale = b.kind === 'image' || b.kind === 'decal' ? MIN_PHOTO_SCALE : MIN_TEXT_SCALE;
           scale = Math.min(MAX_TEXT_SCALE, Math.max(minScale, (s0 * distance(a, c)) / Math.max(distance(a0, c0), 1)));
           if (Math.abs(scale - 1) < SNAP_SCALE) scale = 1;
           rotate = snapAngle(normalize(r0 + angleDeg(a, c) - angleDeg(a0, c0)));
@@ -1123,8 +1140,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     // слоям могли выбрать другую); по фото — новая надпись прямо на нём
     // (просьба автора)
     const hit = blockAt(p);
-    if (turning) return;
-    if (hit && hit.kind !== 'image') {
+    if (turning || stamp) return;
+    if (hit && hit.kind !== 'image' && hit.kind !== 'decal') {
       if (document.activeElement === blockElement(hit.id)) return;
       flushSync(() => setSelected(hit.id));
       edit(hit.id);
@@ -1690,6 +1707,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               <div key={b.id} className="item-clip" data-clip={sideOfBlock(b)}>
                 {b.kind === 'image' ? (
                   <ImageItem block={b} />
+                ) : b.kind === 'decal' ? (
+                  <DecalItem block={b} />
                 ) : (
                   <TextBlock
                     block={b}
@@ -1809,11 +1828,11 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             ref={selection}
             block={selectedBlock}
             camera={() => camera.current}
-            onResize={gripOn && selectedBlock.kind !== 'image' && !selectedBlock.locked ? resizeWidth : undefined}
+            onResize={gripOn && (!selectedBlock.kind || selectedBlock.kind === 'sticker') && !selectedBlock.locked ? resizeWidth : undefined}
           />
           {selectedBlock.locked ? (
             <LockedToolbar history={toolbarTop} onDone={deselect} onHeight={setToolbarHeight} />
-          ) : selectedBlock.kind === 'image' ? (
+          ) : selectedBlock.kind === 'image' || selectedBlock.kind === 'decal' ? (
             <ImageToolbar
               block={selectedBlock}
               onPatch={patch => patchBlock(selectedBlock.id, patch)}
@@ -1884,10 +1903,26 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             <AddMenu
               onPhoto={file => void addPhoto(file)}
               onSticker={addSticker}
+              onDecal={d => {
+                deselect();
+                setStamp(d);
+              }}
               onPaste={() => window.setTimeout(() => void pasteFromMenu(), MENU_GONE_MS)}
               canPaste={clipboardMayHaveContent}
             />
           </div>
+          {/* Идёт наклеивание — «×» над «+» и шестерёнкой, крупнее них
+              (просьба автора); на ней — какая наклейка */}
+          {stamp && (
+            <button type="button" className="round-button stamp-cancel" aria-label="Закончить наклеивать" onClick={() => setStamp(null)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+              <span className="stamp-cancel-badge" aria-hidden="true">
+                {decalOf(stamp).char}
+              </span>
+            </button>
+          )}
           {/* Настройки открытого листа — отдельно от ряда, в правом нижнем
               углу (просьба автора; отладка — в настройках главного меню) */}
           <button
@@ -1955,7 +1990,13 @@ function PageSide({ spread, side, blocks, date, day, look }: PageSideProps) {
         {blocks
           .filter(b => sideOfBlock(b) === side)
           .map(b =>
-            b.kind === 'image' ? <ImageItem key={b.id} block={b} /> : <TextBlock key={b.id} block={b} width={maxWidthOf(b)} face />
+            b.kind === 'image' ? (
+              <ImageItem key={b.id} block={b} />
+            ) : b.kind === 'decal' ? (
+              <DecalItem key={b.id} block={b} />
+            ) : (
+              <TextBlock key={b.id} block={b} width={maxWidthOf(b)} face />
+            )
           )}
       </div>
     </div>

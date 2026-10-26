@@ -33,12 +33,20 @@ export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onD
   const room = menuRoom(0);
   const toggle = (m: Menu) => setMenu(menu === m ? null : m);
 
+  const decal = block.kind === 'decal';
   return (
-    <div ref={ref} className={menu ? 'text-toolbar has-menu' : 'text-toolbar'} role="toolbar" aria-label="Фото" onMouseDown={keepFocus}>
+    <div ref={ref} className={menu ? 'text-toolbar has-menu' : 'text-toolbar'} role="toolbar" aria-label={decal ? 'Наклейка' : 'Фото'} onMouseDown={keepFocus}>
       {history && <div className="toolbar-history">{history}</div>}
 
       {/* Рамка, фильтр, прозрачность — каскадный список, как у надписи */}
-      {menu === 'style' && (
+      {/* У наклейки рамок и фильтров нет — только прозрачность */}
+      {menu === 'style' && decal && (
+        <div className="toolbar-menu toolbar-opacity-pop" role="dialog" aria-label="Прозрачность">
+          <OpacitySlider value={block.opacity} onPick={onOpacity} />
+        </div>
+      )}
+
+      {menu === 'style' && !decal && (
         <CascadeMenu
           anchor={ref}
           room={room}
@@ -106,11 +114,18 @@ export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onD
         </div>
       )}
 
-      {menu === 'delete' && <ConfirmDelete what="фото" onDelete={onDelete} onCancel={() => setMenu(null)} />}
+      {menu === 'delete' && <ConfirmDelete what={decal ? 'наклейку' : 'фото'} onDelete={onDelete} onCancel={() => setMenu(null)} />}
 
-      <button type="button" className={menu === 'style' ? 'is-active' : undefined} aria-label="Оформление" aria-expanded={menu === 'style'} onClick={() => toggle('style')}>
+      <button type="button" className={menu === 'style' ? 'is-active' : undefined} aria-label={decal ? 'Прозрачность' : 'Оформление'} aria-expanded={menu === 'style'} onClick={() => toggle('style')}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 4h16v16H4zM8 8h8v8H8z" />
+          {decal ? (
+            <>
+              <path d="M12 3.5c3.2 4.3 6 7.4 6 10.6a6 6 0 0 1-12 0c0-3.2 2.8-6.3 6-10.6z" />
+              <path d="M6 14.1a6 6 0 0 0 12 0z" style={{ fill: 'currentColor', opacity: 0.45 }} />
+            </>
+          ) : (
+            <path d="M4 4h16v16H4zM8 8h8v8H8z" />
+          )}
         </svg>
       </button>
       <button type="button" className={menu === 'layer' ? 'is-active' : undefined} aria-label="Слой" onClick={() => toggle('layer')}>
@@ -118,7 +133,7 @@ export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onD
           <path d="M12 4l8.5 4.5L12 13 3.5 8.5zM3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5" />
         </svg>
       </button>
-      <button type="button" className={menu === 'delete' ? 'is-active' : undefined} aria-label="Удалить фото" onClick={() => toggle('delete')}>
+      <button type="button" className={menu === 'delete' ? 'is-active' : undefined} aria-label={decal ? 'Удалить наклейку' : 'Удалить фото'} onClick={() => toggle('delete')}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5" />
         </svg>

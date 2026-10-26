@@ -33,6 +33,32 @@
   z-index: 7;
 }
 
+/* «×» — закончить наклеивать: над «+» и шестерёнкой, крупнее них */
+.round-button.stamp-cancel {
+  position: fixed;
+  right: calc(10px + var(--safe-right));
+  bottom: calc(62px + var(--safe-bottom));
+  z-index: 7;
+  width: 52px;
+  height: 52px;
+  background: color-mix(in srgb, var(--chrome) 90%, transparent);
+  box-shadow: 0 2px 10px rgb(60 40 10 / 0.18);
+}
+
+.round-button.stamp-cancel svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 2.2;
+}
+
+/* Какая наклейка сейчас наклеивается — значок в углу кнопки */
+.stamp-cancel-badge {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  font: 18px/1 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
 .bottom-center > * {
   pointer-events: auto;
 }
