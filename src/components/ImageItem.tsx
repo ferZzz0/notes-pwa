@@ -1,7 +1,8 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { imageUrl, knownImageUrl } from '../images';
 import type { Block } from '../notes';
-import { decalOf, filterCss, frameOf } from '../textStyle';
+import { DEFAULT_GLITTER, decalOf, decalSrc, filterCss, frameOf } from '../textStyle';
+import { Glitter } from './Glitter';
 import './ImageItem.css';
 
 // Ширина фото по умолчанию (px мира), если её почему-то нет
@@ -59,9 +60,9 @@ export function ImageItem({ block }: { block: Block }) {
 // Размер новой наклейки (px мира при обычном размере листа)
 export const DECAL_SIZE = 140;
 
-// Наклейка на листе — эмодзи в квадрате width; выбирают, двигают,
-// поворачивают и меняют размер её, как фото (тот же класс .item-image — по
-// нему её меряют и находят)
+// Наклейка на листе — картинка в квадрате width и блёстки на ней (Glitter);
+// выбирают, двигают, поворачивают и меняют размер её, как фото (тот же класс
+// .item-image — по нему её меряют и находят)
 export function DecalItem({ block }: { block: Block }) {
   const rotate = block.rotate ?? 0;
   const scale = block.scale ?? 1;
@@ -72,7 +73,6 @@ export function DecalItem({ block }: { block: Block }) {
     top: block.y,
     width: size,
     height: size,
-    fontSize: size * 0.8,
     transform: rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : undefined,
     opacity: block.opacity
   } as CSSProperties;
@@ -86,7 +86,8 @@ export function DecalItem({ block }: { block: Block }) {
       role="img"
       aria-label={decal.label}
     >
-      {decal.char}
+      <img src={decalSrc(decal.id)} alt="" draggable={false} />
+      <Glitter seed={block.id} amount={block.glitter ?? DEFAULT_GLITTER} />
     </div>
   );
 }

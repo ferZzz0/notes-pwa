@@ -170,24 +170,60 @@ export const FILTERS = [
 ] as const;
 
 // Наклейки (просьба автора): выбирают в «+» и наклеивают касаниями по листу,
-// пока не нажмут «×». Это эмодзи — на iPhone они рисуются яркими картинками
+// пока не нажмут «×». Не эмодзи телефона, а картинки из открытого набора
+// Microsoft Fluent Emoji 3D (лицензия MIT — public/decals/LICENSE-fluentui-emoji.txt),
+// 256×256 WebP в public/decals; блёстки поверх рисует Glitter
+export const DECAL_GROUPS = [
+  { id: 'cute', label: 'Наклейки' },
+  { id: 'halloween', label: 'Хэллоуин' }
+] as const;
 export const DECALS = [
-  { id: 'star', char: '⭐', label: 'Звезда' },
-  { id: 'heart', char: '❤️', label: 'Сердце' },
-  { id: 'smile', char: '😊', label: 'Улыбка' },
-  { id: 'flower', char: '🌸', label: 'Цветок' },
-  { id: 'check', char: '✅', label: 'Галочка' },
-  { id: 'fire', char: '🔥', label: 'Огонь' },
-  { id: 'like', char: '👍', label: 'Класс' },
-  { id: 'party', char: '🎉', label: 'Праздник' },
-  { id: 'sun', char: '☀️', label: 'Солнце' },
-  { id: 'rainbow', char: '🌈', label: 'Радуга' },
-  { id: 'clover', char: '🍀', label: 'Клевер' },
-  { id: 'pin', char: '📌', label: 'Кнопка' }
+  { id: 'heart', label: 'Сердце', group: 'cute' },
+  { id: 'pink-heart', label: 'Розовое сердце', group: 'cute' },
+  { id: 'sparkling-heart', label: 'Сердце со звёздочками', group: 'cute' },
+  { id: 'two-hearts', label: 'Два сердца', group: 'cute' },
+  { id: 'heart-ribbon', label: 'Сердце с бантом', group: 'cute' },
+  { id: 'sakura', label: 'Сакура', group: 'cute' },
+  { id: 'hibiscus', label: 'Гибискус', group: 'cute' },
+  { id: 'tulip', label: 'Тюльпан', group: 'cute' },
+  { id: 'sunflower', label: 'Подсолнух', group: 'cute' },
+  { id: 'rose', label: 'Роза', group: 'cute' },
+  { id: 'blossom', label: 'Цветок', group: 'cute' },
+  { id: 'star', label: 'Звезда', group: 'cute' },
+  { id: 'glowing-star', label: 'Сияющая звезда', group: 'cute' },
+  { id: 'shooting-star', label: 'Падающая звезда', group: 'cute' },
+  { id: 'dizzy', label: 'Звёздочка', group: 'cute' },
+  { id: 'fire', label: 'Огонёк', group: 'cute' },
+  { id: 'rainbow', label: 'Радуга', group: 'cute' },
+  { id: 'pumpkin', label: 'Тыква', group: 'halloween' },
+  { id: 'ghost', label: 'Привидение', group: 'halloween' },
+  { id: 'bat', label: 'Летучая мышь', group: 'halloween' },
+  { id: 'spider', label: 'Паук', group: 'halloween' },
+  { id: 'web', label: 'Паутина', group: 'halloween' },
+  { id: 'skull', label: 'Череп', group: 'halloween' },
+  { id: 'cat', label: 'Чёрная кошка', group: 'halloween' },
+  { id: 'candy', label: 'Конфета', group: 'halloween' },
+  { id: 'lollipop', label: 'Леденец', group: 'halloween' },
+  { id: 'crystal-ball', label: 'Хрустальный шар', group: 'halloween' }
 ] as const;
 export type DecalId = (typeof DECALS)[number]['id'];
-// Незнакомое значение — звезда
-export const decalOf = (id?: string) => DECALS.find(d => d.id === id) ?? DECALS[0];
+// Первые наклейки были эмодзи — их места занимают похожие картинки
+const OLD_DECALS: Record<string, DecalId> = {
+  flower: 'sakura',
+  sun: 'sunflower',
+  clover: 'sakura',
+  smile: 'heart',
+  check: 'star',
+  like: 'heart',
+  party: 'dizzy',
+  pin: 'heart'
+};
+// Незнакомое значение — сердце
+export const decalOf = (id?: string) => DECALS.find(d => d.id === (id && OLD_DECALS[id]) || d.id === id) ?? DECALS[0];
+// Картинка наклейки
+export const decalSrc = (id: string) => `${import.meta.env.BASE_URL}decals/${decalOf(id).id}.webp`;
+// Блёстки новой наклейки, если их ещё не выбирали (0 — нет, 1 — много)
+export const DEFAULT_GLITTER = 0.5;
 
 export type StickerId = (typeof STICKERS)[number]['id'];
 export type FrameId = (typeof FRAMES)[number]['id'];

@@ -1,12 +1,16 @@
 import { useState, type CSSProperties } from 'react';
-import { DECALS, STICKERS, type DecalId, type StickerId } from '../textStyle';
+import { loadGlitter, saveGlitter } from '../notes';
+import { DECAL_GROUPS, DECALS, DEFAULT_GLITTER, STICKERS, decalSrc, type DecalId, type StickerId } from '../textStyle';
+import { Glitter } from './Glitter';
+import { GlitterSlider } from './TextToolbar';
 import './AddMenu.css';
 
 type Props = {
   onPhoto: (file: File) => void;
   onSticker: (sticker: StickerId) => void;
-  // Выбрали наклейку — дальше её наклеивают касаниями по листу
-  onDecal?: (decal: DecalId) => void;
+  // Выбрали наклейку — дальше её наклеивают касаниями по листу; glitter —
+  // сколько на ней блёсток (ползунок над наклейками)
+  onDecal?: (decal: DecalId, glitter: number) => void;
   // «Вставить» из буфера обмена (зовётся сразу после того, как меню закрыли)
   onPaste?: () => void;
   // Есть ли что вставить: false — буфер точно пуст (тогда пункта нет)
@@ -43,6 +47,8 @@ export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste }: Prop
   // Буфер точно пуст — пункта «Вставить» нет (просьба автора); узнаём при
   // каждом открытии меню, а пока не узнали — пункт есть
   const [empty, setEmpty] = useState(false);
+  // Блёстки новых наклеек — как выбрали в прошлый раз
+  const [glitter, setGlitter] = useState(() => loadGlitter(DEFAULT_GLITTER));
   const toggle = () => {
     if (!open) {
       setEmpty(false);
@@ -131,27 +137,43 @@ export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste }: Prop
                 </button>
               ))}
             </div>
-            {/* Наклейки (просьба автора): выбрали — и касания по листу её
+            {/* Наклейки (просьба автора): картинки с блёстками; сколько
+                блёсток — ползунком; выбрали — и касания по листу её
                 наклеивают, пока не нажмут «×» над «+» */}
             {onDecal && (
               <>
-                <p className="add-section">Наклейки</p>
-                <div className="add-decals">
-                  {DECALS.map(d => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      className="add-decal"
-                      aria-label={`Наклейка «${d.label}»`}
-                      onClick={() => {
-                        setOpen(false);
-                        onDecal(d.id);
-                      }}
-                    >
-                      {d.char}
-                    </button>
-                  ))}
+                <div className="add-glitter">
+                  <span>Блёстки</span>
+                  <GlitterSlider
+                    value={glitter}
+                    onPick={(v, final) => {
+                      setGlitter(v);
+                      if (final) saveGlitter(v);
+                    }}
+                  />
                 </div>
+                {DECAL_GROUPS.map(g => (
+                  <div key={g.id}>
+                    <p className="add-section">{g.label}</p>
+                    <div className="add-decals">
+                      {DECALS.filter(d => d.group === g.id).map(d => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          className="add-decal"
+                          aria-label={`Наклейка «${d.label}»`}
+                          onClick={() => {
+                            setOpen(false);
+                            onDecal(d.id, glitter);
+                          }}
+                        >
+                          <img src={decalSrc(d.id)} alt="" draggable={false} />
+                          <Glitter seed={d.id} amount={glitter} twinkle />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </>
             )}
           </div>

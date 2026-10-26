@@ -165,7 +165,7 @@
   transform-origin: 0 0;
 }
 
-/* Наклейки — эмодзи по шесть в ряд */
+/* Наклейки — картинки по шесть в ряд */
 .add-decals {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -173,14 +173,43 @@
 }
 
 .add-decal {
+  position: relative;
   display: grid;
   place-items: center;
   aspect-ratio: 1;
-  padding: 0;
+  padding: 4px;
   border: none;
   border-radius: 12px;
   background: transparent;
-  font: 28px/1 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+.add-decal img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  -webkit-user-drag: none;
+}
+
+/* Блёстки новых наклеек: подпись и ползунок */
+.add-glitter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.add-glitter > span {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.add-glitter .toolbar-glitter {
+  flex: 1;
+  padding: 0;
 }
 
 .add-decal:active {

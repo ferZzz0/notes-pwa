@@ -42,7 +42,7 @@ import {
   type RunStyle,
   type TextRange
 } from '../richText';
-import { decalOf, markerOf, type DecalId, type StickerId } from '../textStyle';
+import { decalSrc, markerOf, type DecalId, type StickerId } from '../textStyle';
 import { isDark } from '../theme';
 import { AddMenu } from './AddMenu';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -1017,13 +1017,13 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Режим наклеивания (просьба автора): выбрали наклейку в «+» — каждое
   // касание листа ставит её туда (не выбирая), пока не нажмут «×» над «+».
   // Размер — по зуму, как у новой надписи: на экране всегда одинаковая
-  const [stamp, setStamp] = useState<DecalId | null>(null);
-  const placeDecal = (decal: DecalId, p: Point) => {
+  const [stamp, setStamp] = useState<{ decal: DecalId; glitter: number } | null>(null);
+  const placeDecal = ({ decal, glitter }: { decal: DecalId; glitter: number }, p: Point) => {
     // Выше верха листа и за корешком одной страницы — не наклеиваем
     if (p.y < 0 || (display !== 'both' && (p.x < 0 ? 'left' : 'right') !== display)) return;
     const w = Math.round(DECAL_SIZE / (canvas.current?.zoom() ?? 1));
     const cur = spreads[spread] ?? { blocks: [] };
-    const block: Block = { id: newBlockId(), kind: 'decal', decal, text: '', width: w, ...place(w, p.x - w / 2, p.y - w / 2) };
+    const block: Block = { id: newBlockId(), kind: 'decal', decal, glitter, text: '', width: w, ...place(w, p.x - w / 2, p.y - w / 2) };
     commit({ ...spreads, [spread]: { ...cur, created: cur.created ?? localDate(), blocks: [...cur.blocks, block] } });
   };
 
@@ -1837,6 +1837,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               block={selectedBlock}
               onPatch={patch => patchBlock(selectedBlock.id, patch)}
               onOpacity={(opacity, final) => patchBlock(selectedBlock.id, { opacity: opacity < 1 ? opacity : undefined }, final)}
+              onGlitter={(glitter, final) => patchBlock(selectedBlock.id, { glitter }, final)}
               onLayer={dir => reorder(selectedBlock.id, dir)}
               onDelete={() => {
                 removeBlock(selectedBlock.id);
@@ -1903,9 +1904,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             <AddMenu
               onPhoto={file => void addPhoto(file)}
               onSticker={addSticker}
-              onDecal={d => {
+              onDecal={(decal, glitter) => {
                 deselect();
-                setStamp(d);
+                setStamp({ decal, glitter });
               }}
               onPaste={() => window.setTimeout(() => void pasteFromMenu(), MENU_GONE_MS)}
               canPaste={clipboardMayHaveContent}
@@ -1918,9 +1919,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 6l12 12M18 6 6 18" />
               </svg>
-              <span className="stamp-cancel-badge" aria-hidden="true">
-                {decalOf(stamp).char}
-              </span>
+              <img className="stamp-cancel-badge" src={decalSrc(stamp.decal)} alt="" />
             </button>
           )}
           {/* Настройки открытого листа — отдельно от ряда, в правом нижнем

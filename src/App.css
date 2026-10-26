@@ -54,9 +54,10 @@
 /* Какая наклейка сейчас наклеивается — значок в углу кнопки */
 .stamp-cancel-badge {
   position: absolute;
-  top: -6px;
-  left: -6px;
-  font: 18px/1 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  top: -8px;
+  left: -8px;
+  width: 24px;
+  height: 24px;
 }
 
 .bottom-center > * {

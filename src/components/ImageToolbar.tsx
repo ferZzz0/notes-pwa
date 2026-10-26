@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { knownImageUrl } from '../images';
 import type { Block } from '../notes';
-import { FILTERS, FRAMES, filterOf, frameOf } from '../textStyle';
-import { CascadeMenu, ConfirmDelete, LayerButtons, OpacitySlider, keepFocus, menuRoom, useToolbarHeight } from './TextToolbar';
+import { DEFAULT_GLITTER, FILTERS, FRAMES, filterOf, frameOf } from '../textStyle';
+import { CascadeMenu, ConfirmDelete, GlitterSlider, LayerButtons, OpacitySlider, StyleSection, keepFocus, menuRoom, useToolbarHeight } from './TextToolbar';
 import './TextToolbar.css';
 
 type Props = {
@@ -10,6 +10,8 @@ type Props = {
   onPatch: (patch: Partial<Block>) => void;
   // Непрозрачность с ползунка; final — палец отпустили (сохранить)
   onOpacity: (opacity: number, final: boolean) => void;
+  // Блёстки наклейки с ползунка; final — палец отпустили (сохранить)
+  onGlitter?: (glitter: number, final: boolean) => void;
   onLayer: (dir: 'up' | 'down') => void;
   onDelete: () => void;
   onDone: () => void;
@@ -24,7 +26,7 @@ type Menu = 'style' | 'layer' | 'delete' | null;
 // каскадный список (рамка, фильтр, прозрачность — просьба автора), слой (наверх /
 // вниз), удалить (с подтверждением), готово. Двигают, поворачивают и меняют размер фото
 // пальцами, как надпись.
-export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onDone, onHeight, history }: Props) {
+export function ImageToolbar({ block, onPatch, onOpacity, onGlitter, onLayer, onDelete, onDone, onHeight, history }: Props) {
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
   const frame = frameOf(block.frame);
@@ -39,10 +41,15 @@ export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onD
       {history && <div className="toolbar-history">{history}</div>}
 
       {/* Рамка, фильтр, прозрачность — каскадный список, как у надписи */}
-      {/* У наклейки рамок и фильтров нет — только прозрачность */}
+      {/* У наклейки рамок и фильтров нет — блёстки и прозрачность */}
       {menu === 'style' && decal && (
-        <div className="toolbar-menu toolbar-opacity-pop" role="dialog" aria-label="Прозрачность">
-          <OpacitySlider value={block.opacity} onPick={onOpacity} />
+        <div className="toolbar-menu toolbar-opacity-pop" role="dialog" aria-label="Блёстки и прозрачность">
+          <StyleSection title="Блёстки">
+            <GlitterSlider value={block.glitter ?? DEFAULT_GLITTER} onPick={(v, final) => onGlitter?.(v, final)} />
+          </StyleSection>
+          <StyleSection title="Прозрачность">
+            <OpacitySlider value={block.opacity} onPick={onOpacity} />
+          </StyleSection>
         </div>
       )}
 
@@ -116,13 +123,10 @@ export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onD
 
       {menu === 'delete' && <ConfirmDelete what={decal ? 'наклейку' : 'фото'} onDelete={onDelete} onCancel={() => setMenu(null)} />}
 
-      <button type="button" className={menu === 'style' ? 'is-active' : undefined} aria-label={decal ? 'Прозрачность' : 'Оформление'} aria-expanded={menu === 'style'} onClick={() => toggle('style')}>
+      <button type="button" className={menu === 'style' ? 'is-active' : undefined} aria-label={decal ? 'Блёстки и прозрачность' : 'Оформление'} aria-expanded={menu === 'style'} onClick={() => toggle('style')}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           {decal ? (
-            <>
-              <path d="M12 3.5c3.2 4.3 6 7.4 6 10.6a6 6 0 0 1-12 0c0-3.2 2.8-6.3 6-10.6z" />
-              <path d="M6 14.1a6 6 0 0 0 12 0z" style={{ fill: 'currentColor', opacity: 0.45 }} />
-            </>
+            <path d="M11 3.5l1.9 5.6 5.6 1.9-5.6 1.9L11 18.5l-1.9-5.6L3.5 11l5.6-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
           ) : (
             <path d="M4 4h16v16H4zM8 8h8v8H8z" />
           )}

@@ -1,0 +1,29 @@
+/* Блёстки поверх наклейки (Glitter.tsx): во весь её квадрат, искорки светятся */
+.glitter {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(0 0 1.5px rgb(255 255 255 / 0.95)) drop-shadow(0 0 3px rgb(255 240 180 / 0.7));
+}
+
+/* В меню — мерцают (на листе неподвижные: мерцание перерисовывало бы лист) */
+.glitter.is-twinkling > * {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: glitter-twinkle 1.6s ease-in-out infinite;
+}
+
+@keyframes glitter-twinkle {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glitter.is-twinkling > * {
+    animation: none;
+  }
+}

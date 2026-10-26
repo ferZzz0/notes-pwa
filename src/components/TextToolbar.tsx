@@ -152,6 +152,50 @@ export function OpacitySlider({ value = 1, onPick }: { value?: number; onPick: (
   );
 }
 
+// Сколько блёсток на наклейке (просьба автора: ползунком от «мало» к
+// «много»): 0–1 шагом 5%, как прозрачность — свой ползунок на касаниях
+export function GlitterSlider({ value, onPick }: { value: number; onPick: (v: number, final: boolean) => void }) {
+  const pick = (e: PointerEvent<HTMLDivElement>, final: boolean) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    onPick(Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * 20) / 20, final);
+  };
+  return (
+    <div className="toolbar-glitter">
+      <span>мало</span>
+      <div
+        className="glitter-track"
+        role="slider"
+        tabIndex={0}
+        aria-label="Блёстки"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(value * 100)}
+        onPointerDown={e => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          pick(e, false);
+        }}
+        onPointerMove={e => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) pick(e, false);
+        }}
+        onPointerUp={e => pick(e, true)}
+      >
+        <span className="opacity-thumb" style={{ left: `${value * 100}%` }} />
+      </div>
+      <span>много</span>
+    </div>
+  );
+}
+
+// Раздел плашки над панелью: мелкий заголовок и его настройки
+export function StyleSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="toolbar-section">
+      <p className="toolbar-section-title">{title}</p>
+      {children}
+    </section>
+  );
+}
+
 // Пункт каскадного списка: название, текущее значение (мелко) и настройки
 export type CascadeItem = { id: string; label: string; value?: string; content: ReactNode };
 

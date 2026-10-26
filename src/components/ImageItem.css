@@ -87,12 +87,11 @@
   border-radius: 50%;
 }
 
-/* Наклейка: эмодзи посередине квадрата */
-.item-decal {
-  display: grid;
-  place-items: center;
-  line-height: 1;
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-  -webkit-user-select: none;
+/* Наклейка: картинка во весь квадрат, блёстки — поверх */
+.item-decal img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  -webkit-user-drag: none;
   user-select: none;
 }

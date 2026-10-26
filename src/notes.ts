@@ -51,8 +51,10 @@ export type Block = {
   // строк (по ней текст переносится; ручка на рамке), нет — по тексту, до
   // предела страницы
   image?: string;
-  // Наклейка: какая (textStyle.ts: DECALS); её размер — width (px мира)
+  // Наклейка: какая (textStyle.ts: DECALS) и сколько на ней блёсток (0–1);
+  // её размер — width (px мира)
   decal?: string;
+  glitter?: number;
   width?: number;
   ratio?: number;
   frame?: FrameId;
@@ -359,6 +361,16 @@ export function loadClip(): Clip | null {
 
 export function saveClip(clip: Clip): void {
   write(CLIP_KEY, clip);
+}
+
+// Блёстки новых наклеек — как выбрали в «+» последний раз
+const GLITTER_KEY = 'notes-pwa:glitter';
+export function loadGlitter(fallback: number): number {
+  const v = read<number | null>(GLITTER_KEY, null);
+  return typeof v === 'number' && v >= 0 && v <= 1 ? v : fallback;
+}
+export function saveGlitter(v: number): void {
+  write(GLITTER_KEY, v);
 }
 
 export function loadStyle(): TextStyle {
