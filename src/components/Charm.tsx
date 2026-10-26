@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Block } from '../notes';
 import { DEFAULT_GLITTER, decalOf, decalSrc } from '../textStyle';
 import { Glitter } from './Glitter';
@@ -12,17 +12,50 @@ import './Charm.css';
 // покое, точка подвеса — верх посередине (x + width/2, y); width — ширина
 // наклейки (px мира). Цепочка у всех одна
 
-// Цепочка (px мира, Charm.css): длина рисунка; наклейка заходит верхом на
-// колечко на OVERLAP + 8% своей ширины — оно будто продето в неё
+// Цепочка (px мира, Charm.css): длина рисунка и середина нижнего колечка.
+// Край наклейки (посередине, где начинается сама картинка) приходится ровно
+// на середину колечка — его нижняя половина за наклейкой, оно будто продето
+// в неё (просьба автора)
 export const CHAIN_H = 120;
-const OVERLAP = 9;
+const RING_Y = 105;
+// Где начинается картинка, пока не измерили (доля высоты)
+const TOP_GUESS = 0.08;
 // Ширина наклейки (px мира): от и до; у нового брелка — CHARM_SIZE / зум (на
 // экране всегда одинаковый, как новая наклейка)
 export const CHARM_MIN = 80;
 export const CHARM_MAX = 280;
 export const CHARM_SIZE = 150;
-// Высота брелка в покое — цепочка и наклейка
-export const charmHeight = (w: number) => CHAIN_H + w - OVERLAP - 0.08 * w;
+// Высота брелка в покое — цепочка и наклейка (примерно)
+export const charmHeight = (w: number) => RING_Y + w * (1 - TOP_GUESS);
+
+// Где у картинки наклейки посередине начинается сама наклейка (доля высоты;
+// сверху у картинок прозрачный край, у сердца посередине — выемка): меряем
+// один раз по её пикселям
+const tops = new Map<string, number>();
+function measureTop(src: string): Promise<number> {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const n = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = n;
+      canvas.height = n;
+      const g = canvas.getContext('2d', { willReadFrequently: true });
+      if (!g) return resolve(TOP_GUESS);
+      g.drawImage(img, 0, 0, n, n);
+      // Средние столбцы — там висит колечко
+      const from = Math.round(n * 0.44);
+      const cols = Math.round(n * 0.12);
+      const data = g.getImageData(from, 0, cols, n).data;
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < cols; x++) if (data[(y * cols + x) * 4 + 3] > 128) return resolve(y / n);
+      }
+      resolve(TOP_GUESS);
+    };
+    img.onerror = () => resolve(TOP_GUESS);
+    img.src = src;
+  });
+}
 
 // Маятник: длина (м — с ней качается, как настоящий брелок чуть длиннее
 // пальца), самый большой угол (рад — дальше цепочка не пускает,
@@ -134,6 +167,19 @@ export function CharmItem({ block, kick = 0, face = false }: { block: Block; kic
   const push = useRef<((speed: number) => void) | null>(null);
   const size = block.width ?? CHARM_SIZE;
   const scale = block.scale ?? 1;
+  const src = decalSrc(decalOf(block.decal).id);
+  const [top, setTop] = useState(() => tops.get(src) ?? TOP_GUESS);
+  useEffect(() => {
+    if (tops.has(src)) return setTop(tops.get(src)!);
+    let alive = true;
+    void measureTop(src).then(t => {
+      tops.set(src, t);
+      if (alive) setTop(t);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [src]);
 
   useEffect(() => {
     const el = swing.current;
@@ -209,6 +255,7 @@ export function CharmItem({ block, kick = 0, face = false }: { block: Block; kic
     top: block.y,
     width: size,
     '--charm-size': `${size}px`,
+    '--charm-top': top,
     transform: scale !== 1 ? `scale(${scale})` : undefined,
     opacity: block.opacity
   } as CSSProperties;
@@ -237,7 +284,7 @@ export function CharmItem({ block, kick = 0, face = false }: { block: Block; kic
           <circle className="charm-ring" cx="10" cy="49" r="5.5" />
         </svg>
         <div className="charm-body">
-          <img src={decalSrc(decalOf(block.decal).id)} alt="" draggable={false} />
+          <img src={src} alt="" draggable={false} />
           <Glitter seed={block.id} amount={block.glitter ?? DEFAULT_GLITTER} />
         </div>
       </div>

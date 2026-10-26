@@ -44,13 +44,14 @@
   stroke-width: 2.2;
 }
 
-/* Сама наклейка: заходит верхом на колечко — оно будто продето в неё
-   (OVERLAP + 8% ширины) */
+/* Сама наклейка: край картинки (посередине — --charm-top, доля её высоты)
+   — на середине нижнего колечка (RING_Y = 105 от верха цепочки длиной 120):
+   нижняя половина колечка за наклейкой */
 .charm-body {
   position: relative;
   width: var(--charm-size);
   height: var(--charm-size);
-  margin-top: calc(-9px - var(--charm-size) * 0.08);
+  margin-top: calc(-15px - var(--charm-top) * var(--charm-size));
 }
 
 .charm-body img {
