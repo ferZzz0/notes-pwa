@@ -107,22 +107,30 @@ export function ConfirmDelete({ what, onDelete, onCancel }: { what: string; onDe
 
 // Непрозрачность — от MIN_OPACITY до 1, шагом 5%
 const MIN_OPACITY = 0.1;
+// Бегунок ползунка (px; .opacity-thumb): его середина ходит от половины
+// бегунка до края минус половина — на 0% и 100% он целиком на дорожке
+// (жалоба автора: уходил за окошко)
+const THUMB = 26;
+// Доля дорожки под пальцем — в тех же пределах, что ходит бегунок
+const trackShare = (e: PointerEvent<HTMLDivElement>) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  return Math.min(1, Math.max(0, (e.clientX - r.left - THUMB / 2) / Math.max(1, r.width - THUMB)));
+};
+// Где бегунок при доле t
+const thumbLeft = (t: number) => `calc(${THUMB / 2}px + (100% - ${THUMB}px) * ${t})`;
 
 // Прозрачность надписи или фото: ползунок (свой, на касаниях, как палитра, —
 // обычный ползунок забрал бы фокус у надписи и закрыл клавиатуру). Меняется,
 // пока ведёшь пальцем; отпустили — сохранить
 export function OpacitySlider({ value = 1, onPick }: { value?: number; onPick: (opacity: number, final: boolean) => void }) {
-  const track = useRef<HTMLDivElement>(null);
   const pick = (e: PointerEvent<HTMLDivElement>, final: boolean) => {
-    const r = track.current!.getBoundingClientRect();
-    const t = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    const t = trackShare(e);
     onPick(Math.round((MIN_OPACITY + t * (1 - MIN_OPACITY)) * 20) / 20, final);
   };
   const percent = Math.round(value * 100);
   return (
     <div className="toolbar-opacity">
       <div
-        ref={track}
         className="opacity-track"
         role="slider"
         tabIndex={0}
@@ -145,7 +153,7 @@ export function OpacitySlider({ value = 1, onPick }: { value?: number; onPick: (
           onPick(Math.round(Math.min(1, Math.max(MIN_OPACITY, value + step)) * 20) / 20, true);
         }}
       >
-        <span className="opacity-thumb" style={{ left: `${((value - MIN_OPACITY) / (1 - MIN_OPACITY)) * 100}%` }} />
+        <span className="opacity-thumb" style={{ left: thumbLeft((value - MIN_OPACITY) / (1 - MIN_OPACITY)) }} />
       </div>
       <span className="opacity-value">{percent}%</span>
     </div>
@@ -156,8 +164,7 @@ export function OpacitySlider({ value = 1, onPick }: { value?: number; onPick: (
 // «много»): 0–1 шагом 5%, как прозрачность — свой ползунок на касаниях
 export function GlitterSlider({ value, onPick }: { value: number; onPick: (v: number, final: boolean) => void }) {
   const pick = (e: PointerEvent<HTMLDivElement>, final: boolean) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    onPick(Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * 20) / 20, final);
+    onPick(Math.round(trackShare(e) * 20) / 20, final);
   };
   return (
     <div className="toolbar-glitter">
@@ -179,7 +186,7 @@ export function GlitterSlider({ value, onPick }: { value: number; onPick: (v: nu
         }}
         onPointerUp={e => pick(e, true)}
       >
-        <span className="opacity-thumb" style={{ left: `${value * 100}%` }} />
+        <span className="opacity-thumb" style={{ left: thumbLeft(value) }} />
       </div>
       <span>много</span>
     </div>

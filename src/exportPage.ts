@@ -6,8 +6,8 @@ import { toSvg } from 'html-to-image';
 
 // Больше пикселей холст в iOS Safari не выдержит (~16.7 млн)
 const MAX_PIXELS = 16_000_000;
-// Чёткость картинки: px картинки на px мира
-const PIXEL_RATIO = 2;
+// Чёткость картинки: px картинки на px мира (лист 850 → 2550 px)
+const PIXEL_RATIO = 3;
 
 // Шрифты листа, встроенные как data: URL. Только основные наборы букв
 // (латиница и кириллица — их и подключаем, main.tsx): остальные наборы
@@ -87,21 +87,27 @@ const loadImage = (src: string) =>
   });
 
 // Картинка узла node (width × height px мира): html-to-image собирает SVG
-// (стили, шрифты и фото внутри), рисуем его сами
+// (стили, шрифты и фото внутри), рисуем его сами. SVG — сразу итогового
+// размера (копия страницы в нём увеличена transform): iPhone иначе рисовал
+// страницу в 1× и растягивал — картинка выходила мыльной (просьба автора:
+// «экспорт более высокого качества»)
 export async function pageImage(node: HTMLElement, width: number, height: number): Promise<Blob> {
   const ratio = Math.min(PIXEL_RATIO, Math.sqrt(MAX_PIXELS / (width * height)));
+  const w = Math.round(width * ratio);
+  const h = Math.round(height * ratio);
   const svg = await toSvg(node, {
-    width,
-    height,
+    width: w,
+    height: h,
     fontEmbedCSS: await fontCSS(),
-    // Сама копия страницы спрятана за экраном — на картинке она на месте
-    style: { position: 'relative', transform: 'none' }
+    // Сама копия страницы спрятана за экраном — на картинке она на месте и
+    // увеличена до итогового размера
+    style: { position: 'relative', transform: `scale(${ratio})`, transformOrigin: '0 0', width: `${width}px`, height: `${height}px` }
   });
   const img = await loadImage(svg);
   await img.decode().catch(() => {});
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(width * ratio);
-  canvas.height = Math.round(height * ratio);
+  canvas.width = w;
+  canvas.height = h;
   const g = canvas.getContext('2d')!;
   for (let i = 0; i < DRAWS; i++) {
     if (i > 0) await new Promise(r => setTimeout(r, DRAW_PAUSE_MS));

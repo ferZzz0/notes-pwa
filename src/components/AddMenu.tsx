@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from 'react';
-import { loadGlitter, saveGlitter } from '../notes';
+import { loadAddSection, loadGlitter, saveAddSection, saveGlitter, type AddSection } from '../notes';
 import { DECAL_GROUPS, DECALS, DEFAULT_GLITTER, STICKERS, decalSrc, type DecalId, type StickerId } from '../textStyle';
 import { Glitter } from './Glitter';
 import { GlitterSlider } from './TextToolbar';
@@ -49,6 +49,26 @@ export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste }: Prop
   const [empty, setEmpty] = useState(false);
   // Блёстки новых наклеек — как выбрали в прошлый раз
   const [glitter, setGlitter] = useState(() => loadGlitter(DEFAULT_GLITTER));
+  // «Стикеры» и «Наклейки» сворачиваются (просьба автора), развёрнут не
+  // больше одного; какой — запоминаем
+  const [section, setSection] = useState<AddSection>(loadAddSection);
+  const fold = (id: Exclude<AddSection, null>, label: string) => (
+    <button
+      type="button"
+      className="add-fold"
+      aria-expanded={section === id}
+      onClick={() => {
+        const next = section === id ? null : id;
+        setSection(next);
+        saveAddSection(next);
+      }}
+    >
+      {label}
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 6l6 6-6 6" />
+      </svg>
+    </button>
+  );
   const toggle = () => {
     if (!open) {
       setEmpty(false);
@@ -80,8 +100,8 @@ export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste }: Prop
                 свою кнопку «Вставить», страница не перерисовывается */}
             {onPaste && !empty && (
               <button
-                type='button'
-                className='add-paste'
+                type="button"
+                className="add-paste"
                 onPointerDown={e => {
                   // Прозрачностью, а не visibility: скрытое так не ловит касание
                   const panel = e.currentTarget.closest<HTMLElement>('.add-panel');
@@ -120,27 +140,30 @@ export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste }: Prop
               </svg>
               Фото
             </button>
-            <p className="add-section">Стикеры</p>
-            <div className="add-stickers">
-              {STICKERS.map(s => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className="add-sticker"
-                  onClick={() => {
-                    setOpen(false);
-                    onSticker(s.id);
-                  }}
-                >
-                  <StickerPreview sticker={s.id} fill={s.fill} />
-                  {s.label}
-                </button>
-              ))}
-            </div>
+            {fold('stickers', 'Стикеры')}
+            {section === 'stickers' && (
+              <div className="add-stickers">
+                {STICKERS.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="add-sticker"
+                    onClick={() => {
+                      setOpen(false);
+                      onSticker(s.id);
+                    }}
+                  >
+                    <StickerPreview sticker={s.id} fill={s.fill} />
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* Наклейки (просьба автора): картинки с блёстками; сколько
                 блёсток — ползунком; выбрали — и касания по листу её
                 наклеивают, пока не нажмут «×» над «+» */}
-            {onDecal && (
+            {onDecal && fold('decals', 'Наклейки')}
+            {onDecal && section === 'decals' && (
               <>
                 <div className="add-glitter">
                   <span>Блёстки</span>

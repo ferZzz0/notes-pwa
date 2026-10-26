@@ -145,7 +145,10 @@ export const STICKERS = [
   { id: 'tag', label: 'Бирка', fill: '#f2d39b' },
   { id: 'ribbon', label: 'Лента', fill: '#e8566f' },
   { id: 'badge', label: 'Значок', fill: '#7fd1ae' },
-  { id: 'tape', label: 'Скотч', fill: '#b9a7ef' }
+  { id: 'tape', label: 'Скотч', fill: '#b9a7ef' },
+  // Ещё два — просьба автора
+  { id: 'lined', label: 'Листок', fill: '#ffffff' },
+  { id: 'heart', label: 'Сердечко', fill: '#ff9ec0' }
 ] as const;
 
 
@@ -174,7 +177,7 @@ export const FILTERS = [
 // Microsoft Fluent Emoji 3D (лицензия MIT — public/decals/LICENSE-fluentui-emoji.txt),
 // 256×256 WebP в public/decals; блёстки поверх рисует Glitter
 export const DECAL_GROUPS = [
-  { id: 'cute', label: 'Наклейки' },
+  { id: 'cute', label: 'Милые' },
   { id: 'halloween', label: 'Хэллоуин' }
 ] as const;
 export const DECALS = [
@@ -195,6 +198,9 @@ export const DECALS = [
   { id: 'dizzy', label: 'Звёздочка', group: 'cute' },
   { id: 'fire', label: 'Огонёк', group: 'cute' },
   { id: 'rainbow', label: 'Радуга', group: 'cute' },
+  // Пони — просьба автора
+  { id: 'pony', label: 'Пони', group: 'cute' },
+  { id: 'unicorn', label: 'Пони-единорог', group: 'cute' },
   { id: 'pumpkin', label: 'Тыква', group: 'halloween' },
   { id: 'ghost', label: 'Привидение', group: 'halloween' },
   { id: 'bat', label: 'Летучая мышь', group: 'halloween' },

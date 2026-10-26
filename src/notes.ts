@@ -363,6 +363,17 @@ export function saveClip(clip: Clip): void {
   write(CLIP_KEY, clip);
 }
 
+// Какой раздел «+» развёрнут — «Стикеры» или «Наклейки» (только один)
+const ADD_SECTION_KEY = 'notes-pwa:add-section';
+export type AddSection = 'stickers' | 'decals' | null;
+export function loadAddSection(): AddSection {
+  const v = read<AddSection>(ADD_SECTION_KEY, null);
+  return v === 'stickers' || v === 'decals' ? v : null;
+}
+export function saveAddSection(v: AddSection): void {
+  write(ADD_SECTION_KEY, v);
+}
+
 // Блёстки новых наклеек — как выбрали в «+» последний раз
 const GLITTER_KEY = 'notes-pwa:glitter';
 export function loadGlitter(fallback: number): number {
