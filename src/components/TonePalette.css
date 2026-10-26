@@ -1,19 +1,35 @@
-/* Палитра светлых или тёмных цветов (TonePalette.tsx): во всю ширину панели */
+/* Палитра светлых или тёмных цветов (TonePalette.tsx): во всю ширину панели,
+   под ней — полоска серых */
 .tone-palette {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   width: 100%;
-  height: 120px;
+}
+
+.tone-hues,
+.tone-greys {
+  position: relative;
   border-radius: 12px;
   box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
   touch-action: none;
   cursor: crosshair;
 }
 
+.tone-hues {
+  height: 120px;
+}
+
+.tone-greys {
+  height: 28px;
+  border-radius: 14px;
+}
+
 .tone-palette canvas {
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: 12px;
+  border-radius: inherit;
 }
 
 /* Где выбранный цвет */

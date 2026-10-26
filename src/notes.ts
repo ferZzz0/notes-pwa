@@ -241,9 +241,30 @@ export function deleteNotebookData(id: string): string[] {
   return Object.values(spreads).flatMap(s => s.blocks.map(b => b.image).filter((x): x is string => !!x));
 }
 
+// Метка запуска (sessionStorage живёт, пока приложение открыто, и
+// переживает перезагрузку, но не новый запуск)
+const SESSION_KEY = 'notes-pwa:session';
+
+// Что открыть: новый запуск — главное меню (просьба автора: стартовый экран —
+// меню); перезагрузка в том же запуске (например, поставилось обновление) —
+// то, что было открыто
+// Решается один раз (React в строгом режиме зовёт начальное состояние дважды)
+let freshLaunch: boolean | null = null;
 export function loadView(): View {
+  if (freshLaunch === null) {
+    try {
+      freshLaunch = !sessionStorage.getItem(SESSION_KEY);
+      sessionStorage.setItem(SESSION_KEY, '1');
+    } catch {
+      // sessionStorage недоступен — как раньше, открытое
+      freshLaunch = false;
+    }
+    // Меню и запоминаем: перезагрузка сейчас вернёт в него же
+    if (freshLaunch) saveView({ kind: 'menu' });
+  }
+  if (freshLaunch) return { kind: 'menu' };
   const v = read<View | null>(VIEW_KEY, null);
-  return v && (v.kind === 'menu' || v.kind === 'notebook' || v.kind === 'day') ? v : { kind: 'notebook', id: FIRST_NOTEBOOK };
+  return v && (v.kind === 'menu' || v.kind === 'notebook' || v.kind === 'day') ? v : { kind: 'menu' };
 }
 
 export function saveView(view: View): void {

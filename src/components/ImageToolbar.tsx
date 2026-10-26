@@ -34,7 +34,7 @@ export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onD
   const toggle = (m: Menu) => setMenu(menu === m ? null : m);
 
   return (
-    <div ref={ref} className="text-toolbar" role="toolbar" aria-label="Фото" onMouseDown={keepFocus}>
+    <div ref={ref} className={menu ? 'text-toolbar has-menu' : 'text-toolbar'} role="toolbar" aria-label="Фото" onMouseDown={keepFocus}>
       {history && <div className="toolbar-history">{history}</div>}
 
       {menu === 'style' && (

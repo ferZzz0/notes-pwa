@@ -183,15 +183,15 @@ export const filterCss = (id?: string): string => FILTERS.find(f => f.id === fil
 
 // --- Светлые и тёмные тона (цвет листа и его надписей) ---
 // Палитра-прямоугольник (TonePalette, просьба автора: «у светлых — только
-// светлые цвета, у тёмных — только тёмные»): вправо — оттенок (у правого края
-// — серые), вниз — светлота в пределах тона. Светлые — от 96% до 74%,
+// светлые цвета, у тёмных — только тёмные»): вправо — оттенок, вниз —
+// светлота в пределах тона; под ней — полоска серых (слева направо — от
+// светлого к тёмному в пределах тона; столбец серых у края палитры выглядел
+// криво — жалоба автора). Светлые — от 96% до 74%,
 // тёмные — от 28% до 6%: тёмный цвет любого оттенка остаётся тёмным и для
 // isDark (theme.ts), светлый — светлым
 export type Tone = 'light' | 'dark';
 const TONE_L: Record<Tone, [number, number]> = { light: [0.96, 0.74], dark: [0.28, 0.06] };
 const TONE_S: Record<Tone, number> = { light: 0.85, dark: 0.55 };
-// Доля ширины под серые (справа)
-const TONE_GREY = 0.1;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 // hsl (h — градусы, s и l — доли) → [r, g, b] долями
@@ -218,27 +218,33 @@ function hexHsl(hex: string): { h: number; s: number; l: number } {
   return { h, s: d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1)), l };
 }
 
+// Светлота тона по доле t (0 — самый светлый в тоне, 1 — самый тёмный)
+const toneL = (t: number, tone: Tone) => TONE_L[tone][0] + (TONE_L[tone][1] - TONE_L[tone][0]) * clamp01(t);
+
 // Точка палитры тона (x, y — доли ширины и высоты) → [r, g, b] долями
-export function toneRgb(x: number, y: number, tone: Tone): [number, number, number] {
-  const [l0, l1] = TONE_L[tone];
-  const l = l0 + (l1 - l0) * clamp01(y);
-  if (x > 1 - TONE_GREY) return [l, l, l];
-  return hslRgb((clamp01(x) / (1 - TONE_GREY)) * 360, TONE_S[tone], l);
+export const toneRgb = (x: number, y: number, tone: Tone) => hslRgb(clamp01(x) * 360, TONE_S[tone], toneL(y, tone));
+// Точка полоски серых (x — доля ширины) → [r, g, b] долями
+export function greyRgb(x: number, tone: Tone): [number, number, number] {
+  const l = toneL(x, tone);
+  return [l, l, l];
 }
 
-export const toneColor = (x: number, y: number, tone: Tone) => `#${toneRgb(x, y, tone).map(hex2).join('')}`;
+const rgbHex = (rgb: [number, number, number]) => `#${rgb.map(hex2).join('')}`;
+export const toneColor = (x: number, y: number, tone: Tone) => rgbHex(toneRgb(x, y, tone));
+export const greyColor = (x: number, tone: Tone) => rgbHex(greyRgb(x, tone));
 
-// Где цвет на палитре тона: оттенок → x (почти без цвета — серые), светлота
-// → y (за пределами тона — у края)
-export function tonePosition(color: string, tone: Tone): { x: number; y: number } {
+// Где цвет: почти без цвета — на полоске серых (x — светлота), иначе на
+// палитре (x — оттенок, y — светлота); за пределами тона — у края
+export function tonePosition(color: string, tone: Tone): { grey: boolean; x: number; y: number } {
   const { h, s, l } = hexHsl(HEX.test(color) ? color : '#ffffff');
   const [l0, l1] = TONE_L[tone];
-  return { x: s < 0.12 ? 1 - TONE_GREY / 2 : (h / 360) * (1 - TONE_GREY), y: clamp01((l - l0) / (l1 - l0)) };
+  const t = clamp01((l - l0) / (l1 - l0));
+  return s < 0.12 ? { grey: true, x: t, y: 0.5 } : { grey: false, x: h / 360, y: t };
 }
 
-// Тот же оттенок в другом тоне (переключатель «Светлые / Тёмные»): то же
-// место на палитре — от светлого from к тону to
+// Тот же оттенок (или серый) в другом тоне (переключатель «Светлые /
+// Тёмные»): то же место — от тона from к тону to
 export function toTone(color: string, from: Tone, to: Tone): string {
-  const { x, y } = tonePosition(color, from);
-  return toneColor(x, y, to);
+  const p = tonePosition(color, from);
+  return p.grey ? greyColor(p.x, to) : toneColor(p.x, p.y, to);
 }

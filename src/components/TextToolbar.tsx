@@ -249,7 +249,9 @@ export function TextToolbar(props: Props) {
   return (
     <div
       ref={ref}
-      className="text-toolbar"
+      // Открыт список или подтверждение — ряд кнопок над панелью прячется:
+      // он под ними, и его края выглядывали (жалоба автора)
+      className={menu ? 'text-toolbar has-menu' : 'text-toolbar'}
       role="toolbar"
       aria-label="Оформление надписи"
       style={keyboard > 0 ? { bottom: keyboard + 8 } : undefined}
