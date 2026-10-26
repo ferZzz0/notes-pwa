@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import type { Block } from '../notes';
 import { DEFAULT_GLITTER } from '../textStyle';
 import { CHARM_MAX, CHARM_MIN, CHARM_SIZE } from './Charm';
-import { ConfirmDelete, GlitterSlider, OpacitySlider, StyleSection, keepFocus, useToolbarHeight } from './TextToolbar';
+import { ConfirmDelete, GlitterSlider, LayerButtons, OpacitySlider, StyleSection, keepFocus, useToolbarHeight } from './TextToolbar';
 import './TextToolbar.css';
 
 type Props = {
@@ -12,6 +12,8 @@ type Props = {
   onGlitter: (glitter: number, final: boolean) => void;
   onSize: (size: number, final: boolean) => void;
   onOpacity: (opacity: number, final: boolean) => void;
+  // Слой: наверх или вниз (просьба автора — как у наклейки)
+  onLayer: (dir: 'up' | 'down') => void;
   onDelete: () => void;
   onDone: () => void;
   onHeight: (h: number) => void;
@@ -19,12 +21,12 @@ type Props = {
   history: ReactNode;
 };
 
-type Menu = 'style' | 'delete' | null;
+type Menu = 'style' | 'layer' | 'delete' | null;
 
 // Панель выбранного брелка — как у наклейки (TextToolbar.css): блёстки,
-// размер и прозрачность, удалить (с подтверждением), готово. Переносят брелок
-// пальцем, как наклейку
-export function CharmToolbar({ block, onGlitter, onSize, onOpacity, onDelete, onDone, onHeight, history }: Props) {
+// размер и прозрачность, слой (наверх / вниз), удалить (с подтверждением),
+// готово. Переносят брелок пальцем, как наклейку
+export function CharmToolbar({ block, onGlitter, onSize, onOpacity, onLayer, onDelete, onDone, onHeight, history }: Props) {
   const size = block.width ?? CHARM_SIZE;
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
@@ -51,11 +53,22 @@ export function CharmToolbar({ block, onGlitter, onSize, onOpacity, onDelete, on
         </div>
       )}
 
+      {menu === 'layer' && (
+        <div className="toolbar-menu" role="dialog" aria-label="Слой">
+          <LayerButtons onLayer={onLayer} />
+        </div>
+      )}
+
       {menu === 'delete' && <ConfirmDelete what="брелок" onDelete={onDelete} onCancel={() => setMenu(null)} />}
 
       <button type="button" className={menu === 'style' ? 'is-active' : undefined} aria-label="Блёстки и размер" aria-expanded={menu === 'style'} onClick={() => toggle('style')}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M11 3.5l1.9 5.6 5.6 1.9-5.6 1.9L11 18.5l-1.9-5.6L3.5 11l5.6-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
+        </svg>
+      </button>
+      <button type="button" className={menu === 'layer' ? 'is-active' : undefined} aria-label="Слой" onClick={() => toggle('layer')}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 4l8.5 4.5L12 13 3.5 8.5zM3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5" />
         </svg>
       </button>
       <button type="button" className={menu === 'delete' ? 'is-active' : undefined} aria-label="Удалить брелок" onClick={() => toggle('delete')}>

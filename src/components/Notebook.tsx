@@ -1875,6 +1875,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
                 patchBlock(selectedBlock.id, { width, x: selectedBlock.x + ((selectedBlock.width ?? CHARM_SIZE) - width) / 2 }, final)
               }
               onOpacity={(opacity, final) => patchBlock(selectedBlock.id, { opacity: opacity < 1 ? opacity : undefined }, final)}
+              onLayer={dir => reorder(selectedBlock.id, dir)}
               onDelete={() => {
                 removeBlock(selectedBlock.id);
                 deselect();

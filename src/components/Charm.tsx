@@ -223,7 +223,9 @@ export function CharmItem({ block, kick = 0, face = false }: { block: Block; kic
     >
       <div className={face ? 'charm-swing' : 'charm-swing is-live'} ref={swing}>
         <svg className="charm-chain" viewBox="0 0 20 56" aria-hidden="true">
-          <path className="charm-clasp" d="M6 0v3a4 4 0 0 0 8 0V0" />
+          {/* Сверху — замкнутое кольцо (просьба автора), продетое в первое
+              звено; точка подвеса — его верх */}
+          <circle className="charm-clasp" cx="10" cy="4.6" r="3.6" />
           <g className="charm-links">
             <ellipse cx="10" cy="10" rx="2.4" ry="3.6" />
             <rect x="9.2" y="13" width="1.6" height="6.5" rx="0.8" />
