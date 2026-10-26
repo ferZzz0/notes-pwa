@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { loadGlitter, newBlockId, type CoverDecal, type NotebookInfo } from '../notes';
 import { COVER_DESIGNS, DECALS, DEFAULT_GLITTER, decalSrc } from '../textStyle';
-import { CoverDecals, designClass } from './CoverArt';
+import { CoverDecals, coverDesignOf, designClass } from './CoverArt';
 import { Calendar } from './Calendar';
 import { ConfirmDialog } from './ConfirmDialog';
 import { AppSettings } from './AppSettings';
@@ -176,8 +176,8 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
                     key={d.id}
                     type="button"
                     role="radio"
-                    aria-checked={(edited.design ?? 'plain') === d.id}
-                    className={(edited.design ?? 'plain') === d.id ? 'is-active' : undefined}
+                    aria-checked={coverDesignOf(edited.design) === d.id}
+                    className={coverDesignOf(edited.design) === d.id ? 'is-active' : undefined}
                     onClick={() => onChange(edited.id, { design: d.id === 'plain' ? undefined : d.id })}
                   >
                     <span className={`cover-swatch${designClass(d.id)}`} style={{ '--cover': edited.color } as CSSProperties} />

@@ -234,7 +234,8 @@ export const COVER_DESIGNS = [
   { id: 'dots', label: 'Горошек' },
   { id: 'stripes', label: 'Полоски' },
   { id: 'checks', label: 'Клетка' },
-  { id: 'stars', label: 'Звёздное небо' },
+  // Была «Звёздное небо» — заменена книжкой (просьба автора)
+  { id: 'book', label: 'Книжка с закладкой' },
   { id: 'glitter', label: 'Блёстки' }
 ] as const;
 

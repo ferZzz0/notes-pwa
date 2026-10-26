@@ -398,6 +398,7 @@
 }
 
 .cover-swatch {
+  position: relative;
   width: 48px;
   aspect-ratio: 3 / 4;
   border-radius: 3px 7px 7px 3px;
@@ -408,11 +409,15 @@
   box-shadow: 0 2px 5px rgb(40 30 10 / 0.2);
 }
 
-/* Наклейки для обложки — по четыре в ряд */
+/* Наклейки для обложки — по пять в ряд; список листается только по
+   вертикали (просьба автора) */
 .diary-decal-grid {
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   max-height: 170px;
+  overflow-x: hidden;
   overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
 }
 
 .diary-decal-grid button {
@@ -459,9 +464,11 @@
   text-align: center;
 }
 
-/* Окно дневника не выше экрана — прокручивается */
+/* Окно дневника не выше экрана — прокручивается, только по вертикали */
 .diary-color-panel {
   max-height: calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom));
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
 }

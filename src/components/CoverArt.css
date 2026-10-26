@@ -16,12 +16,27 @@
     linear-gradient(rgb(255 255 255 / 0.17) 50%, transparent 50%) 0 0 / 22px 22px;
 }
 
-.design-stars {
+/* Книжка с закладкой: обрез страниц справа, уголки, ленточка-закладка
+   выглядывает снизу (её рисует ::after) */
+.design-book {
   --cover-pattern:
-    radial-gradient(circle at 20% 30%, #fff 0 1.4px, transparent 2px) 0 0 / 34px 30px,
-    radial-gradient(circle at 70% 70%, rgb(255 255 255 / 0.8) 0 1px, transparent 1.5px) 0 0 / 22px 26px,
-    radial-gradient(circle at 50% 50%, rgb(255 236 160 / 0.95) 0 2px, transparent 2.6px) 9px 5px / 46px 40px,
-    linear-gradient(rgb(0 0 30 / 0.25), rgb(0 0 30 / 0.25));
+    linear-gradient(to left, #f4ecd8 0 3px, #ddd0b4 3px 4px, #f4ecd8 4px 6px, #ddd0b4 6px 7px, transparent 7px),
+    linear-gradient(225deg, rgb(0 0 0 / 0.26) 0 15px, transparent 15px),
+    linear-gradient(315deg, rgb(0 0 0 / 0.26) 0 15px, transparent 15px),
+    repeating-linear-gradient(135deg, rgb(255 255 255 / 0.05) 0 2px, transparent 2px 5px);
+}
+
+.design-book::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 24%;
+  z-index: 0;
+  width: 9%;
+  height: calc(100% + 14px);
+  background: linear-gradient(to right, #b4283a, #d8434f 50%, #b4283a);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 8px), 0 100%);
+  pointer-events: none;
 }
 
 .design-glitter {
@@ -32,10 +47,11 @@
     linear-gradient(135deg, rgb(255 255 255 / 0.28), transparent 35%, rgb(255 255 255 / 0.22) 55%, transparent 75%, rgb(255 255 255 / 0.2));
 }
 
-/* Наклейки на обложке: в её пределах, поверх наклейки с названием */
+/* Наклейки на обложке: в её пределах, над закладкой, под наклейкой с названием */
 .cover-decals {
   position: absolute;
   inset: 0;
+  z-index: 1;
   overflow: hidden;
   border-radius: inherit;
   pointer-events: none;
@@ -54,11 +70,8 @@
   user-select: none;
 }
 
-/* В окне дневника наклейки двигают пальцем; выбранная — в пунктире */
-.cover-decals.is-editable {
-  overflow: visible;
-}
-
+/* В окне дневника наклейки двигают пальцем; выбранная — в пунктире. Они
+   тоже не выходят за обложку (просьба автора) */
 .cover-decals.is-editable .cover-decal {
   pointer-events: auto;
   touch-action: none;
@@ -67,6 +80,19 @@
 
 .cover-decal.is-selected {
   outline: 2px dashed rgb(255 255 255 / 0.95);
-  outline-offset: 2px;
+  outline-offset: -2px;
   border-radius: 6px;
+}
+
+/* Наклейка с названием — поверх наклеек и закладки (просьба автора) */
+.diary-cover .diary-label,
+.diary-color-preview .diary-label {
+  position: relative;
+  z-index: 2;
+}
+
+/* …но касания проходит насквозь: наклейку под названием всё равно можно
+   потянуть пальцем */
+.diary-color-preview .diary-label {
+  pointer-events: none;
 }

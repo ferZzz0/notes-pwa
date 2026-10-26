@@ -43,7 +43,14 @@ export function CoverDecals({ decals, selected = null, onSelect, onMove }: Props
     const s = start.current;
     const box = e.currentTarget.parentElement?.getBoundingClientRect();
     if (!s || !box || !e.currentTarget.hasPointerCapture(e.pointerId)) return;
-    onMove?.(i, clamp01(s.x + (e.clientX - s.px) / box.width), clamp01(s.y + (e.clientY - s.py) / box.height), final);
+    // Не за край обложки (просьба автора): середина — не ближе половины
+    // наклейки к краю (по высоте — в долях высоты обложки)
+    const d = decals?.[i];
+    const hx = (d?.size ?? 0) / 2;
+    const hy = (((d?.size ?? 0) / 2) * box.width) / box.height;
+    const x = Math.min(1 - hx, Math.max(hx, s.x + (e.clientX - s.px) / box.width));
+    const y = Math.min(1 - hy, Math.max(hy, s.y + (e.clientY - s.py) / box.height));
+    onMove?.(i, clamp01(x), clamp01(y), final);
   };
   return (
     <span className={editable ? 'cover-decals is-editable' : 'cover-decals'} aria-hidden={!editable}>
@@ -62,5 +69,10 @@ export function CoverDecals({ decals, selected = null, onSelect, onMove }: Props
   );
 }
 
+// Узор обложки: «Звёздное небо» заменила «Книжка с закладкой»
+export const coverDesignOf = (design?: string) => (design === 'stars' ? 'book' : (design ?? 'plain'));
 // Класс узора обложки (CoverArt.css: .design-*); однотонная — без класса
-export const designClass = (design?: string) => (design && design !== 'plain' ? ` design-${design}` : '');
+export const designClass = (design?: string) => {
+  const d = coverDesignOf(design);
+  return d !== 'plain' ? ` design-${d}` : '';
+};
