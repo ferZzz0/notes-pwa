@@ -465,6 +465,22 @@
   padding: 7px 10px;
 }
 
+.diary-decal-glitter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.diary-decal-glitter > span {
+  color: var(--text);
+  font: 600 13px/1.2 var(--ui-font);
+}
+
+.diary-decal-glitter .toolbar-glitter {
+  flex: 1;
+}
+
 .diary-hint {
   margin: 0;
   color: var(--muted);

@@ -1,12 +1,12 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
-import { loadGlitter, newBlockId, type CoverDecal, type NotebookInfo } from '../notes';
+import { loadGlitter, newBlockId, saveGlitter, type CoverDecal, type NotebookInfo } from '../notes';
 import { COVER_DESIGNS, DECALS, DEFAULT_GLITTER, decalSrc } from '../textStyle';
 import { CoverDecals, coverDesignOf, designClass } from './CoverArt';
 import { Calendar } from './Calendar';
 import { ConfirmDialog } from './ConfirmDialog';
 import { AppSettings } from './AppSettings';
-import { ColorWheel } from './TextToolbar';
+import { ColorWheel, GlitterSlider } from './TextToolbar';
 import './MainMenu.css';
 
 type Props = {
@@ -189,27 +189,41 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
             {tab === 'decals' && (
               <>
                 {picked !== null && decals[picked] ? (
-                  <div className="diary-decal-tools">
-                    <button type="button" aria-label="Меньше" onClick={() => patchDecal(picked, { size: Math.max(0.12, decals[picked].size - 0.06) })}>
-                      −
-                    </button>
-                    <button type="button" aria-label="Больше" onClick={() => patchDecal(picked, { size: Math.min(0.9, decals[picked].size + 0.06) })}>
-                      +
-                    </button>
-                    <button type="button" aria-label="Повернуть" onClick={() => patchDecal(picked, { rotate: ((decals[picked].rotate ?? 0) + 15) % 360 })}>
-                      ↻
-                    </button>
-                    <button
-                      type="button"
-                      className="diary-delete"
-                      onClick={() => {
-                        setDecals(decals.filter((_, j) => j !== picked));
-                        setPicked(null);
-                      }}
-                    >
-                      Убрать
-                    </button>
-                  </div>
+                  <>
+                    <div className="diary-decal-tools">
+                      <button type="button" aria-label="Меньше" onClick={() => patchDecal(picked, { size: Math.max(0.12, decals[picked].size - 0.06) })}>
+                        −
+                      </button>
+                      <button type="button" aria-label="Больше" onClick={() => patchDecal(picked, { size: Math.min(0.9, decals[picked].size + 0.06) })}>
+                        +
+                      </button>
+                      <button type="button" aria-label="Повернуть" onClick={() => patchDecal(picked, { rotate: ((decals[picked].rotate ?? 0) + 15) % 360 })}>
+                        ↻
+                      </button>
+                      <button
+                        type="button"
+                        className="diary-delete"
+                        onClick={() => {
+                          setDecals(decals.filter((_, j) => j !== picked));
+                          setPicked(null);
+                        }}
+                      >
+                        Убрать
+                      </button>
+                    </div>
+                    {/* Сколько блёсток на выбранной наклейке (просьба автора);
+                        столько же получит и следующая */}
+                    <div className="diary-decal-glitter">
+                      <span>Блёстки</span>
+                      <GlitterSlider
+                        value={decals[picked].glitter ?? DEFAULT_GLITTER}
+                        onPick={(glitter, final) => {
+                          patchDecal(picked, { glitter });
+                          if (final) saveGlitter(glitter);
+                        }}
+                      />
+                    </div>
+                  </>
                 ) : (
                   <p className="diary-hint">Нажмите наклейку — она появится на обложке; её можно передвинуть пальцем</p>
                 )}
