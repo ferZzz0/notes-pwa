@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react';
 import type { Block } from '../notes';
 import type { RunStyle } from '../richText';
 import {
@@ -152,13 +152,53 @@ export function OpacitySlider({ value = 1, onPick }: { value?: number; onPick: (
   );
 }
 
-// Раздел общего списка оформления: заголовок и его варианты
-export function StyleSection({ title, children }: { title: string; children: ReactNode }) {
+// Пункт каскадного списка: название, текущее значение (мелко) и настройки
+export type CascadeItem = { id: string; label: string; value?: string; content: ReactNode };
+
+// Каскадный список оформления (просьба автора): над панелью — короткий
+// список пунктов (у надписи — шрифт, эффект, маркер, прозрачность; у фото —
+// рамка, фильтр, прозрачность), касание пункта открывает справа от него
+// второй список — настройки этого пункта. Пункты начинаются у левого края
+// панели, а если справа не хватит места — левее, чтобы оба списка были на
+// экране
+const CASCADE_MARGIN = 12;
+const CASCADE_WIDTH = 400;
+export function CascadeMenu({ items, anchor, room, label }: { items: CascadeItem[]; anchor: RefObject<HTMLDivElement | null>; room: number; label: string }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const bar = anchor.current?.getBoundingClientRect();
+  const width = Math.min(CASCADE_WIDTH, window.innerWidth - 2 * CASCADE_MARGIN);
+  const left = bar ? Math.min(Math.max(CASCADE_MARGIN, bar.left), window.innerWidth - CASCADE_MARGIN - width) - bar.left : 0;
+  const current = items.find(i => i.id === open);
   return (
-    <section className="toolbar-section">
-      <p className="toolbar-section-title">{title}</p>
-      {children}
-    </section>
+    <div className="toolbar-cascade" style={{ left, width }} role="dialog" aria-label={label}>
+      <ul className="toolbar-cascade-list" role="menu" style={{ maxHeight: room }}>
+        {items.map(i => (
+          <li key={i.id}>
+            <button
+              type="button"
+              role="menuitem"
+              aria-haspopup="true"
+              aria-expanded={open === i.id}
+              className={open === i.id ? 'is-active' : undefined}
+              onClick={() => setOpen(open === i.id ? null : i.id)}
+            >
+              <span>
+                {i.label}
+                {i.value && <small>{i.value}</small>}
+              </span>
+              <svg className="toolbar-cascade-arrow" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {current && (
+        <div className="toolbar-cascade-sub" role="group" aria-label={current.label} style={{ maxHeight: room }}>
+          {current.content}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -213,8 +253,8 @@ export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => voi
 }
 
 // Панель выбранной надписи или стикера внизу экрана (а при открытой
-// клавиатуре — над ней): цвет текста (круговая палитра), «Аа» — один список
-// оформления (шрифт, эффект, маркер — на готовом тексте, прозрачность), у
+// клавиатуре — над ней): цвет текста (круговая палитра), «Аа» — каскадный
+// список оформления (шрифт, эффект, маркер — на готовом тексте, прозрачность), у
 // стикера — его форма, цвет и слой, у надписи — слой, ширина строк (ручка
 // на рамке), удалить (с подтверждением), готово. Списки открываются над панелью, по одному.
 export function TextToolbar(props: Props) {
@@ -272,55 +312,80 @@ export function TextToolbar(props: Props) {
         </div>
       )}
 
-      {/* Шрифт, эффект, маркер и прозрачность — один выезжающий список (просьба
-          автора); выбор его не закрывает */}
+      {/* «Аа» — каскадный список: шрифт, эффект, маркер (на готовом тексте),
+          прозрачность; настройки пункта — справа (просьба автора). Выбор
+          список не закрывает */}
       {menu === 'style' && (
-        <div className="toolbar-menu toolbar-style" style={{ maxHeight: room }} role="dialog" aria-label="Оформление">
-          <StyleSection title="Шрифт">
-            <div className="toolbar-choices toolbar-fonts" role="radiogroup" aria-label="Шрифт">
-              {FONTS.map(f => (
-                <button key={f.id} type="button" role="radio" aria-checked={f.id === font} className={f.id === font ? 'is-active' : undefined} onClick={() => onFont(f.id)}>
-                  <span className={`font-${f.id}`}>{f.label}</span>
-                </button>
-              ))}
-            </div>
-          </StyleSection>
-          <StyleSection title="Эффект">
-            <div className="toolbar-choices" role="radiogroup" aria-label="Эффект">
-              {EFFECTS.map(e => (
-                <button key={e.id} type="button" role="radio" aria-checked={e.id === effect} className={e.id === effect ? 'is-active' : undefined} onClick={() => onEffect(e.id)}>
-                  <span className={`toolbar-choice-sample font-${font} effect-${e.id}`} style={inkStyle}>
-                    Аа
-                  </span>
-                  <small>{e.label}</small>
-                </button>
-              ))}
-            </div>
-          </StyleSection>
-          {/* Маркер — на готовый текст */}
-          {block.text.trim() !== '' && (
-            <StyleSection title="Маркер">
-              <div className="toolbar-marker">
-                <div className="toolbar-choices" role="radiogroup" aria-label="Форма маркера">
-                  {MARKERS.map(m => (
-                    <button key={m.id} type="button" role="radio" aria-checked={m.id === marker} className={m.id === marker ? 'is-active' : undefined} onClick={() => onMarker(m.id)}>
-                      <span className={`toolbar-choice-sample font-${font}`} style={inkStyle}>
-                        <span className={`mark-${m.id}`} style={{ '--mark': markColor } as CSSProperties}>
-                          текст
-                        </span>
-                      </span>
-                      <small>{m.label}</small>
+        <CascadeMenu
+          anchor={ref}
+          room={room}
+          label="Оформление"
+          items={[
+            {
+              id: 'font',
+              label: 'Шрифт',
+              value: FONTS.find(f => f.id === font)?.label,
+              content: (
+                <div className="toolbar-options" role="radiogroup" aria-label="Шрифт">
+                  {FONTS.map(f => (
+                    <button key={f.id} type="button" role="radio" aria-checked={f.id === font} className={f.id === font ? 'is-active' : undefined} onClick={() => onFont(f.id)}>
+                      <span className={`toolbar-font-sample font-${f.id}`}>{f.label}</span>
                     </button>
                   ))}
                 </div>
-                <ColorWheel color={markColor} base="light" size={MARKER_WHEEL_SIZE} label="Цвет маркера" onPick={onMarkerColor} />
-              </div>
-            </StyleSection>
-          )}
-          <StyleSection title="Прозрачность">
-            <OpacitySlider value={block.opacity} onPick={onOpacity} />
-          </StyleSection>
-        </div>
+              )
+            },
+            {
+              id: 'effect',
+              label: 'Эффект',
+              value: EFFECTS.find(e => e.id === effect)?.label,
+              content: (
+                <div className="toolbar-options" role="radiogroup" aria-label="Эффект">
+                  {EFFECTS.map(e => (
+                    <button key={e.id} type="button" role="radio" aria-checked={e.id === effect} className={e.id === effect ? 'is-active' : undefined} onClick={() => onEffect(e.id)}>
+                      <span className={`toolbar-choice-sample font-${font} effect-${e.id}`} style={inkStyle}>
+                        Аа
+                      </span>
+                      {e.label}
+                    </button>
+                  ))}
+                </div>
+              )
+            },
+            ...(block.text.trim() !== ''
+              ? [
+                  {
+                    id: 'marker',
+                    label: 'Маркер',
+                    value: MARKERS.find(m => m.id === marker)?.label,
+                    content: (
+                      <div className="toolbar-marker">
+                        <div className="toolbar-choices" role="radiogroup" aria-label="Форма маркера">
+                          {MARKERS.map(m => (
+                            <button key={m.id} type="button" role="radio" aria-checked={m.id === marker} className={m.id === marker ? 'is-active' : undefined} onClick={() => onMarker(m.id)}>
+                              <span className={`toolbar-choice-sample font-${font}`} style={inkStyle}>
+                                <span className={`mark-${m.id}`} style={{ '--mark': markColor } as CSSProperties}>
+                                  текст
+                                </span>
+                              </span>
+                              <small>{m.label}</small>
+                            </button>
+                          ))}
+                        </div>
+                        <ColorWheel color={markColor} base="light" size={Math.min(MARKER_WHEEL_SIZE, room - 140)} label="Цвет маркера" onPick={onMarkerColor} />
+                      </div>
+                    )
+                  }
+                ]
+              : []),
+            {
+              id: 'opacity',
+              label: 'Прозрачность',
+              value: `${Math.round((block.opacity ?? 1) * 100)}%`,
+              content: <OpacitySlider value={block.opacity} onPick={onOpacity} />
+            }
+          ]}
+        />
       )}
 
       {menu === 'sticker' && (

@@ -452,23 +452,131 @@
   text-align: right;
 }
 
-/* «Оформление» — один выезжающий список (просьба автора): разделы с
-   заголовками (у надписи — шрифт, эффект, маркер, прозрачность; у фото —
-   рамка, фильтр, прозрачность), варианты — плитками по три */
-.toolbar-style {
+/* «Оформление» — каскадный список (просьба автора; CascadeMenu): слева —
+   пункты (название и мелко — что выбрано), справа — настройки выбранного
+   пункта. Оба столбца — отдельные плашки, низом на одной линии над панелью */
+.toolbar-cascade {
+  position: absolute;
+  bottom: calc(100% + 10px);
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: min(360px, calc(100vw - 24px));
-  padding: 10px 10px 12px;
+  align-items: flex-end;
+  gap: 6px;
+  /* Между столбцами и справа от них — касание листа */
+  pointer-events: none;
+  animation: cascade-in 0.15s ease-out;
 }
 
-.toolbar-section-title {
-  margin: 0 0 6px 4px;
+@keyframes cascade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.toolbar-cascade-list,
+.toolbar-cascade-sub {
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgb(60 40 10 / 0.08);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--chrome) 94%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 16px rgb(60 40 10 / 0.16);
+  touch-action: pan-y;
+  pointer-events: auto;
+}
+
+.toolbar-cascade-list {
+  flex: none;
+  width: 150px;
+}
+
+.toolbar-cascade-sub {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  animation: cascade-in 0.12s ease-out;
+}
+
+.toolbar-cascade-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-height: 46px;
+  padding: 6px 6px 6px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 14px/1.2 var(--ui-font);
+  text-align: left;
+}
+
+.toolbar-cascade-list button.is-active {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.toolbar-cascade-list button > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.toolbar-cascade-list small {
+  overflow: hidden;
   color: var(--muted);
-  font: 600 11px/1.2 var(--ui-font);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font: 400 12px/1.3 var(--ui-font);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.text-toolbar .toolbar-cascade-arrow {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.4;
+}
+
+/* Варианты списком (шрифт, эффект): по строке на вариант */
+.toolbar-options button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: 15px/1.2 var(--ui-font);
+  text-align: left;
+}
+
+.toolbar-options button.is-active {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+/* Шрифты — каждый своим шрифтом (классы .font-* — TextBlock.css),
+   рукописные покрупнее */
+.toolbar-font-sample {
+  font-size: 17px;
+  white-space: nowrap;
+}
+
+.toolbar-font-sample.font-hand,
+.toolbar-font-sample.font-script {
+  font-size: 22px;
+}
+
+.toolbar-font-sample.font-mono {
+  font-weight: 600;
 }
 
 .toolbar-choices {
@@ -505,26 +613,6 @@
   text-overflow: ellipsis;
 }
 
-/* Шрифты — по два в ряд, каждый своим шрифтом (классы .font-* —
-   TextBlock.css), рукописные покрупнее */
-.toolbar-fonts {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.toolbar-fonts span {
-  font-size: 16px;
-  white-space: nowrap;
-}
-
-.toolbar-fonts .font-hand,
-.toolbar-fonts .font-script {
-  font-size: 22px;
-}
-
-.toolbar-fonts .font-mono {
-  font-weight: 600;
-}
-
 /* Образец эффекта или маркера — цветом и шрифтом надписи */
 .toolbar-choice-sample {
   color: var(--ink-color);
@@ -532,13 +620,19 @@
   line-height: 32px;
 }
 
-/* Маркер в списке: формы, под ними палитра (горизонтально — рядом) */
-.toolbar-style .toolbar-marker {
+/* Маркер справа: формы, под ними палитра — всегда друг под другом */
+.toolbar-cascade-sub .toolbar-marker {
+  grid-template-columns: none;
   width: 100%;
   padding: 0;
 }
 
-.toolbar-style .toolbar-opacity {
+.toolbar-cascade-sub .toolbar-choice-sample {
+  min-width: 44px;
+  text-align: center;
+}
+
+.toolbar-cascade-sub .toolbar-opacity {
   min-width: 0;
   padding: 4px 6px;
 }

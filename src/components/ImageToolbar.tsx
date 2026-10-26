@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { knownImageUrl } from '../images';
 import type { Block } from '../notes';
 import { FILTERS, FRAMES, filterOf, frameOf } from '../textStyle';
-import { ConfirmDelete, LayerButtons, OpacitySlider, StyleSection, keepFocus, menuRoom, useToolbarHeight } from './TextToolbar';
+import { CascadeMenu, ConfirmDelete, LayerButtons, OpacitySlider, keepFocus, menuRoom, useToolbarHeight } from './TextToolbar';
 import './TextToolbar.css';
 
 type Props = {
@@ -21,7 +21,7 @@ type Props = {
 type Menu = 'style' | 'layer' | 'delete' | null;
 
 // Панель выбранного фото — как у надписи (TextToolbar.css): «Оформление» —
-// один список (рамка, фильтр, прозрачность — просьба автора), слой (наверх /
+// каскадный список (рамка, фильтр, прозрачность — просьба автора), слой (наверх /
 // вниз), удалить (с подтверждением), готово. Двигают, поворачивают и меняют размер фото
 // пальцами, как надпись.
 export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onDone, onHeight, history }: Props) {
@@ -37,48 +37,67 @@ export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onD
     <div ref={ref} className={menu ? 'text-toolbar has-menu' : 'text-toolbar'} role="toolbar" aria-label="Фото" onMouseDown={keepFocus}>
       {history && <div className="toolbar-history">{history}</div>}
 
+      {/* Рамка, фильтр, прозрачность — каскадный список, как у надписи */}
       {menu === 'style' && (
-        <div className="toolbar-menu toolbar-style" style={{ maxHeight: room }} role="dialog" aria-label="Оформление">
-          <StyleSection title="Рамка">
-            <div className="toolbar-choices" role="radiogroup" aria-label="Рамка">
-              {FRAMES.map(f => (
-                <button
-                  key={f.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={f.id === frame}
-                  className={f.id === frame ? 'is-active' : undefined}
-                  onClick={() => onPatch({ frame: f.id === 'none' ? undefined : f.id })}
-                >
-                  <span className={`toolbar-frame-preview frame-${f.id}`}>
-                    <span />
-                  </span>
-                  <small>{f.label}</small>
-                </button>
-              ))}
-            </div>
-          </StyleSection>
-          <StyleSection title="Фильтр">
-            <div className="toolbar-choices" role="radiogroup" aria-label="Фильтр">
-              {FILTERS.map(f => (
-                <button
-                  key={f.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={f.id === filter}
-                  className={f.id === filter ? 'is-active' : undefined}
-                  onClick={() => onPatch({ filter: f.id === 'none' ? undefined : f.id })}
-                >
-                  {url && <img className="toolbar-filter-preview" src={url} alt="" style={{ filter: f.css }} />}
-                  <small>{f.label}</small>
-                </button>
-              ))}
-            </div>
-          </StyleSection>
-          <StyleSection title="Прозрачность">
-            <OpacitySlider value={block.opacity} onPick={onOpacity} />
-          </StyleSection>
-        </div>
+        <CascadeMenu
+          anchor={ref}
+          room={room}
+          label="Оформление"
+          items={[
+            {
+              id: 'frame',
+              label: 'Рамка',
+              value: FRAMES.find(f => f.id === frame)?.label,
+              content: (
+                <div className="toolbar-choices" role="radiogroup" aria-label="Рамка">
+                  {FRAMES.map(f => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={f.id === frame}
+                      className={f.id === frame ? 'is-active' : undefined}
+                      onClick={() => onPatch({ frame: f.id === 'none' ? undefined : f.id })}
+                    >
+                      <span className={`toolbar-frame-preview frame-${f.id}`}>
+                        <span />
+                      </span>
+                      <small>{f.label}</small>
+                    </button>
+                  ))}
+                </div>
+              )
+            },
+            {
+              id: 'filter',
+              label: 'Фильтр',
+              value: FILTERS.find(f => f.id === filter)?.label,
+              content: (
+                <div className="toolbar-choices" role="radiogroup" aria-label="Фильтр">
+                  {FILTERS.map(f => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={f.id === filter}
+                      className={f.id === filter ? 'is-active' : undefined}
+                      onClick={() => onPatch({ filter: f.id === 'none' ? undefined : f.id })}
+                    >
+                      {url && <img className="toolbar-filter-preview" src={url} alt="" style={{ filter: f.css }} />}
+                      <small>{f.label}</small>
+                    </button>
+                  ))}
+                </div>
+              )
+            },
+            {
+              id: 'opacity',
+              label: 'Прозрачность',
+              value: `${Math.round((block.opacity ?? 1) * 100)}%`,
+              content: <OpacitySlider value={block.opacity} onPick={onOpacity} />
+            }
+          ]}
+        />
       )}
 
       {menu === 'layer' && (
