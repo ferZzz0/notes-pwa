@@ -50,6 +50,9 @@ type Props = {
   // Непрозрачность с ползунка; final — палец отпустили (сохранить)
   onOpacity: (opacity: number, final: boolean) => void;
   onLayer: (dir: 'up' | 'down') => void;
+  // Ручка ширины строк на рамке: показана ли и кнопка, которая её
+  // показывает и прячет (нет — кнопки нет)
+  grip?: { on: boolean; onToggle: () => void };
   onDelete: () => void;
   onDone: () => void;
   // Высота панели — чтобы лист можно было поднять над ней
@@ -212,10 +215,10 @@ export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => voi
 // Панель выбранной надписи или стикера внизу экрана (а при открытой
 // клавиатуре — над ней): цвет текста (круговая палитра), «Аа» — один список
 // оформления (шрифт, эффект, маркер — на готовом тексте, прозрачность), у
-// стикера — его форма, цвет и слой, у надписи — слой, удалить (с
-// подтверждением), готово. Списки открываются над панелью, по одному.
+// стикера — его форма, цвет и слой, у надписи — слой, ширина строк (ручка
+// на рамке), удалить (с подтверждением), готово. Списки открываются над панелью, по одному.
 export function TextToolbar(props: Props) {
-  const { block, keyboard, onColor, onFont, onEffect, onMarker, onMarkerColor, onCapture, rangeStyle, history, onMenu, onSticker, onOpacity, onLayer, onDelete, onDone, onHeight } = props;
+  const { block, keyboard, onColor, onFont, onEffect, onMarker, onMarkerColor, onCapture, rangeStyle, history, onMenu, onSticker, onOpacity, onLayer, grip, onDelete, onDone, onHeight } = props;
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
   const font = fontOf(rangeStyle?.font ?? block.font);
@@ -389,6 +392,21 @@ export function TextToolbar(props: Props) {
             <path d="M12 4l8.5 4.5L12 13 3.5 8.5zM3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5" />
           </svg>
         )}
+      {/* Ширина строк: показать или спрятать ручку на рамке (просьба автора;
+          по умолчанию её нет) */}
+      {grip && (
+        <button
+          type="button"
+          className={grip.on ? 'is-active' : undefined}
+          aria-label="Ширина строк"
+          aria-pressed={grip.on}
+          onClick={grip.onToggle}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 5v14M20 5v14M8 12h8M10.5 9.5 8 12l2.5 2.5M13.5 9.5 16 12l-2.5 2.5" />
+          </svg>
+        </button>
+      )}
       {opener(
         'delete',
         isSticker ? 'Удалить стикер' : 'Удалить надпись',

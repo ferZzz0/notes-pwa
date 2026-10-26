@@ -881,6 +881,11 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     setSelected(null);
   };
 
+  // Ручка ширины строк на рамке — только если её показали кнопкой на панели
+  // (просьба автора); выбрали надпись заново — снова скрыта
+  const [gripOn, setGripOn] = useState(false);
+  useEffect(() => setGripOn(false), [selected]);
+
   // Верхняя из видимых надписей в точке мира p
   // Всё, что в точке мира p, — сверху вниз (порядок в списке — порядок слоёв)
   const blocksAt = (p: Point) => {
@@ -1752,7 +1757,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             ref={selection}
             block={selectedBlock}
             camera={() => camera.current}
-            onResize={selectedBlock.kind !== 'image' && !selectedBlock.locked ? resizeWidth : undefined}
+            onResize={gripOn && selectedBlock.kind !== 'image' && !selectedBlock.locked ? resizeWidth : undefined}
           />
           {selectedBlock.locked ? (
             <LockedToolbar history={toolbarTop} onDone={deselect} onHeight={setToolbarHeight} />
@@ -1793,6 +1798,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               onSticker={(patch, save) => patchBlock(selectedBlock.id, patch, save)}
               onOpacity={(opacity, final) => patchBlock(selectedBlock.id, { opacity: opacity < 1 ? opacity : undefined }, final)}
               onLayer={dir => reorder(selectedBlock.id, dir)}
+              grip={{ on: gripOn, onToggle: () => setGripOn(!gripOn) }}
               onDelete={() => {
                 removeBlock(selectedBlock.id);
                 deselect();
