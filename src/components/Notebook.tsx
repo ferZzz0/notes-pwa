@@ -1550,6 +1550,19 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     };
   }, [darkPaper]);
 
+  // Строка состояния (полоса с часами и «островком» над листом) — цветом
+  // открытой страницы (просьба автора). Это не часть страницы: iPhone красит
+  // её по theme-color (index.html) и сам выбирает к ней тёмные или светлые
+  // часы. Своего цвета нет — прежний, как у бумаги приложения
+  const barColor = spreads[spread]?.looks?.[side]?.paper;
+  useEffect(() => {
+    if (!barColor) return;
+    const metas = [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')];
+    const before = metas.map(m => m.content);
+    for (const m of metas) m.content = barColor;
+    return () => metas.forEach((m, i) => (m.content = before[i]));
+  }, [barColor]);
+
   const pageSide = (s: number, sd: Side) => (
     <PageSide
       spread={s}
