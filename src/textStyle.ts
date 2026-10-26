@@ -193,6 +193,10 @@ export type Tone = 'light' | 'dark';
 const TONE_L: Record<Tone, [number, number]> = { light: [0.96, 0.74], dark: [0.28, 0.06] };
 const TONE_S: Record<Tone, number> = { light: 0.85, dark: 0.55 };
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+// Оттенки слева направо — от красного до малиново-розового, не по кругу: при
+// 360° правый край снова был красным, как левый, и ползунок, уведённый за
+// правый край, прыгал влево (жалоба автора)
+const HUE_SPAN = 340;
 
 // hsl (h — градусы, s и l — доли) → [r, g, b] долями
 function hslRgb(h: number, s: number, l: number): [number, number, number] {
@@ -222,7 +226,7 @@ function hexHsl(hex: string): { h: number; s: number; l: number } {
 const toneL = (t: number, tone: Tone) => TONE_L[tone][0] + (TONE_L[tone][1] - TONE_L[tone][0]) * clamp01(t);
 
 // Точка палитры тона (x, y — доли ширины и высоты) → [r, g, b] долями
-export const toneRgb = (x: number, y: number, tone: Tone) => hslRgb(clamp01(x) * 360, TONE_S[tone], toneL(y, tone));
+export const toneRgb = (x: number, y: number, tone: Tone) => hslRgb(clamp01(x) * HUE_SPAN, TONE_S[tone], toneL(y, tone));
 // Точка полоски серых (x — доля ширины) → [r, g, b] долями
 export function greyRgb(x: number, tone: Tone): [number, number, number] {
   const l = toneL(x, tone);
@@ -239,7 +243,7 @@ export function tonePosition(color: string, tone: Tone): { grey: boolean; x: num
   const { h, s, l } = hexHsl(HEX.test(color) ? color : '#ffffff');
   const [l0, l1] = TONE_L[tone];
   const t = clamp01((l - l0) / (l1 - l0));
-  return s < 0.12 ? { grey: true, x: t, y: 0.5 } : { grey: false, x: h / 360, y: t };
+  return s < 0.12 ? { grey: true, x: t, y: 0.5 } : { grey: false, x: Math.min(1, h / HUE_SPAN), y: t };
 }
 
 // Тот же оттенок (или серый) в другом тоне (переключатель «Светлые /
