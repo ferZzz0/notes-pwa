@@ -49,7 +49,7 @@ export function ImageItem({ block }: { block: Block }) {
             src={url}
             alt=""
             draggable={false}
-            style={{ filter: filterCss(block.filter) }}
+            style={{ filter: filterCss(block.filter), transform: flipTransform(block) }}
           />
         )}
       </div>
@@ -90,4 +90,10 @@ export function DecalItem({ block }: { block: Block }) {
       <Glitter seed={block.id} amount={block.glitter ?? DEFAULT_GLITTER} />
     </div>
   );
+}
+
+// Отражение картинки фото (рамка остаётся как есть)
+function flipTransform(block: Block): string | undefined {
+  if (!block.flip && !block.flipV) return undefined;
+  return `scale(${block.flip ? -1 : 1}, ${block.flipV ? -1 : 1})`;
 }

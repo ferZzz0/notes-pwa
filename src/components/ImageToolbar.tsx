@@ -106,6 +106,38 @@ export function ImageToolbar({ block, onPatch, onOpacity, onGlitter, onLayer, on
               )
             },
             {
+              // Отразить (просьба автора — вернуть): по горизонтали и по вертикали
+              id: 'flip',
+              label: 'Отразить',
+              value: block.flip && block.flipV ? 'Оба' : block.flip ? 'По горизонтали' : block.flipV ? 'По вертикали' : 'Нет',
+              content: (
+                <div className="toolbar-options" role="group" aria-label="Отразить">
+                  <button
+                    type="button"
+                    aria-pressed={!!block.flip}
+                    className={block.flip ? 'is-active' : undefined}
+                    onClick={() => onPatch({ flip: block.flip ? undefined : true })}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 3v18M9 7 4 12l5 5V7zM15 7l5 5-5 5V7z" />
+                    </svg>
+                    По горизонтали
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={!!block.flipV}
+                    className={block.flipV ? 'is-active' : undefined}
+                    onClick={() => onPatch({ flipV: block.flipV ? undefined : true })}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M3 12h18M7 9l5-5 5 5H7zM7 15l5 5 5-5H7z" />
+                    </svg>
+                    По вертикали
+                  </button>
+                </div>
+              )
+            },
+            {
               id: 'opacity',
               label: 'Прозрачность',
               value: `${Math.round((block.opacity ?? 1) * 100)}%`,
