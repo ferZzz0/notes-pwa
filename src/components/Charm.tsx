@@ -13,11 +13,21 @@ import './Charm.css';
 
 // Маятник: длина (м — с ней качается, как настоящий брелок чуть длиннее
 // пальца), затухание (1/с), самый большой угол (рад — дальше цепочка не
-// пускает, отскакивает)
+// пускает, отскакивает), самая большая скорость (рад/с)
 const LENGTH = 0.12;
-const DAMPING = 1.1;
+// Брелок качался слишком охотно (просьба автора: «менее чувствительным»):
+// затухание сильнее, скорость ниже, толчки слабее, а от ускорения самого
+// телефона доходит только доля SHAKE; дрожь руки слабее CALM (м/с²) не
+// качает вовсе. Наклон — честный: сила тяжести (сглаженные показания,
+// SMOOTH — доля нового показания) тянет в полную силу
+const DAMPING = 2.4;
 const MAX_ANGLE = 2.6;
-const MAX_SPEED = 25;
+const MAX_SPEED = 10;
+const SHAKE = 0.3;
+const CALM = 0.5;
+const SMOOTH = 0.06;
+const KICK = 1.5;
+const TAP = 2.5;
 const G = 9.81;
 
 // Размер брелка (px экрана): от и до, сначала. Сколько места сверху он
@@ -31,8 +41,29 @@ export const CHARM_ROOM = 56 + CHARM_MAX;
 
 // Датчик: у iPhone accelerationIncludingGravity — сама сила тяжести (вниз:
 // y < 0, когда телефон стоит), по стандарту и на Android — наоборот. Знак
-// уточняем по показаниям: телефон обычно держат верхом вверх
+// уточняем по показаниям: экран обычно держат верхом вверх
 const APPLE = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// Показания датчика (оси телефона: x — вправо, y — к его верху) в
+// координатах экрана (x вправо, y вниз) с учётом поворота экрана:
+// горизонтально верх телефона смотрит вбок (без этого брелок в
+// горизонтальном режиме висел влево — жалоба автора). Поворот —
+// window.orientation (iPhone: 90 — верх телефона слева, −90 — справа),
+// иначе screen.orientation
+function toScreen(dx: number, dy: number): [number, number] {
+  const legacy = (window as { orientation?: unknown }).orientation;
+  const turn = typeof legacy === 'number' ? legacy : (screen.orientation?.angle ?? 0);
+  switch (((turn % 360) + 360) % 360) {
+    case 90:
+      return [-dy, -dx];
+    case 180:
+      return [-dx, dy];
+    case 270:
+      return [dy, dx];
+    default:
+      return [dx, -dy];
+  }
+}
 
 type MotionPermission = { requestPermission?: () => Promise<'granted' | 'denied'> };
 
@@ -63,6 +94,8 @@ export function Charm({ charm, kick, ref }: { charm: CharmLook; kick: number; re
     let restY = gy;
     let sign = APPLE ? 1 : -1;
     let upright = 0;
+    // Сглаженная сила тяжести (наклон телефона); null — ещё не было показаний
+    let base: { x: number; y: number } | null = null;
     let frame = 0;
     let last = 0;
 
@@ -105,12 +138,26 @@ export function Charm({ charm, kick, ref }: { charm: CharmLook; kick: number; re
     const onMotion = (e: DeviceMotionEvent) => {
       const a = e.accelerationIncludingGravity;
       if (a?.x == null || a.y == null) return;
-      // Знак показаний: усреднённая вертикаль телефона должна тянуть вниз
-      upright += (a.y - upright) * 0.02;
-      if (Math.abs(upright) > 4) sign = upright < 0 ? 1 : -1;
-      // Сила тяжести (с ускорением самого телефона) в координатах экрана
-      gx = sign * a.x;
-      gy = -sign * a.y;
+      // Показания (сила тяжести и ускорение самого телефона) в координатах экрана
+      const [rx, ry] = toScreen(a.x, a.y);
+      // Знак показаний: усреднённо они должны тянуть к низу экрана
+      upright += (ry - upright) * 0.02;
+      if (Math.abs(upright) > 4) {
+        const next = upright > 0 ? 1 : -1;
+        if (next !== sign) base = null;
+        sign = next;
+      }
+      const x = sign * rx;
+      const y = sign * ry;
+      // Сила тяжести — сглаженные показания; остальное — тряска: от неё только
+      // доля SHAKE, и без дрожи руки (меньше CALM)
+      base = base ? { x: base.x + (x - base.x) * SMOOTH, y: base.y + (y - base.y) * SMOOTH } : { x, y };
+      const sx = x - base.x;
+      const sy = y - base.y;
+      const shake = Math.hypot(sx, sy);
+      const k = shake > CALM ? (SHAKE * (shake - CALM)) / shake : 0;
+      gx = base.x + sx * k;
+      gy = base.y + sy * k;
       if (!frame && Math.hypot(gx - restX, gy - restY) > 0.3) run();
     };
     window.addEventListener('devicemotion', onMotion);
@@ -121,7 +168,7 @@ export function Charm({ charm, kick, ref }: { charm: CharmLook; kick: number; re
       }
     };
     // Появился — чуть качнулся
-    speed = 2;
+    speed = 1;
     run();
     return () => {
       window.removeEventListener('devicemotion', onMotion);
@@ -132,7 +179,7 @@ export function Charm({ charm, kick, ref }: { charm: CharmLook; kick: number; re
 
   // Перелистнули страницу — телефон «дёрнулся»
   useEffect(() => {
-    if (kick) engine.current?.push((Math.random() < 0.5 ? -1 : 1) * (3 + 2 * Math.random()));
+    if (kick) engine.current?.push((Math.random() < 0.5 ? -1 : 1) * KICK * (1 + 0.5 * Math.random()));
   }, [kick]);
 
   return (
@@ -158,7 +205,7 @@ export function Charm({ charm, kick, ref }: { charm: CharmLook; kick: number; re
             // Касание — качнуть; на iPhone заодно спросить про датчик движения
             askMotion();
             const r = e.currentTarget.getBoundingClientRect();
-            engine.current?.push(e.clientX < r.left + r.width / 2 ? 4 : -4);
+            engine.current?.push(e.clientX < r.left + r.width / 2 ? TAP : -TAP);
           }}
         >
           <img src={decalSrc(charm.decal)} alt="" draggable={false} />
