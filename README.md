@@ -250,8 +250,12 @@ GitHub Pages из той же сети отдаёт файлы без обрыв
 - `src/components/UpdatePrompt.tsx` — регистрация service worker'а, плашка
   «готово к работе офлайн» и автоматическое обновление
 - `index.html` — точка входа Vite
-- `public/icon.svg` — исходник иконки; PNG и `favicon.ico` рядом с ним
-  генерирует `npm run icons` (настройки в `pwa-assets.config.ts`)
+- `public/icon.svg` — исходник иконки (розовый стеклянный дневник с
+  сердечком и блёстками в стиле Liquid Glass, «тёмное стекло»); PNG и
+  `favicon.ico` рядом с ним генерирует `npm run icons` (настройки в
+  `pwa-assets.config.ts`). На iPhone название и иконка запоминаются при
+  добавлении на главный экран: у уже добавленного приложения они не
+  меняются, а удаление с главного экрана стирает его записи
 - `vite.config.ts` — конфиг сборки и PWA (манифест, офлайн-кэш)
 - `.github/workflows/pages.yml` — сборка и выкладка на GitHub Pages
 - `wrangler.jsonc` — прежний деплой на Cloudflare (не используется)

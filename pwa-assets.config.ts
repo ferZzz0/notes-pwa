@@ -3,8 +3,9 @@ import { defineConfig, minimal2023Preset } from '@vite-pwa/assets-generator/conf
 // Настройки `npm run icons`: из public/icon.svg делает PNG-иконки PWA,
 // apple-touch-icon и favicon.ico (кладёт их рядом, в public/).
 // Для maskable (Android) и Apple фон заливаем цветом иконки без отступов:
-// эти системы сами обрезают углы своей маской.
-const background = '#f9a546';
+// эти системы сами обрезают углы своей маской. Цвет — середина фона иконки
+// (тёмное сливовое стекло).
+const background = '#3f1750';
 
 export default defineConfig({
   headLinkOptions: { preset: '2023' },

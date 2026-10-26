@@ -1,23 +1,91 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Исходник иконки приложения. После правок запусти `npm run icons`,
-       чтобы перегенерировать PNG и favicon.ico рядом с этим файлом. -->
+  <!-- Исходник иконки приложения: розовый дневник с сердечком и блёстками
+       в стиле Liquid Glass, «тёмное стекло» (выбор автора, 2026-10-26). После правок запусти `npm run icons`,
+       чтобы перегенерировать PNG и favicon.ico рядом с этим файлом. Всё
+       важное лежит в круге радиусом 40% от центра — эту зону не обрезает ни
+       одна маска (maskable-иконки). -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffc15e"/>
-      <stop offset="1" stop-color="#f28a2e"/>
+      <stop offset="0" stop-color="#2a1140"/>
+      <stop offset="1" stop-color="#5b1d5e"/>
     </linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="42"/></filter>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="16"/></filter>
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- Стекло обложки: цвет, сверху — светлее -->
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffa6d2" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#ff4f9a" stop-opacity="0.66"/>
+    </linearGradient>
+    <!-- Блик на стекле: светлая верхняя часть, сходит на нет к середине -->
+    <linearGradient id="sheen" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.5"/>
+      <stop offset="0.45" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Край стекла: яркий сверху слева, гаснет, снова светлеет снизу справа -->
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="1"/>
+      <stop offset="0.45" stop-color="#fff" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0.7"/>
+    </linearGradient>
+    <!-- Стеклянное сердце -->
+    <radialGradient id="heart" cx="0.35" cy="0.3" r="0.9">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#ffd1e8"/>
+      <stop offset="1" stop-color="#ff8cc3"/>
+    </radialGradient>
+    <!-- Застёжка — золотая стеклянная бусина -->
+    <radialGradient id="bead" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#fffbe6"/>
+      <stop offset="0.55" stop-color="#ffd76a"/>
+      <stop offset="1" stop-color="#f0a92c"/>
+    </radialGradient>
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <!-- Лист заметки, чуть повёрнут. Всё важное лежит в круге радиусом 40%
-       от центра — эту зону не обрезает ни одна маска (maskable-иконки). -->
-  <g transform="rotate(-6 256 256)">
-    <path d="M150 122 h170 l62 62 v206 a20 20 0 0 1 -20 20 h-212 a20 20 0 0 1 -20 -20 v-248 a20 20 0 0 1 20 -20 z"
-          fill="#7a3a00" opacity="0.18"/>
-    <path d="M150 112 h170 l62 62 v206 a20 20 0 0 1 -20 20 h-212 a20 20 0 0 1 -20 -20 v-248 a20 20 0 0 1 20 -20 z"
-          fill="#fffdf8"/>
-    <path d="M320 112 v42 a20 20 0 0 0 20 20 h42 z" fill="#f3dfbf"/>
-    <rect x="168" y="208" width="140" height="18" rx="9" fill="#e7ad62"/>
-    <rect x="168" y="258" width="176" height="18" rx="9" fill="#efc890"/>
-    <rect x="168" y="308" width="124" height="18" rx="9" fill="#efc890"/>
+  <!-- Размытые цветные пятна за стеклом -->
+  <g filter="url(#soft)">
+    <circle cx="150" cy="150" r="130" fill="#ff4fa0"/>
+    <circle cx="400" cy="400" r="150" fill="#8a4dff"/>
+    <circle cx="420" cy="130" r="90" fill="#ff7ac0"/>
+  </g>
+
+  <g transform="rotate(-7 256 256)">
+    <!-- Мягкая тень -->
+    <rect x="146" y="128" width="248" height="290" rx="26" fill="#000000" filter="url(#shadow)"/>
+    <!-- Страницы — матовое стекло -->
+    <path d="M172 106h196a22 22 0 0 1 22 22v246a22 22 0 0 1-22 22h-196z" fill="#fff" fill-opacity="0.32"/>
+    <path d="M172 106h196a22 22 0 0 1 22 22v246a22 22 0 0 1-22 22h-196z" fill="none" stroke="#fff" stroke-opacity="0.85" stroke-width="2.5"/>
+    <path d="M376 122v258M383 132v238" stroke="#fff" stroke-opacity="0.6" stroke-width="2"/>
+    <!-- Обложка — цветное стекло с бликом и светлым краем -->
+    <path d="M156 100h192a22 22 0 0 1 22 22v246a22 22 0 0 1-22 22h-192a22 22 0 0 1-22-22v-246a22 22 0 0 1 22-22z" fill="url(#glass)"/>
+    <path d="M134 122a22 22 0 0 1 22-22h20v290h-20a22 22 0 0 1-22-22z" fill="#ff3f93" fill-opacity="0.45"/>
+    <path d="M156 100h192a22 22 0 0 1 22 22v246a22 22 0 0 1-22 22h-192a22 22 0 0 1-22-22v-246a22 22 0 0 1 22-22z" fill="url(#sheen)"/>
+    <path d="M182 104v282" stroke="#fff" stroke-opacity="0.45" stroke-width="2.5"/>
+    <path d="M156 100h192a22 22 0 0 1 22 22v246a22 22 0 0 1-22 22h-192a22 22 0 0 1-22-22v-246a22 22 0 0 1 22-22z" fill="none" stroke="url(#rim)" stroke-width="5"/>
+    <path d="M160 106h186a18 18 0 0 1 18 18" fill="none" stroke="#fff" stroke-opacity="0.9" stroke-width="3" stroke-linecap="round"/>
+    <!-- Сердце — выпуклое стекло -->
+    <path transform="translate(262 236) scale(4.5)" d="M0 9C-6 4-12 0-12-5.5-12-9.5-9-12-5.8-12-3-12-1-10.5 0-8.5 1-10.5 3-12 5.8-12 9-12 12-9.5 12-5.5 12 0 6 4 0 9Z" fill="url(#heart)"/>
+    <path transform="translate(262 236) scale(4.5)" d="M0 9C-6 4-12 0-12-5.5-12-9.5-9-12-5.8-12-3-12-1-10.5 0-8.5 1-10.5 3-12 5.8-12 9-12 12-9.5 12-5.5 12 0 6 4 0 9Z" fill="none" stroke="#fff" stroke-opacity="0.95" stroke-width="0.55"/>
+    <ellipse cx="236" cy="200" rx="14" ry="8" transform="rotate(-35 236 200)" fill="#fff" fill-opacity="0.9"/>
+    <circle cx="257" cy="196" r="3.5" fill="#fff" fill-opacity="0.85"/>
+    <!-- Хлястик с застёжкой -->
+    <rect x="330" y="214" width="58" height="62" rx="14" fill="#ff4f9a" fill-opacity="0.6"/>
+    <rect x="330" y="214" width="58" height="62" rx="14" fill="none" stroke="url(#rim)" stroke-width="3"/>
+    <circle cx="366" cy="245" r="19" fill="url(#bead)"/>
+    <path transform="translate(366 247) scale(0.95)" d="M0 9C-6 4-12 0-12-5.5-12-9.5-9-12-5.8-12-3-12-1-10.5 0-8.5 1-10.5 3-12 5.8-12 9-12 12-9.5 12-5.5 12 0 6 4 0 9Z" fill="#ff3f93"/>
+    <ellipse cx="359" cy="236" rx="6" ry="3.5" transform="rotate(-35 359 236)" fill="#fff" fill-opacity="0.9"/>
+    <!-- Искорки на обложке -->
+    <g filter="url(#glow)">
+      <path transform="translate(206 150) rotate(0) scale(15)" fill="#fff" d="M0-1C.13-.13.13-.13 1 0 .13.13.13.13 0 1-.13.13-.13.13-1 0-.13-.13-.13-.13 0-1Z"/><path transform="translate(318 330) rotate(20) scale(13)" fill="#fff7c2" d="M0-1C.13-.13.13-.13 1 0 .13.13.13.13 0 1-.13.13-.13.13-1 0-.13-.13-.13-.13 0-1Z"/><path transform="translate(216 342) rotate(0) scale(9)" fill="#fff" d="M0-1C.13-.13.13-.13 1 0 .13.13.13.13 0 1-.13.13-.13.13-1 0-.13-.13-.13-.13 0-1Z"/>
+      <circle cx="302" cy="152" r="4" fill="#fff"/><circle cx="246" cy="304" r="3.5" fill="#fff7c2"/><circle cx="332" cy="178" r="3" fill="#fff"/>
+    </g>
+  </g>
+  <!-- Искорки вокруг -->
+  <g filter="url(#glow)">
+    <path transform="translate(108 136) rotate(0) scale(26)" fill="#fff" d="M0-1C.13-.13.13-.13 1 0 .13.13.13.13 0 1-.13.13-.13.13-1 0-.13-.13-.13-.13 0-1Z"/><path transform="translate(408 106) rotate(15) scale(18)" fill="#fff7c2" d="M0-1C.13-.13.13-.13 1 0 .13.13.13.13 0 1-.13.13-.13.13-1 0-.13-.13-.13-.13 0-1Z"/><path transform="translate(420 392) rotate(0) scale(22)" fill="#fff" d="M0-1C.13-.13.13-.13 1 0 .13.13.13.13 0 1-.13.13-.13.13-1 0-.13-.13-.13-.13 0-1Z"/><path transform="translate(96 380) rotate(10) scale(14)" fill="#ffd1e8" d="M0-1C.13-.13.13-.13 1 0 .13.13.13.13 0 1-.13.13-.13.13-1 0-.13-.13-.13-.13 0-1Z"/>
+    <circle cx="140" cy="94" r="6" fill="#fff"/><circle cx="432" cy="250" r="5" fill="#fff"/><circle cx="88" cy="262" r="4" fill="#fff7c2"/>
   </g>
 </svg>
