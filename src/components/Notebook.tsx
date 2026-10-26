@@ -1883,11 +1883,13 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       )}
 
       {/* Пока надпись выбрана, внизу — её панель: кнопки прячем */}
-      {!turning && !selectedBlock && (
+      {/* Пока лист перелистывается, кнопки плавно гаснут и потом так же
+          появляются (просьба автора; App.css: .is-faded) */}
+      {!selectedBlock && (
         <>
           {/* Ряд внизу: меню — ровно посередине экрана (просьба автора: два
               слева, два справа) */}
-          <div className="bottom-center">
+          <div className={turning ? 'bottom-center is-faded' : 'bottom-center'}>
             {historyButtons}
             <button type="button" className="round-button" aria-label="Главное меню" onClick={onMenu}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1915,7 +1917,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           {/* Идёт наклеивание — «×» над «+» и шестерёнкой, крупнее них
               (просьба автора); на ней — какая наклейка */}
           {stamp && (
-            <button type="button" className="round-button stamp-cancel" aria-label="Закончить наклеивать" onClick={() => setStamp(null)}>
+            <button type="button" className={turning ? 'round-button stamp-cancel is-faded' : 'round-button stamp-cancel'} aria-label="Закончить наклеивать" onClick={() => setStamp(null)}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 6l12 12M18 6 6 18" />
               </svg>
@@ -1926,7 +1928,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               углу (просьба автора; отладка — в настройках главного меню) */}
           <button
             type="button"
-            className="round-button page-settings-button"
+            className={turning ? 'round-button page-settings-button is-faded' : 'round-button page-settings-button'}
             aria-label="Настройки листа"
             onClick={() => {
               deselect();

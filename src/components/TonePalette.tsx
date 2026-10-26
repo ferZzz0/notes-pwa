@@ -6,6 +6,10 @@ import './TonePalette.css';
 const W = 240;
 const H = 110;
 const GREY_H = 8;
+// Шарик-отметка (px; .tone-mark): на краях он целиком на рисунке, не
+// вылезает (жалоба автора)
+const MARK = 24;
+const inset = (t: number) => `calc(${MARK / 2}px + (100% - ${MARK}px) * ${t})`;
 
 // Нарисовать холст по точкам — ровно те цвета, что получатся при касании
 function paint(canvas: HTMLCanvasElement, rgb: (x: number, y: number) => [number, number, number]) {
@@ -31,7 +35,8 @@ function paint(canvas: HTMLCanvasElement, rgb: (x: number, y: number) => [number
 function track(pick: (x: number, y: number) => string, onPick: (color: string, final: boolean) => void) {
   const at = (e: PointerEvent<HTMLElement>, final: boolean) => {
     const r = e.currentTarget.getBoundingClientRect();
-    onPick(pick((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height), final);
+    // Середина шарика ходит в пределах рисунка минус половина шарика
+    onPick(pick((e.clientX - r.left - MARK / 2) / Math.max(1, r.width - MARK), (e.clientY - r.top - MARK / 2) / Math.max(1, r.height - MARK)), final);
   };
   return {
     onPointerDown: (e: PointerEvent<HTMLElement>) => {
@@ -70,7 +75,13 @@ export function TonePalette({
 
   const pos = color ? tonePosition(color, tone) : null;
   const mark = (grey: boolean) =>
-    pos && pos.grey === grey && <span className="tone-mark" style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%`, background: color }} />;
+    pos &&
+    pos.grey === grey && (
+      <span
+        className="tone-mark"
+        style={{ left: inset(pos.x), top: grey ? '50%' : inset(pos.y), background: color }}
+      />
+    );
 
   return (
     <div className="tone-palette">

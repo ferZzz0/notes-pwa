@@ -143,6 +143,10 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
             </span>
           );
         })}
+        {/* Текст кончается переносом — пустая последняя строка, как у
+            живой надписи (там её держит <br data-ghost>): без неё стикер на
+            перевороте листа был на строку ниже (жалоба автора) */}
+        {block.text.endsWith('\n') && <br />}
       </div>
     );
   }

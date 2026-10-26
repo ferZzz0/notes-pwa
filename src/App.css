@@ -60,6 +60,20 @@
   height: 24px;
 }
 
+/* Пока лист перелистывается — кнопки плавно гаснут и не ловят касаний
+   (Notebook: is-faded), потом так же плавно появляются */
+.bottom-center > *,
+.page-settings-button,
+.stamp-cancel {
+  transition: opacity 0.2s ease-out;
+}
+
+.bottom-center.is-faded > *,
+.round-button.is-faded {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .bottom-center > * {
   pointer-events: auto;
 }
