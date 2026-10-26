@@ -96,9 +96,12 @@
   padding: 12px 10px 12px 18px;
   border: none;
   border-radius: 4px 10px 10px 4px;
-  /* Корешок — тёмная полоса слева */
+  /* Корешок — тёмная полоса слева; под ним — узор (CoverArt.css), под
+     узором — цвет обложки */
+  position: relative;
   background:
     linear-gradient(to right, rgb(0 0 0 / 0.28) 0 9px, rgb(255 255 255 / 0.12) 9px 11px, transparent 11px),
+    var(--cover-pattern, linear-gradient(transparent, transparent)),
     var(--cover);
   box-shadow:
     0 6px 14px rgb(40 30 10 / 0.22),
@@ -155,12 +158,14 @@
 .diary-color-preview {
   display: flex;
   align-items: center;
-  width: 96px;
+  width: 130px;
   aspect-ratio: 3 / 4;
   padding: 10px 8px 10px 16px;
   border-radius: 4px 10px 10px 4px;
+  position: relative;
   background:
     linear-gradient(to right, rgb(0 0 0 / 0.28) 0 8px, rgb(255 255 255 / 0.12) 8px 10px, transparent 10px),
+    var(--cover-pattern, linear-gradient(transparent, transparent)),
     var(--cover);
   box-shadow: 0 4px 10px rgb(40 30 10 / 0.2);
 }
@@ -340,4 +345,123 @@
   margin-left: -3px;
   border-radius: 50%;
   background: var(--accent);
+}
+
+/* Окно дневника: обложка-образец крупнее, под ней — вкладки «Цвет»,
+   «Дизайн», «Наклейки» */
+.diary-tabs {
+  display: flex;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.diary-tabs button {
+  flex: 1;
+  padding: 7px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: 600 13px/1.2 var(--ui-font);
+}
+
+.diary-tabs button.is-active {
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+
+/* Узоры — образцы-обложки по три в ряд */
+.diary-designs,
+.diary-decal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.diary-designs button {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: 11px/1.2 var(--ui-font);
+}
+
+.diary-designs button.is-active {
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+
+.cover-swatch {
+  width: 48px;
+  aspect-ratio: 3 / 4;
+  border-radius: 3px 7px 7px 3px;
+  background:
+    linear-gradient(to right, rgb(0 0 0 / 0.28) 0 5px, transparent 5px),
+    var(--cover-pattern, linear-gradient(transparent, transparent)),
+    var(--cover);
+  box-shadow: 0 2px 5px rgb(40 30 10 / 0.2);
+}
+
+/* Наклейки для обложки — по четыре в ряд */
+.diary-decal-grid {
+  grid-template-columns: repeat(5, 1fr);
+  max-height: 170px;
+  overflow-y: auto;
+}
+
+.diary-decal-grid button {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 3px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.diary-decal-grid img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Выбранная на обложке наклейка: меньше, больше, повернуть, убрать */
+.diary-decal-tools {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.diary-decal-tools button {
+  min-width: 40px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: 600 14px/1 var(--ui-font);
+}
+
+.diary-decal-tools .diary-delete {
+  padding: 7px 10px;
+}
+
+.diary-hint {
+  margin: 0;
+  color: var(--muted);
+  font: 12px/1.3 var(--ui-font);
+  text-align: center;
+}
+
+/* Окно дневника не выше экрана — прокручивается */
+.diary-color-panel {
+  max-height: calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }

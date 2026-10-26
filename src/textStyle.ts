@@ -228,6 +228,16 @@ const OLD_DECALS: Record<string, DecalId> = {
 export const decalOf = (id?: string) => DECALS.find(d => d.id === (id && OLD_DECALS[id]) || d.id === id) ?? DECALS[0];
 // Картинка наклейки
 export const decalSrc = (id: string) => `${import.meta.env.BASE_URL}decals/${decalOf(id).id}.webp`;
+// Узоры обложки дневника (CoverArt.css: .design-*) — поверх её цвета
+export const COVER_DESIGNS = [
+  { id: 'plain', label: 'Однотонная' },
+  { id: 'dots', label: 'Горошек' },
+  { id: 'stripes', label: 'Полоски' },
+  { id: 'checks', label: 'Клетка' },
+  { id: 'stars', label: 'Звёздное небо' },
+  { id: 'glitter', label: 'Блёстки' }
+] as const;
+
 // Блёстки новой наклейки, если их ещё не выбирали (0 — нет, 1 — много)
 export const DEFAULT_GLITTER = 0.5;
 

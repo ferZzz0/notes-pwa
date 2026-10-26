@@ -213,7 +213,11 @@ function migrate(spreads: Spreads): void {
 export type Source = { kind: 'notebook'; id: string } | { kind: 'day'; date: string };
 // Что открыто: меню или тетрадь
 export type View = { kind: 'menu' } | Source;
-export type NotebookInfo = { id: string; name: string; color: string };
+// Наклейка на обложке дневника: какая (textStyle.ts: DECALS), середина
+// (x, y) и ширина (size) — доли обложки, поворот (градусы), блёстки (0–1)
+export type CoverDecal = { id: string; decal: string; x: number; y: number; size: number; rotate?: number; glitter?: number };
+// Дневник: имя, цвет обложки, её узор (textStyle.ts: COVER_DESIGNS) и наклейки
+export type NotebookInfo = { id: string; name: string; color: string; design?: string; decals?: CoverDecal[] };
 
 const NOTEBOOKS_KEY = 'notes-pwa:notebooks';
 const DAYS_KEY = 'notes-pwa:days';

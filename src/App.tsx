@@ -60,7 +60,7 @@ export default function App() {
             return info;
           }}
           onRename={(id, name) => setNotebooks(notebooks.map(n => (n.id === id ? { ...n, name } : n)))}
-          onRecolor={(id, color) => setNotebooks(notebooks.map(n => (n.id === id ? { ...n, color } : n)))}
+          onChange={(id, patch) => setNotebooks(notebooks.map(n => (n.id === id ? { ...n, ...patch } : n)))}
           onDelete={id => {
             for (const image of deleteNotebookData(id)) void deleteImage(image);
             setNotebooks(notebooks.filter(n => n.id !== id));

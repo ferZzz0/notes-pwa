@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
-import type { NotebookInfo } from '../notes';
+import { loadGlitter, newBlockId, type CoverDecal, type NotebookInfo } from '../notes';
+import { COVER_DESIGNS, DECALS, DEFAULT_GLITTER, decalSrc } from '../textStyle';
+import { CoverDecals, designClass } from './CoverArt';
 import { Calendar } from './Calendar';
 import { ConfirmDialog } from './ConfirmDialog';
 import { AppSettings } from './AppSettings';
@@ -14,8 +16,8 @@ type Props = {
   // Новый дневник; возвращает его — сразу даём его назвать
   onCreate: () => NotebookInfo;
   onRename: (id: string, name: string) => void;
-  // Другой цвет обложки
-  onRecolor: (id: string, color: string) => void;
+  // Обложка: цвет, узор, наклейки
+  onChange: (id: string, patch: Partial<NotebookInfo>) => void;
   onDelete: (id: string) => void;
 };
 
@@ -35,13 +37,19 @@ const COVER_WHEEL_SIZE = 200;
 // Главное меню: дневники (обложки с именами; новый, переименовать,
 // удалить) и календарь — касание по дню открывает лист этого дня.
 // Горизонтально — две колонки, вертикально — одна под другой.
-export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecolor, onDelete }: Props) {
+export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChange, onDelete }: Props) {
   // Дневник, который правят (окно поверх меню), его название в поле, и тот,
   // который хотят удалить
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [deleting, setDeleting] = useState<NotebookInfo | null>(null);
   const edited = notebooks.find(n => n.id === editing);
+  // Окно дневника: вкладка и наклейка на обложке, которую правят
+  const [tab, setTab] = useState<'color' | 'design' | 'decals'>('color');
+  const [picked, setPicked] = useState<number | null>(null);
+  const decals = edited?.decals ?? [];
+  const setDecals = (next: CoverDecal[]) => edited && onChange(edited.id, { decals: next.length ? next : undefined });
+  const patchDecal = (i: number, patch: Partial<CoverDecal>) => setDecals(decals.map((d, j) => (j === i ? { ...d, ...patch } : d)));
   // Всё меню помещается на экране — вверх-вниз оно не двигается (просьба
   // автора: иначе его можно было потянуть и оно «пружинило»)
   const menu = useRef<HTMLDivElement>(null);
@@ -63,6 +71,8 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecol
     flushSync(() => {
       setEditing(info.id);
       setDraft(info.name);
+      setTab('color');
+      setPicked(null);
     });
     if (focus) focusName();
   };
@@ -82,8 +92,9 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecol
           <div className="diaries">
             {notebooks.map(n => (
               <div key={n.id} className="diary" style={{ '--cover': n.color } as CSSProperties}>
-                <button type="button" className="diary-cover" onClick={() => onOpen(n.id)}>
+                <button type="button" className={`diary-cover${designClass(n.design)}`} onClick={() => onOpen(n.id)}>
                   <span className="diary-label">{n.name}</span>
+                  <CoverDecals decals={n.decals} />
                 </button>
                 <button type="button" className="diary-rename" aria-label={`Изменить «${n.name}»`} onClick={() => startEditing(n, false)}>
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -129,10 +140,105 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecol
                 if (e.key === 'Enter') e.currentTarget.blur();
               }}
             />
-            <div className="diary-color-preview" style={{ '--cover': edited.color } as CSSProperties}>
+            {/* Обложка-образец: на ней видно всё сразу, наклейки двигают
+                пальцем прямо по ней */}
+            <div className={`diary-color-preview${designClass(edited.design)}`} style={{ '--cover': edited.color } as CSSProperties}>
               <span className="diary-label">{draft.trim() || edited.name}</span>
+              <CoverDecals
+                decals={decals}
+                selected={tab === 'decals' ? picked : null}
+                onSelect={i => {
+                  setTab('decals');
+                  setPicked(i);
+                }}
+                onMove={(i, x, y) => patchDecal(i, { x, y })}
+              />
             </div>
-            <ColorWheel color={edited.color} size={COVER_WHEEL_SIZE} label="Цвет обложки" onPick={c => onRecolor(edited.id, c)} />
+            {/* Обложку настраивают (просьба автора): цвет, узор, наклейки */}
+            <div className="diary-tabs" role="tablist">
+              {(
+                [
+                  ['color', 'Цвет'],
+                  ['design', 'Дизайн'],
+                  ['decals', 'Наклейки']
+                ] as const
+              ).map(([id, label]) => (
+                <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'is-active' : undefined} onClick={() => setTab(id)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {tab === 'color' && <ColorWheel color={edited.color} size={COVER_WHEEL_SIZE} label="Цвет обложки" onPick={c => onChange(edited.id, { color: c })} />}
+            {tab === 'design' && (
+              <div className="diary-designs" role="radiogroup" aria-label="Дизайн обложки">
+                {COVER_DESIGNS.map(d => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={(edited.design ?? 'plain') === d.id}
+                    className={(edited.design ?? 'plain') === d.id ? 'is-active' : undefined}
+                    onClick={() => onChange(edited.id, { design: d.id === 'plain' ? undefined : d.id })}
+                  >
+                    <span className={`cover-swatch${designClass(d.id)}`} style={{ '--cover': edited.color } as CSSProperties} />
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {tab === 'decals' && (
+              <>
+                {picked !== null && decals[picked] ? (
+                  <div className="diary-decal-tools">
+                    <button type="button" aria-label="Меньше" onClick={() => patchDecal(picked, { size: Math.max(0.12, decals[picked].size - 0.06) })}>
+                      −
+                    </button>
+                    <button type="button" aria-label="Больше" onClick={() => patchDecal(picked, { size: Math.min(0.9, decals[picked].size + 0.06) })}>
+                      +
+                    </button>
+                    <button type="button" aria-label="Повернуть" onClick={() => patchDecal(picked, { rotate: ((decals[picked].rotate ?? 0) + 15) % 360 })}>
+                      ↻
+                    </button>
+                    <button
+                      type="button"
+                      className="diary-delete"
+                      onClick={() => {
+                        setDecals(decals.filter((_, j) => j !== picked));
+                        setPicked(null);
+                      }}
+                    >
+                      Убрать
+                    </button>
+                  </div>
+                ) : (
+                  <p className="diary-hint">Нажмите наклейку — она появится на обложке; её можно передвинуть пальцем</p>
+                )}
+                <div className="diary-decal-grid">
+                  {DECALS.map(d => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      aria-label={`На обложку: «${d.label}»`}
+                      onClick={() => {
+                        const next: CoverDecal = {
+                          id: newBlockId(),
+                          decal: d.id,
+                          x: 0.3 + Math.random() * 0.45,
+                          y: 0.25 + Math.random() * 0.55,
+                          size: 0.36,
+                          rotate: Math.round(Math.random() * 30 - 15),
+                          glitter: loadGlitter(DEFAULT_GLITTER)
+                        };
+                        setDecals([...decals, next]);
+                        setPicked(decals.length);
+                      }}
+                    >
+                      <img src={decalSrc(d.id)} alt="" draggable={false} />
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <div className="diary-panel-actions">
               {notebooks.length > 1 && (
                 <button
