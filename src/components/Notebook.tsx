@@ -1423,7 +1423,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     });
   };
 
-  // Стрелка: в дневнике — перелистнуть, на листе дня — соседний день
+  // Стрелка: в блокноте — перелистнуть, на листе дня — соседний день
   const turn = (dir: FlipDir) => {
     if (dayDate === null) {
       void go(dir);

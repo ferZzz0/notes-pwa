@@ -24,7 +24,7 @@ type Props = {
   onUndo: () => void;
   onRedo: () => void;
   look: PageLook;
-  // Сколько листов в дневнике (для «как на листе…»)
+  // Сколько листов в блокноте (для «как на листе…»)
   pages: number;
   // Цвет бумаги или надписей; final — палец отпустили (сохранить)
   onLook: (patch: PageLook, final: boolean) => void;

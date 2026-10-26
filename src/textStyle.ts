@@ -228,7 +228,7 @@ const OLD_DECALS: Record<string, DecalId> = {
 export const decalOf = (id?: string) => DECALS.find(d => d.id === (id && OLD_DECALS[id]) || d.id === id) ?? DECALS[0];
 // Картинка наклейки
 export const decalSrc = (id: string) => `${import.meta.env.BASE_URL}decals/${decalOf(id).id}.webp`;
-// Узоры обложки дневника (CoverArt.css: .design-*) — поверх её цвета
+// Узоры обложки блокнота (CoverArt.css: .design-*) — поверх её цвета
 export const COVER_DESIGNS = [
   { id: 'plain', label: 'Однотонная' },
   { id: 'dots', label: 'Горошек' },

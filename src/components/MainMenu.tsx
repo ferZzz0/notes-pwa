@@ -13,7 +13,7 @@ type Props = {
   notebooks: NotebookInfo[];
   onOpen: (id: string) => void;
   onDay: (date: string) => void;
-  // Новый дневник; возвращает его — сразу даём его назвать
+  // Новый блокнот; возвращает его — сразу даём его назвать
   onCreate: () => NotebookInfo;
   onRename: (id: string, name: string) => void;
   // Обложка: цвет, узор, наклейки
@@ -34,17 +34,17 @@ const focusName = () => {
 // Размер палитры цвета обложки (px)
 const COVER_WHEEL_SIZE = 200;
 
-// Главное меню: дневники (обложки с именами; новый, переименовать,
+// Главное меню: блокноти (обложки с именами; новый, переименовать,
 // удалить) и календарь — касание по дню открывает лист этого дня.
 // Горизонтально — две колонки, вертикально — одна под другой.
 export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChange, onDelete }: Props) {
-  // Дневник, который правят (окно поверх меню), его название в поле, и тот,
+  // Блокнот, который правят (окно поверх меню), его название в поле, и тот,
   // который хотят удалить
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [deleting, setDeleting] = useState<NotebookInfo | null>(null);
   const edited = notebooks.find(n => n.id === editing);
-  // Окно дневника: вкладка и наклейка на обложке, которую правят
+  // Окно блокнота: вкладка и наклейка на обложке, которую правят
   const [tab, setTab] = useState<'color' | 'design' | 'decals'>('color');
   const [picked, setPicked] = useState<number | null>(null);
   const decals = edited?.decals ?? [];
@@ -64,8 +64,8 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
     return () => observer.disconnect();
   }, []);
 
-  // Окно дневника (просьба автора): карандаш — название в поле, обложка,
-  // палитра цвета, «Удалить дневник». Новый дневник создаётся в том же
+  // Окно блокнота (просьба автора): карандаш — название в поле, обложка,
+  // палитра цвета, «Удалить блокнот». Новый блокнот создаётся в том же
   // нажатии, и в поле сразу можно печатать
   const startEditing = (info: NotebookInfo, focus: boolean) => {
     flushSync(() => {
@@ -88,7 +88,7 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
     <div ref={menu} className={fits ? 'main-menu is-fit' : 'main-menu'}>
       <div className="main-menu-content">
         <section className="main-menu-section">
-          <h1>Дневники</h1>
+          <h1>Блокнотики</h1>
           <div className="diaries">
             {notebooks.map(n => (
               <div key={n.id} className="diary" style={{ '--cover': n.color } as CSSProperties}>
@@ -107,7 +107,7 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              Новый дневник
+              Новый блокнот
             </button>
           </div>
         </section>
@@ -124,7 +124,7 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
       {edited && (
         <>
           <div className="diary-color-backdrop" onClick={finish} />
-          <div className="diary-color-panel" role="dialog" aria-label="Дневник">
+          <div className="diary-color-panel" role="dialog" aria-label="Блокнот">
             <input
               id="diary-name"
               className="diary-name-input"
@@ -133,7 +133,7 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
               spellCheck={false}
               autoCorrect="off"
               enterKeyHint="done"
-              aria-label="Название дневника"
+              aria-label="Название блокнота"
               onChange={e => setDraft(e.target.value)}
               // Enter — название готово (клавиатура прячется, окно остаётся)
               onKeyDown={e => {
@@ -249,7 +249,7 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
                     setDeleting(edited);
                   }}
                 >
-                  Удалить дневник
+                  Удалить блокнот
                 </button>
               )}
               <button type="button" className="diary-color-done" onClick={finish}>

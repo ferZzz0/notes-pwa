@@ -89,7 +89,7 @@ export async function pixelSize(image: string | Blob): Promise<[number, number] 
 }
 
 // Копия картинки from под id to (вставленное фото — со своей картинкой:
-// удаление дневника стирает картинки его фото); false — картинки нет
+// удаление блокнота стирает картинки его фото); false — картинки нет
 export async function copyImage(from: string, to: string): Promise<boolean> {
   const blob = await run<Blob | undefined>('readonly', s => s.get(from) as IDBRequest<Blob | undefined>).catch(() => undefined);
   if (!blob) return false;

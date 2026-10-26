@@ -121,7 +121,7 @@ const RESET_KEY = 'notes-pwa:reset';
 const ALL_KEYS = [SPREADS_KEY, PAGE_KEY, OLD_SPREAD_KEY, OLD_PAGES_KEY, OLD_DRAFT_KEY, STYLE_KEY, 'notes-pwa:settings'];
 
 // Стереть все записи и настройки на этом устройстве (кнопка в настройках):
-// все ключи приложения — и известные, и с id дневника. Отметку о разовой
+// все ключи приложения — и известные, и с id блокнота. Отметку о разовой
 // очистке не трогаем — иначе она прошла бы ещё раз
 export function clearAll(): void {
   try {
@@ -209,19 +209,19 @@ function migrate(spreads: Spreads): void {
   }
 }
 
-// --- Дневники и листы дней ---
-// Тетрадь открывает либо дневник (их несколько, у каждого имя), либо лист
-// одного дня из календаря. У дневника свои развороты и открытая страница;
-// у первого дневника — прежние ключи (записи, сделанные до дневников).
+// --- Блокноти и листы дней ---
+// Тетрадь открывает либо блокнот (их несколько, у каждого имя), либо лист
+// одного дня из календаря. У блокнота свои развороты и открытая страница;
+// у первого блокнота — прежние ключи (записи, сделанные до блокнотов).
 // Листы дней — все в одном ключе: { 'ГГГГ-ММ-ДД': разворот }, у дня один
 // лист — правая страница разворота 0.
 export type Source = { kind: 'notebook'; id: string } | { kind: 'day'; date: string };
 // Что открыто: меню или тетрадь
 export type View = { kind: 'menu' } | Source;
-// Наклейка на обложке дневника: какая (textStyle.ts: DECALS), середина
+// Наклейка на обложке блокнота: какая (textStyle.ts: DECALS), середина
 // (x, y) и ширина (size) — доли обложки, поворот (градусы), блёстки (0–1)
 export type CoverDecal = { id: string; decal: string; x: number; y: number; size: number; rotate?: number; glitter?: number };
-// Дневник: имя, цвет обложки, её узор (textStyle.ts: COVER_DESIGNS) и наклейки
+// Блокнот: имя, цвет обложки, её узор (textStyle.ts: COVER_DESIGNS) и наклейки
 export type NotebookInfo = { id: string; name: string; color: string; design?: string; decals?: CoverDecal[] };
 
 const NOTEBOOKS_KEY = 'notes-pwa:notebooks';
@@ -230,22 +230,29 @@ const VIEW_KEY = 'notes-pwa:view';
 export const FIRST_NOTEBOOK = 'default';
 // Страница листа дня (правая страница разворота 0)
 export const DAY_PAGE = 2;
-// Цвета обложек — по кругу для новых дневников
+// Цвета обложек — по кругу для новых блокнотов
 export const COVER_COLORS = ['#3b4a8c', '#b5523b', '#3f7d5c', '#8a5aa8', '#c48a2c', '#2f7f95', '#a8435f', '#5b5f66'];
 
 const spreadsKey = (id: string) => (id === FIRST_NOTEBOOK ? SPREADS_KEY : `${SPREADS_KEY}:${id}`);
 const pageKey = (id: string) => (id === FIRST_NOTEBOOK ? PAGE_KEY : `${PAGE_KEY}:${id}`);
 
+// Раньше это были «дневники»: имена, которые давало само приложение, —
+// «Мой дневник», «Дневник N» — теперь «Мой блокнот», «Блокнот N» (просьба
+// автора); свои имена не трогаем
+const renamed = (name: string) => (name === 'Мой дневник' ? 'Мой блокнот' : name.replace(/^Дневник (\d+)$/, 'Блокнот $1'));
+
 export function loadNotebooks(): NotebookInfo[] {
   const list = read<NotebookInfo[] | null>(NOTEBOOKS_KEY, null);
-  return Array.isArray(list) && list.length > 0 ? list : [{ id: FIRST_NOTEBOOK, name: 'Мой дневник', color: COVER_COLORS[0] }];
+  return Array.isArray(list) && list.length > 0
+    ? list.map(n => ({ ...n, name: renamed(n.name) }))
+    : [{ id: FIRST_NOTEBOOK, name: 'Мой блокнот', color: COVER_COLORS[0] }];
 }
 
 export function saveNotebooks(list: NotebookInfo[]): void {
   write(NOTEBOOKS_KEY, list);
 }
 
-// Стереть записи дневника; возвращает id его фото — их стирает images.ts
+// Стереть записи блокнота; возвращает id его фото — их стирает images.ts
 export function deleteNotebookData(id: string): string[] {
   const spreads = read<Spreads>(spreadsKey(id), {});
   try {
@@ -298,7 +305,7 @@ export function daysWithNotes(): Set<string> {
   );
 }
 
-// id всех фото на всех листах (дневники и дни): остальные картинки в
+// id всех фото на всех листах (блокноти и дни): остальные картинки в
 // IndexedDB никому не нужны. null — память не прочитать, и тогда ничего не
 // стираем
 export function allImageIds(): Set<string> | null {
@@ -377,7 +384,7 @@ export function savePage(source: Source, n: number): void {
 }
 
 // Скопированное кнопкой «Копировать»: надпись, стикер или фото со всем
-// оформлением (без id и дат) — вставляется в любом дневнике и дне
+// оформлением (без id и дат) — вставляется в любом блокноте и дне
 // У фото — ещё размер картинки (px): по нему вставка из буфера обмена
 // узнаёт, что там это самое фото
 export type Clip = Omit<Block, 'id' | 'day' | 'edited'> & { size?: [number, number] };

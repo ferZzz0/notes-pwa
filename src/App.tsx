@@ -25,7 +25,7 @@ function shiftDay(iso: string, delta: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-// Главный экран: меню (дневники и календарь) или открытая тетрадь — дневник
+// Главный экран: меню (блокноти и календарь) или открытая тетрадь — блокнот
 // или лист дня. Что было открыто, открывается и после перезапуска.
 export default function App() {
   const [view, setViewState] = useState(loadView);
@@ -40,7 +40,7 @@ export default function App() {
     saveNotebooks(next);
   };
 
-  // Открытый дневник могли удалить — тогда меню
+  // Открытый блокнот могли удалить — тогда меню
   const open = view.kind === 'notebook' && !notebooks.some(n => n.id === view.id) ? { kind: 'menu' as const } : view;
 
   return (
@@ -53,7 +53,7 @@ export default function App() {
           onCreate={() => {
             const info = {
               id: newBlockId(),
-              name: `Дневник ${notebooks.length + 1}`,
+              name: `Блокнот ${notebooks.length + 1}`,
               color: COVER_COLORS[notebooks.length % COVER_COLORS.length]
             };
             setNotebooks([...notebooks, info]);
@@ -68,7 +68,7 @@ export default function App() {
         />
       ) : (
         <Notebook
-          // Другой дневник или день — заново, со своими записями
+          // Другой блокнот или день — заново, со своими записями
           key={open.kind === 'day' ? `day:${open.date}` : open.id}
           source={open}
           onMenu={() => setView({ kind: 'menu' })}
