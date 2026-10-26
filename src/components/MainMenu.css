@@ -99,6 +99,8 @@
   /* Корешок — тёмная полоса слева; под ним — узор (CoverArt.css), под
      узором — цвет обложки */
   position: relative;
+  /* Слои обложки (узор, наклейки, название) — внутри неё, под карандашом */
+  isolation: isolate;
   background:
     linear-gradient(to right, rgb(0 0 0 / 0.28) 0 9px, rgb(255 255 255 / 0.12) 9px 11px, transparent 11px),
     var(--cover-pattern, linear-gradient(transparent, transparent)),
@@ -214,10 +216,12 @@
 }
 
 /* Карандаш — переименовать — в углу обложки */
+/* Карандаш — поверх всего на обложке, и наклеек тоже (просьба автора) */
 .diary-rename {
   position: absolute;
   top: 6px;
   right: 6px;
+  z-index: 3;
   display: grid;
   place-items: center;
   width: 32px;
