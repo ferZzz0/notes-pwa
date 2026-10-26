@@ -93,7 +93,10 @@
   gap: 10px;
   width: 100%;
   aspect-ratio: 3 / 4;
-  padding: 12px 10px 12px 18px;
+  /* Поля и надпись — в тех же пропорциях, что у обложки-образца в окне
+     блокнота (.diary-color-preview, 130 px): обложка в списке выглядит
+     ровно как образец (просьба автора — как в окне, мельче) */
+  padding: 10px 8px 10px 15px;
   border: none;
   border-radius: 4px 10px 10px 4px;
   /* Корешок — тёмная полоса слева; под ним — узор (CoverArt.css), под
@@ -123,7 +126,8 @@
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
   color: var(--ink);
   font-family: 'Caveat Variable', cursive;
-  font-size: 24px;
+  /* 18 px образца × 124 / 130 */
+  font-size: 17px;
   line-height: 1.05;
   text-align: center;
   overflow-wrap: anywhere;
