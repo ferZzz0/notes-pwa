@@ -15,6 +15,8 @@ type Props = {
   onPaste?: () => void;
   // Есть ли что вставить: false — буфер точно пуст (тогда пункта нет)
   canPaste?: () => Promise<boolean>;
+  // Выбрали брелок — он повиснет над открытой страницей (Notebook)
+  onCharm?: (decal: DecalId, glitter: number) => void;
   // Меню открылось или закрылось (пока открыто, другие нижние кнопки не нажимаются)
   onOpen?: (open: boolean) => void;
 };
@@ -44,7 +46,7 @@ function pickPhoto(onPhoto: (file: File) => void) {
 
 // «+» внизу экрана (рядом с шестерёнкой): добавить на лист фото из галереи
 // (или снять) либо готовый стикер, на котором сразу можно писать.
-export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste, onOpen }: Props) {
+export function AddMenu({ onPhoto, onSticker, onDecal, onCharm, onPaste, canPaste, onOpen }: Props) {
   const [open, setOpen] = useState(false);
   useEffect(() => onOpen?.(open), [open]);
   // Буфер точно пуст — пункта «Вставить» нет (просьба автора); узнаём при
@@ -52,9 +54,48 @@ export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste, onOpen
   const [empty, setEmpty] = useState(false);
   // Блёстки новых наклеек — как выбрали в прошлый раз
   const [glitter, setGlitter] = useState(() => loadGlitter(DEFAULT_GLITTER));
-  // «Стикеры» и «Наклейки» сворачиваются (просьба автора), развёрнут не
-  // больше одного; какой — запоминаем
+  // «Стикеры», «Наклейки» и «Брелоки» сворачиваются (просьба автора),
+  // развёрнут не больше одного; какой — запоминаем
   const [section, setSection] = useState<AddSection>(loadAddSection);
+  // Наклейки сеткой по группам, над ними — ползунок блёсток (общий для
+  // наклеек и брелоков); what — подпись кнопок, seed — приставка узора
+  // блёсток (у брелка — свой, как на нём самом), pick — что делать с выбранной
+  const decalGrid = (what: string, seed: string, pick: (id: DecalId) => void) => (
+    <>
+      <div className="add-glitter">
+        <span>Блёстки</span>
+        <GlitterSlider
+          value={glitter}
+          onPick={(v, final) => {
+            setGlitter(v);
+            if (final) saveGlitter(v);
+          }}
+        />
+      </div>
+      {DECAL_GROUPS.map(g => (
+        <div key={g.id}>
+          <p className="add-section">{g.label}</p>
+          <div className="add-decals">
+            {DECALS.filter(d => d.group === g.id).map(d => (
+              <button
+                key={d.id}
+                type="button"
+                className="add-decal"
+                aria-label={`${what} «${d.label}»`}
+                onClick={() => {
+                  setOpen(false);
+                  pick(d.id);
+                }}
+              >
+                <img src={decalSrc(d.id)} alt="" draggable={false} />
+                <Glitter seed={seed + d.id} amount={glitter} twinkle />
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </>
+  );
   const fold = (id: Exclude<AddSection, null>, label: string) => (
     <button
       type="button"
@@ -166,40 +207,15 @@ export function AddMenu({ onPhoto, onSticker, onDecal, onPaste, canPaste, onOpen
                 блёсток — ползунком; выбрали — и касания по листу её
                 наклеивают, пока не нажмут «×» над «+» */}
             {onDecal && fold('decals', 'Наклейки')}
-            {onDecal && section === 'decals' && (
+            {onDecal && section === 'decals' && decalGrid('Наклейка', '', id => onDecal(id, glitter))}
+            {/* Брелоки (просьба автора: добавляются, как стикеры): та же
+                наклейка, но на цепочке — висит сверху над открытой страницей
+                и качается; блёстки и размер — на его панели */}
+            {onCharm && fold('charms', 'Брелоки')}
+            {onCharm && section === 'charms' && (
               <>
-                <div className="add-glitter">
-                  <span>Блёстки</span>
-                  <GlitterSlider
-                    value={glitter}
-                    onPick={(v, final) => {
-                      setGlitter(v);
-                      if (final) saveGlitter(v);
-                    }}
-                  />
-                </div>
-                {DECAL_GROUPS.map(g => (
-                  <div key={g.id}>
-                    <p className="add-section">{g.label}</p>
-                    <div className="add-decals">
-                      {DECALS.filter(d => d.group === g.id).map(d => (
-                        <button
-                          key={d.id}
-                          type="button"
-                          className="add-decal"
-                          aria-label={`Наклейка «${d.label}»`}
-                          onClick={() => {
-                            setOpen(false);
-                            onDecal(d.id, glitter);
-                          }}
-                        >
-                          <img src={decalSrc(d.id)} alt="" draggable={false} />
-                          <Glitter seed={d.id} amount={glitter} twinkle />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                <p className="add-note">Висит на цепочке сверху над листом и качается. Коснись брелка — блёстки, размер, удалить.</p>
+                {decalGrid('Брелок', 'charm-', id => onCharm(id, glitter))}
               </>
             )}
           </div>

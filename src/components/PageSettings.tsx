@@ -1,12 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { saveImage } from '../exportPage';
 import type { PageLook } from '../notes';
-import { DECALS, DEFAULT_GLITTER, decalSrc, toTone, type Tone } from '../textStyle';
+import { toTone, type Tone } from '../textStyle';
 import { isDark, loadBrand } from '../theme';
-import { askMotion, CHARM_MAX, CHARM_MIN, CHARM_ROOM, CHARM_SIZE } from './Charm';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Glitter } from './Glitter';
-import { GlitterSlider } from './TextToolbar';
 import { TonePalette } from './TonePalette';
 import './PageSettings.css';
 
@@ -27,9 +24,6 @@ type Props = {
   onUndo: () => void;
   onRedo: () => void;
   look: PageLook;
-  // Брелок этой страницы сейчас висит на экране — панель оставляет над
-  // собой место под него
-  charmShown: boolean;
   // Сколько листов в дневнике (для «как на листе…»)
   pages: number;
   // Цвет бумаги или надписей; final — палец отпустили (сохранить)
@@ -51,7 +45,7 @@ type Shot = 'busy' | 'error' | { file: File; url: string } | null;
 // Настройки листа — шестерёнка в нижнем ряду (просьба автора):
 // цвет бумаги и цвет надписей листа (номер, дата) на палитре светлых или
 // тёмных цветов,
-// «как у приложения», брелок под островком, оформление как у другого листа; очистить лист, удалить
+// «как у приложения», оформление как у другого листа; очистить лист, удалить
 // его (следующие сдвигаются назад), добавить пустой после (следующие —
 // вперёд). У листа дня — только цвета и очистка
 export function PageSettings({
@@ -63,7 +57,6 @@ export function PageSettings({
   onUndo,
   onRedo,
   look,
-  charmShown,
   pages,
   onLook,
   onCopyFrom,
@@ -95,15 +88,6 @@ export function PageSettings({
     }
   };
   const [confirm, setConfirm] = useState<Confirm>(null);
-  // Раздел «Брелок» свёрнут, пока его не откроют (наклеек много)
-  const [charmOpen, setCharmOpen] = useState(false);
-  const panel = useRef<HTMLDivElement>(null);
-  const charmSection = useRef<HTMLDivElement>(null);
-  // Раскрыли раздел — прокрутить панель к нему: наклейки видно сразу
-  useEffect(() => {
-    if (charmOpen && panel.current && charmSection.current) panel.current.scrollTo({ top: charmSection.current.offsetTop - 8, behavior: 'smooth' });
-  }, [charmOpen]);
-  const charm = look.charm;
   const others = Array.from({ length: Math.max(pages, page ?? 0) }, (_, i) => i + 1).filter(n => n !== page);
   const [from, setFrom] = useState(others[0] ?? 0);
   const color = target === 'paper' ? look.paper : look.labels;
@@ -129,13 +113,7 @@ export function PageSettings({
   return (
     <>
       <div className="page-settings-backdrop" onClick={onClose} />
-      <div
-        ref={panel}
-        className="page-settings-panel"
-        style={{ '--charm-room': charmShown ? `${CHARM_ROOM}px` : '0px' } as CSSProperties}
-        role="dialog"
-        aria-label={page ? `Настройки листа ${page}` : 'Настройки листа'}
-      >
+      <div className="page-settings-panel" role="dialog" aria-label={page ? `Настройки листа ${page}` : 'Настройки листа'}>
         <div className="page-settings-head">
           {pair ? (
             <div className="page-settings-pages" role="tablist" aria-label="Какой лист">
@@ -218,61 +196,6 @@ export function PageSettings({
               Как у приложения
             </button>
           </div>
-        </div>
-
-        {/* Брелок под островком (просьба автора): наклейка, блёстки, размер;
-            цепочка у всех одна. Выбрали — на iPhone тут же спросить разрешение
-            на датчик движения (только из нажатия) */}
-        <div className="page-settings-charm" ref={charmSection}>
-          <button type="button" className="page-settings-fold" aria-expanded={charmOpen} onClick={() => setCharmOpen(!charmOpen)}>
-            Брелок
-            <span>
-              {charm ? <img src={decalSrc(charm.decal)} alt="" /> : <em>нет</em>}
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m9 6 6 6-6 6" />
-              </svg>
-            </span>
-          </button>
-          {charmOpen && (
-            <>
-              <p className="page-settings-hint">Висит под островком, когда телефон вертикально, и качается, если его потрясти.</p>
-              <div className="page-settings-decals">
-                <button type="button" aria-label="Без брелка" aria-pressed={!charm} onClick={() => onLook({ charm: undefined }, true)}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="12" cy="12" r="8" />
-                    <path d="M6.5 17.5l11-11" />
-                  </svg>
-                </button>
-                {DECALS.map(d => (
-                  <button
-                    key={d.id}
-                    type="button"
-                    aria-label={`Брелок «${d.label}»`}
-                    aria-pressed={charm?.decal === d.id}
-                    onClick={() => {
-                      askMotion();
-                      onLook({ charm: { decal: d.id, glitter: charm?.glitter ?? DEFAULT_GLITTER, size: charm?.size ?? CHARM_SIZE } }, true);
-                    }}
-                  >
-                    <img src={decalSrc(d.id)} alt="" draggable={false} />
-                    <Glitter seed={`charm-${d.id}`} amount={charm?.glitter ?? DEFAULT_GLITTER} />
-                  </button>
-                ))}
-              </div>
-              {charm && (
-                <div className="page-settings-sliders">
-                  <span>Блёстки</span>
-                  <GlitterSlider value={charm.glitter} onPick={(v, final) => onLook({ charm: { ...charm, glitter: v } }, final)} />
-                  <span>Размер</span>
-                  <GlitterSlider
-                    size
-                    value={(charm.size - CHARM_MIN) / (CHARM_MAX - CHARM_MIN)}
-                    onPick={(t, final) => onLook({ charm: { ...charm, size: Math.round(CHARM_MIN + t * (CHARM_MAX - CHARM_MIN)) } }, final)}
-                  />
-                </div>
-              )}
-            </>
-          )}
         </div>
 
         {page !== null && others.length > 0 && (

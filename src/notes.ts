@@ -77,13 +77,13 @@ export const isBlank = (b: Block) => !b.kind && !b.text.trim();
 // Цвет и шрифт, выбранные последними, — с ними начинается новая надпись
 export type TextStyle = { color?: string; font?: FontId };
 
-// Брелок под островком iPhone (настройки листа, Charm.tsx): наклейка (id из
-// DECALS), сколько на ней блёсток (0–1) и её размер (px экрана)
+// Брелок страницы (Charm.tsx; добавляют через «+», как стикер): наклейка (id
+// из DECALS), сколько на ней блёсток (0–1) и её размер (px экрана)
 export type Charm = { decal: string; glitter: number; size: number };
 
 // Оформление страницы (настройки листа): цвет бумаги и цвет её номера и
-// даты (#rrggbb), брелок; нет — как у приложения
-export type PageLook = { paper?: string; labels?: string; charm?: Charm };
+// даты (#rrggbb); нет — как у приложения
+export type PageLook = { paper?: string; labels?: string };
 // История оформления страницы — для «Отменить» / «Вернуть» в настройках
 // листа (только этой страницы; хранится вместе с ней — просьба автора)
 export type LookLog = { past: PageLook[]; future: PageLook[] };
@@ -95,12 +95,14 @@ export type Spread = {
   // Оформление левой и правой страниц и его история
   looks?: { left?: PageLook; right?: PageLook };
   lookLog?: { left?: LookLog; right?: LookLog };
+  // Брелоки левой и правой страниц
+  charms?: { left?: Charm; right?: Charm };
 };
 
 // Есть ли у разворота что хранить: что-то на листе, своё оформление или его
 // история
 export const isKept = (s: Spread) =>
-  s.blocks.some(b => !isBlank(b)) || !!(s.looks?.left || s.looks?.right || s.lookLog?.left || s.lookLog?.right);
+  s.blocks.some(b => !isBlank(b)) || !!(s.looks?.left || s.looks?.right || s.lookLog?.left || s.lookLog?.right || s.charms?.left || s.charms?.right);
 
 export type Spreads = Record<number, Spread>;
 
@@ -329,6 +331,16 @@ export function loadSpreads(source: Source): Spreads {
   }
   // Пустые блоки могли остаться, если приложение закрыли, ничего не написав
   for (const s of Object.values(spreads)) s.blocks = s.blocks.filter(b => !isBlank(b));
+  // Брелок недолго был частью оформления страницы (looks.*.charm) — теперь
+  // он отдельно (charms)
+  for (const s of Object.values(spreads)) {
+    for (const side of ['left', 'right'] as const) {
+      const look = s.looks?.[side] as (PageLook & { charm?: Charm }) | undefined;
+      if (!look?.charm) continue;
+      s.charms = { ...s.charms, [side]: s.charms?.[side] ?? look.charm };
+      delete look.charm;
+    }
+  }
   return spreads;
 }
 
@@ -375,12 +387,12 @@ export function saveClip(clip: Clip): void {
   write(CLIP_KEY, clip);
 }
 
-// Какой раздел «+» развёрнут — «Стикеры» или «Наклейки» (только один)
+// Какой раздел «+» развёрнут — «Стикеры», «Наклейки» или «Брелоки» (только один)
 const ADD_SECTION_KEY = 'notes-pwa:add-section';
-export type AddSection = 'stickers' | 'decals' | null;
+export type AddSection = 'stickers' | 'decals' | 'charms' | null;
 export function loadAddSection(): AddSection {
   const v = read<AddSection>(ADD_SECTION_KEY, null);
-  return v === 'stickers' || v === 'decals' ? v : null;
+  return v === 'stickers' || v === 'decals' || v === 'charms' ? v : null;
 }
 export function saveAddSection(v: AddSection): void {
   write(ADD_SECTION_KEY, v);

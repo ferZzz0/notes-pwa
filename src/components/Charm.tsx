@@ -8,8 +8,9 @@ import './Charm.css';
 // сверху посередине экрана, пока телефон вертикально (горизонтально — у
 // каждой страницы разворота свой, посередине её видимой части), и качается, как
 // маятник: от тряски и наклона телефона (датчик движения), от касания и от
-// перелистывания. Цепочка у всех одна; какая наклейка, сколько на ней блёсток
-// и её размер — в настройках листа (PageLook.charm)
+// перелистывания. Цепочка у всех одна; какая наклейка — выбирают в «+»,
+// сколько на ней блёсток и её размер — на панели брелка (касание по нему его
+// выбирает); хранится у страницы (Spread.charms)
 
 // Маятник: длина (м — с ней качается, как настоящий брелок чуть длиннее
 // пальца), затухание (1/с), самый большой угол (рад — дальше цепочка не
@@ -30,14 +31,10 @@ const KICK = 1.5;
 const TAP = 2.5;
 const G = 9.81;
 
-// Размер брелка (px экрана): от и до, сначала. Сколько места сверху он
-// занимает самое большее — цепочка (56 px) и самая большая наклейка: столько
-// оставляет над собой панель настроек листа, чтобы брелок было видно, пока
-// его настраивают
+// Размер брелка (px экрана): от и до, сначала
 export const CHARM_MIN = 44;
 export const CHARM_MAX = 120;
 export const CHARM_SIZE = 72;
-export const CHARM_ROOM = 56 + CHARM_MAX;
 
 // Датчик: у iPhone accelerationIncludingGravity — сама сила тяжести (вниз:
 // y < 0, когда телефон стоит), по стандарту и на Android — наоборот. Знак
@@ -75,8 +72,21 @@ export function askMotion() {
   if (typeof ask === 'function') void ask().catch(() => {});
 }
 
-// ref — корень: Notebook ставит его посередине видимой части страницы
-export function Charm({ charm, kick, ref }: { charm: CharmLook; kick: number; ref?: Ref<HTMLDivElement> }) {
+// ref — корень: Notebook ставит его посередине видимой части страницы;
+// selected — выбран (рамка), onSelect — коснулись
+export function Charm({
+  charm,
+  kick,
+  selected = false,
+  onSelect,
+  ref
+}: {
+  charm: CharmLook;
+  kick: number;
+  selected?: boolean;
+  onSelect?: () => void;
+  ref?: Ref<HTMLDivElement>;
+}) {
   const swing = useRef<HTMLDivElement>(null);
   // Состояние маятника: угол (рад, 0 — висит прямо вниз, по часовой — как
   // rotate()), скорость, сила тяжести на экране (м/с², y вниз) и толчок
@@ -199,13 +209,15 @@ export function Charm({ charm, kick, ref }: { charm: CharmLook; kick: number; re
         </svg>
         <button
           type="button"
-          className="charm-body"
+          className={selected ? 'charm-body is-selected' : 'charm-body'}
           aria-label="Брелок"
           onPointerDown={e => {
-            // Касание — качнуть; на iPhone заодно спросить про датчик движения
+            // Касание — выбрать и качнуть; на iPhone заодно спросить про
+            // датчик движения
             askMotion();
             const r = e.currentTarget.getBoundingClientRect();
             engine.current?.push(e.clientX < r.left + r.width / 2 ? TAP : -TAP);
+            onSelect?.();
           }}
         >
           <img src={decalSrc(charm.decal)} alt="" draggable={false} />

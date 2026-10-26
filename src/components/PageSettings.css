@@ -12,8 +12,7 @@
   bottom: calc(12px + var(--safe-bottom));
   z-index: 9;
   width: min(340px, calc(100% - 24px));
-  /* Сверху — место под брелок, если он висит (PageSettings.tsx) */
-  max-height: calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom) - var(--charm-room, 0px));
+  max-height: calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom));
   margin: 0 auto;
   padding: 12px 14px 14px;
   overflow-y: auto;
@@ -227,115 +226,4 @@
 .page-settings-base button.is-active {
   background: var(--primary-soft);
   color: var(--ink);
-}
-
-/* Брелок: свёрнутый раздел — строка с названием, выбранной наклейкой и
-   стрелкой; развёрнутый — наклейки сеткой и ползунки */
-.page-settings-charm {
-  margin-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.page-settings-fold {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 10px 2px 6px;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font: 600 13px/1.2 var(--ui-font);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.page-settings-fold > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.page-settings-fold img {
-  width: 28px;
-  height: 28px;
-}
-
-.page-settings-fold em {
-  color: var(--muted);
-  font: 13px/1 var(--ui-font);
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.page-settings-fold svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 0.15s ease-out;
-}
-
-.page-settings-fold[aria-expanded='true'] svg {
-  transform: rotate(90deg);
-}
-
-.page-settings-hint {
-  margin: 0 2px 8px;
-  color: var(--muted);
-  font: 12px/1.35 var(--ui-font);
-}
-
-.page-settings-decals {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-}
-
-.page-settings-decals button {
-  position: relative;
-  display: grid;
-  place-items: center;
-  aspect-ratio: 1;
-  padding: 3px;
-  border: 1.5px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-}
-
-.page-settings-decals button[aria-pressed='true'] {
-  border-color: var(--primary-line);
-  background: var(--primary-soft);
-}
-
-.page-settings-decals img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  -webkit-user-drag: none;
-}
-
-.page-settings-decals svg:not(.glitter) {
-  width: 60%;
-  height: 60%;
-  fill: none;
-  stroke: var(--muted);
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
-/* Блёстки и размер — подписи слева, ползунки во всю оставшуюся ширину */
-.page-settings-sliders {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 8px;
-}
-
-.page-settings-sliders > span {
-  font: 600 13px/1.2 var(--ui-font);
 }

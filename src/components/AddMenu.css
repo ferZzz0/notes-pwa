@@ -113,6 +113,13 @@
   stroke-linejoin: round;
 }
 
+.add-note {
+  margin: 4px 4px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .add-section {
   margin: 14px 0 6px;
   color: var(--muted);

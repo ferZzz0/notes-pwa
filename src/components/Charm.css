@@ -69,6 +69,12 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+.charm-body.is-selected {
+  border-radius: 14px;
+  outline: 2px dashed var(--ink);
+  outline-offset: 3px;
+}
+
 .charm-body img {
   display: block;
   width: 100%;
