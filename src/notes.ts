@@ -11,8 +11,9 @@ import type { EffectId, FilterId, FontId, FrameId, MarkerId, StickerId } from '.
 
 export type Block = {
   id: string;
-  // Что это: надпись (kind нет), стикер с надписью, фото или наклейка
-  kind?: 'sticker' | 'image' | 'decal';
+  // Что это: надпись (kind нет), стикер с надписью, фото, наклейка или
+  // брелок (наклейка на цепочке, качается — Charm.tsx)
+  kind?: 'sticker' | 'image' | 'decal' | 'charm';
   // Левый верхний угол в координатах мира (px; верх листа — y = 0): у
   // надписи и стикера — начало текста, у фото — угол рамки
   x: number;
@@ -51,8 +52,8 @@ export type Block = {
   // строк (по ней текст переносится; ручка на рамке), нет — по тексту, до
   // предела страницы
   image?: string;
-  // Наклейка: какая (textStyle.ts: DECALS) и сколько на ней блёсток (0–1);
-  // её размер — width (px мира)
+  // Наклейка и брелок: какая наклейка (textStyle.ts: DECALS) и сколько на
+  // ней блёсток (0–1); её размер — width (px мира)
   decal?: string;
   glitter?: number;
   width?: number;
@@ -77,10 +78,6 @@ export const isBlank = (b: Block) => !b.kind && !b.text.trim();
 // Цвет и шрифт, выбранные последними, — с ними начинается новая надпись
 export type TextStyle = { color?: string; font?: FontId };
 
-// Брелок страницы (Charm.tsx; добавляют через «+», как стикер): наклейка (id
-// из DECALS), сколько на ней блёсток (0–1) и её размер (px экрана)
-export type Charm = { decal: string; glitter: number; size: number };
-
 // Оформление страницы (настройки листа): цвет бумаги и цвет её номера и
 // даты (#rrggbb); нет — как у приложения
 export type PageLook = { paper?: string; labels?: string };
@@ -95,14 +92,12 @@ export type Spread = {
   // Оформление левой и правой страниц и его история
   looks?: { left?: PageLook; right?: PageLook };
   lookLog?: { left?: LookLog; right?: LookLog };
-  // Брелоки левой и правой страниц
-  charms?: { left?: Charm; right?: Charm };
 };
 
 // Есть ли у разворота что хранить: что-то на листе, своё оформление или его
 // история
 export const isKept = (s: Spread) =>
-  s.blocks.some(b => !isBlank(b)) || !!(s.looks?.left || s.looks?.right || s.lookLog?.left || s.lookLog?.right || s.charms?.left || s.charms?.right);
+  s.blocks.some(b => !isBlank(b)) || !!(s.looks?.left || s.looks?.right || s.lookLog?.left || s.lookLog?.right);
 
 export type Spreads = Record<number, Spread>;
 
@@ -320,6 +315,9 @@ export function allImageIds(): Set<string> | null {
   return ids;
 }
 
+// Брелок прежнего вида (один на страницу): наклейка, блёстки, размер (px экрана)
+type OldCharm = { decal: string; glitter: number; size: number };
+
 export function loadSpreads(source: Source): Spreads {
   let spreads: Spreads;
   if (source.kind === 'day') {
@@ -331,15 +329,22 @@ export function loadSpreads(source: Source): Spreads {
   }
   // Пустые блоки могли остаться, если приложение закрыли, ничего не написав
   for (const s of Object.values(spreads)) s.blocks = s.blocks.filter(b => !isBlank(b));
-  // Брелок недолго был частью оформления страницы (looks.*.charm) — теперь
-  // он отдельно (charms)
-  for (const s of Object.values(spreads)) {
+  // Брелок недолго был один на страницу, на экране под островком: в
+  // оформлении страницы (looks.*.charm), потом отдельно (charms) — теперь
+  // это вещь листа: повешен у верха посередине своей страницы, размер
+  // (тогда — px экрана) — примерно в px мира
+  for (const s of Object.values(spreads) as (Spread & { charms?: Partial<Record<'left' | 'right', OldCharm>> })[]) {
     for (const side of ['left', 'right'] as const) {
-      const look = s.looks?.[side] as (PageLook & { charm?: Charm }) | undefined;
-      if (!look?.charm) continue;
-      s.charms = { ...s.charms, [side]: s.charms?.[side] ?? look.charm };
-      delete look.charm;
+      const look = s.looks?.[side] as (PageLook & { charm?: OldCharm }) | undefined;
+      const old = s.charms?.[side] ?? look?.charm;
+      if (look?.charm) delete look.charm;
+      if (look && !look.paper && !look.labels) delete s.looks![side];
+      if (!old) continue;
+      const width = Math.round(old.size * 2.1);
+      s.blocks.push({ id: newBlockId(), kind: 'charm', decal: old.decal, glitter: old.glitter, text: '', width, x: (side === 'left' ? -425 : 425) - width / 2, y: 0 });
     }
+    delete s.charms;
+    if (s.looks && !s.looks.left && !s.looks.right) delete s.looks;
   }
   return spreads;
 }

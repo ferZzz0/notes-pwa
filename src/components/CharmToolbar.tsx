@@ -1,14 +1,17 @@
 import { useState, type ReactNode } from 'react';
-import type { Charm } from '../notes';
-import { CHARM_MAX, CHARM_MIN } from './Charm';
-import { ConfirmDelete, GlitterSlider, StyleSection, keepFocus, useToolbarHeight } from './TextToolbar';
+import type { Block } from '../notes';
+import { DEFAULT_GLITTER } from '../textStyle';
+import { CHARM_MAX, CHARM_MIN, CHARM_SIZE } from './Charm';
+import { ConfirmDelete, GlitterSlider, OpacitySlider, StyleSection, keepFocus, useToolbarHeight } from './TextToolbar';
 import './TextToolbar.css';
 
 type Props = {
-  charm: Charm;
-  // Блёстки и размер с ползунков; final — палец отпустили (сохранить)
+  block: Block;
+  // Блёстки, размер (ширина наклейки, px мира) и непрозрачность с ползунков;
+  // final — палец отпустили (сохранить)
   onGlitter: (glitter: number, final: boolean) => void;
   onSize: (size: number, final: boolean) => void;
+  onOpacity: (opacity: number, final: boolean) => void;
   onDelete: () => void;
   onDone: () => void;
   onHeight: (h: number) => void;
@@ -18,9 +21,11 @@ type Props = {
 
 type Menu = 'style' | 'delete' | null;
 
-// Панель выбранного брелка — как у наклейки (TextToolbar.css): блёстки и
-// размер, удалить (с подтверждением), готово
-export function CharmToolbar({ charm, onGlitter, onSize, onDelete, onDone, onHeight, history }: Props) {
+// Панель выбранного брелка — как у наклейки (TextToolbar.css): блёстки,
+// размер и прозрачность, удалить (с подтверждением), готово. Переносят брелок
+// пальцем, как наклейку
+export function CharmToolbar({ block, onGlitter, onSize, onOpacity, onDelete, onDone, onHeight, history }: Props) {
+  const size = block.width ?? CHARM_SIZE;
   const ref = useToolbarHeight(onHeight);
   const [menu, setMenu] = useState<Menu>(null);
   const toggle = (m: Menu) => setMenu(menu === m ? null : m);
@@ -31,14 +36,17 @@ export function CharmToolbar({ charm, onGlitter, onSize, onDelete, onDone, onHei
       {menu === 'style' && (
         <div className="toolbar-menu toolbar-opacity-pop" role="dialog" aria-label="Блёстки и размер">
           <StyleSection title="Блёстки">
-            <GlitterSlider value={charm.glitter} onPick={onGlitter} />
+            <GlitterSlider value={block.glitter ?? DEFAULT_GLITTER} onPick={onGlitter} />
           </StyleSection>
           <StyleSection title="Размер">
             <GlitterSlider
               size
-              value={(charm.size - CHARM_MIN) / (CHARM_MAX - CHARM_MIN)}
+              value={(size - CHARM_MIN) / (CHARM_MAX - CHARM_MIN)}
               onPick={(t, final) => onSize(Math.round(CHARM_MIN + t * (CHARM_MAX - CHARM_MIN)), final)}
             />
+          </StyleSection>
+          <StyleSection title="Прозрачность">
+            <OpacitySlider value={block.opacity} onPick={onOpacity} />
           </StyleSection>
         </div>
       )}

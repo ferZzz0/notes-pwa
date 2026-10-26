@@ -19,7 +19,6 @@ import {
   sideOf,
   spreadOf,
   type Block,
-  type Charm,
   type Clip,
   type LookLog,
   type PageLook,
@@ -46,7 +45,7 @@ import {
 import { decalSrc, markerOf, type DecalId, type StickerId } from '../textStyle';
 import { isDark } from '../theme';
 import { AddMenu } from './AddMenu';
-import { askMotion, Charm as CharmItem, CHARM_SIZE } from './Charm';
+import { askMotion, CharmItem, CHARM_SIZE, charmHeight, pokeCharm } from './Charm';
 import { CharmToolbar } from './CharmToolbar';
 import { ConfirmDialog, NoticeDialog } from './ConfirmDialog';
 import { Canvas, type Camera, type CanvasHandle, type Fixed, type Grab, type Home, type Point, type Rect } from './Canvas';
@@ -116,8 +115,8 @@ const TURN_MS = { spread: 340, single: 850 };
 
 // Сообщение посреди экрана в оформлении приложения (NoticeDialog)
 type Notice = { icon: 'clipboard' | 'photo'; title: string; note?: string };
-// Брелок прячется, если от его страницы на экране меньше этого (px)
-const CHARM_ROOM_X = 90;
+// Режим наклеивания: какую наклейку (или брелок — charm) ставят касаниями
+type Stamp = { decal: DecalId; glitter: number; charm?: boolean };
 
 const EMPTY_CLIPBOARD: Notice = {
   icon: 'clipboard',
@@ -235,8 +234,8 @@ function stampDates(next: Spreads, old: Spreads): Spreads {
 
 // Страница сама по себе — чтобы удалить лист или вставить новый (следующие
 // сдвигаются, и левые страницы становятся правыми и наоборот): её надписи и
-// фото в координатах правой страницы, её оформление и его история, брелок
-type PageData = { blocks: Block[]; look?: PageLook; log?: LookLog; charm?: Charm };
+// фото в координатах правой страницы, её оформление и его история
+type PageData = { blocks: Block[]; look?: PageLook; log?: LookLog };
 
 // x на странице side → x на правой странице и обратно: левая [−850, 0)
 // ложится на [0, 850), а то, что за её внешним краем (лист вырос наружу), —
@@ -257,8 +256,7 @@ function toPages(spreads: Spreads): PageData[] {
         .map(b => ({ ...b, x: toRightX(b.x, side), day: b.day ?? sp.created }));
       const look = sp.looks?.[side];
       const log = sp.lookLog?.[side];
-      const charm = sp.charms?.[side];
-      if (blocks.length > 0 || look || log || charm) pages[2 * s + (side === 'left' ? 0 : 1)] = { blocks, look, log, charm };
+      if (blocks.length > 0 || look || log) pages[2 * s + (side === 'left' ? 0 : 1)] = { blocks, look, log };
     }
   }
   return Array.from(pages, p => p ?? { blocks: [] });
@@ -267,13 +265,12 @@ function toPages(spreads: Spreads): PageData[] {
 function fromPages(pages: PageData[]): Spreads {
   const out: Spreads = {};
   pages.forEach((p, i) => {
-    if (p.blocks.length === 0 && !p.look && !p.log && !p.charm) return;
+    if (p.blocks.length === 0 && !p.look && !p.log) return;
     const side = sideOf(i + 1);
     const sp = (out[spreadOf(i + 1)] ??= { blocks: [] });
     sp.blocks.push(...p.blocks.map(b => ({ ...b, x: fromRightX(b.x, side) })));
     if (p.look) sp.looks = { ...sp.looks, [side]: p.look };
     if (p.log) sp.lookLog = { ...sp.lookLog, [side]: p.log };
-    if (p.charm) sp.charms = { ...sp.charms, [side]: p.charm };
   });
   return out;
 }
@@ -479,23 +476,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     b => display === 'both' || (display === 'left' ? b.x < 0 : b.x >= 0)
   );
   const selectedBlock = turning ? undefined : visibleBlocks.find(b => b.id === selected);
-  // Брелоки (настройки листа): у каждой видимой страницы — свой, вертикально
-  // — только у открытой. Пока листаем — прежние, до конца перелистывания
-  // (иначе брелок пропадал в самом начале)
-  const pageCharms = useRef<Partial<Record<Side, Charm>>>({});
-  if (!turning) {
-    const sides: Side[] = !portrait && display === 'both' ? ['left', 'right'] : [side];
-    pageCharms.current = {};
-    for (const sd of sides) {
-      const c = spreads[spread]?.charms?.[sd];
-      if (c) pageCharms.current[sd] = c;
-    }
-  }
-  const charms = pageCharms.current;
-  // Выбранный брелок (касанием по нему): внизу — его панель
-  const [charmSel, setCharmSel] = useState<Side | null>(null);
-  const selectedCharm = charmSel && !turning ? charms[charmSel] : undefined;
-
   // То, что сейчас записано в память, — от него считаются история и даты
   const saved = useRef<{ spreads: Spreads; json: string } | null>(null);
   saved.current ??= { spreads, json: JSON.stringify(spreads) };
@@ -771,8 +751,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         return;
       }
     }
-    const w = c.kind === 'image' ? (c.width ?? 500) : c.kind === 'decal' ? (c.width ?? DECAL_SIZE) : c.kind === 'sticker' ? STICKER_SIZE.w : PASTE_TEXT_WIDTH;
-    const h = c.kind === 'image' ? w * (c.ratio ?? 0.75) : c.kind === 'decal' ? w : STICKER_SIZE.h;
+    const w = c.kind === 'image' ? (c.width ?? 500) : c.kind === 'decal' ? (c.width ?? DECAL_SIZE) : c.kind === 'charm' ? (c.width ?? CHARM_SIZE) : c.kind === 'sticker' ? STICKER_SIZE.w : PASTE_TEXT_WIDTH;
+    const h = c.kind === 'image' ? w * (c.ratio ?? 0.75) : c.kind === 'decal' ? w : c.kind === 'charm' ? charmHeight(w) : STICKER_SIZE.h;
     addBlock({ ...c, id: newBlockId(), image, ...place(w, at.x - w / 2, at.y - h / 2) });
   };
 
@@ -969,7 +949,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const deselect = () => {
     blurActive();
     setSelected(null);
-    setCharmSel(null);
   };
 
   // Ручка ширины строк на рамке — только если её показали кнопкой на панели
@@ -1041,66 +1020,38 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // касание по выбранной открывает клавиатуру
   const onTap = (p: Point) => {
     if (turning) return;
-    setCharmSel(null);
     if (stamp) {
       placeDecal(stamp, p);
       return;
     }
     const hits = blocksAt(p);
     const i = hits.findIndex(b => b.id === selected);
+    const next = hits.length === 0 ? null : i < 0 ? hits[0] : hits.length > 1 ? hits[(i + 1) % hits.length] : null;
     if (hits.length === 0) setSelected(null);
-    else if (i < 0) setSelected(hits[0].id);
-    else if (hits.length > 1) setSelected(hits[(i + 1) % hits.length].id);
+    else if (next) setSelected(next.id);
     else edit(hits[0].id);
-  };
-
-  // --- Брелоки (просьба автора: добавляются через «+», как стикеры) ---
-  // Брелок страницы sd открытого разворота: поставить, поменять, убрать
-  // (undefined). Пока ведут ползунок — без записи (save = false)
-  const setCharm = (sd: Side, c: Charm | undefined, save = true) =>
-    setSpreads(prev => {
-      const cur = prev[spread] ?? { blocks: [] };
-      const all = { ...cur.charms };
-      if (c) all[sd] = c;
-      else delete all[sd];
-      const sp: Spread = { ...cur, charms: all.left || all.right ? all : undefined };
-      const next = { ...prev, [spread]: sp };
-      if (!isKept(sp)) delete next[spread];
-      return save ? persist(next) : next;
-    });
-  // Новый брелок из «+»: на ту видимую страницу, что без брелка (обе
-  // свободны или обе заняты — что больше видна; занятой — заменить
-  // наклейку, размер прежний), и сразу выбран — панель внизу. Из того же
-  // нажатия на iPhone — вопрос про датчик движения
-  const addCharm = (decal: DecalId, glitter: number) => {
-    askMotion();
-    deselect();
-    setStamp(null);
-    const sides: Side[] = !portrait && display === 'both' ? ['left', 'right'] : [side];
-    const seen = (sd: Side) => (sd === 'left' ? Math.min(viewWidth.current, camera.current.x) : viewWidth.current - Math.max(0, camera.current.x));
-    const free = sides.filter(sd => !charms[sd]);
-    const sd = (free.length > 0 ? free : sides).reduce((a, b) => (seen(b) > seen(a) ? b : a));
-    setCharm(sd, { decal, glitter, size: charms[sd]?.size ?? CHARM_SIZE });
-    setCharmSel(sd);
-  };
-  // Коснулись брелка — выбрать его (он и качнётся — Charm.tsx)
-  const selectCharm = (sd: Side) => {
-    if (turning) return;
-    deselect();
-    setStamp(null);
-    setCharmSel(sd);
+    // Брелок от касания ещё и качается; на iPhone — вопрос про датчик
+    // движения (только из нажатия)
+    const touched = next ?? hits[0];
+    if (touched?.kind === 'charm') {
+      askMotion();
+      pokeCharm(touched.id, p.x < touched.x + (touched.width ?? CHARM_SIZE) / 2 ? 1 : -1);
+    }
   };
 
   // Режим наклеивания (просьба автора): выбрали наклейку в «+» — каждое
   // касание листа ставит её туда (не выбирая), пока не нажмут «×» над «+».
-  // Размер — по зуму, как у новой надписи: на экране всегда одинаковая
-  const [stamp, setStamp] = useState<{ decal: DecalId; glitter: number } | null>(null);
-  const placeDecal = ({ decal, glitter }: { decal: DecalId; glitter: number }, p: Point) => {
+  // Размер — по зуму, как у новой надписи: на экране всегда одинаковая.
+  // Так же вешают брелоки (charm; просьба автора: «сколько угодно и в любое
+  // место»): касание — точка подвеса, верх цепочки
+  const [stamp, setStamp] = useState<Stamp | null>(null);
+  const placeDecal = ({ decal, glitter, charm }: Stamp, p: Point) => {
     // Выше верха листа и за корешком одной страницы — не наклеиваем
     if (p.y < 0 || (display !== 'both' && (p.x < 0 ? 'left' : 'right') !== display)) return;
-    const w = Math.round(DECAL_SIZE / (canvas.current?.zoom() ?? 1));
+    const w = Math.round((charm ? CHARM_SIZE : DECAL_SIZE) / (canvas.current?.zoom() ?? 1));
     const cur = spreads[spread] ?? { blocks: [] };
-    const block: Block = { id: newBlockId(), kind: 'decal', decal, glitter, text: '', width: w, ...place(w, p.x - w / 2, p.y - w / 2) };
+    const at = place(w, p.x - w / 2, charm ? p.y : p.y - w / 2);
+    const block: Block = { id: newBlockId(), kind: charm ? 'charm' : 'decal', decal, glitter, text: '', width: w, ...at };
     commit({ ...spreads, [spread]: { ...cur, created: cur.created ?? localDate(), blocks: [...cur.blocks, block] } });
   };
 
@@ -1186,10 +1137,11 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           const [a, c] = p;
           from = midpoint(a0, c0);
           to = midpoint(a, c);
-          const minScale = b.kind === 'image' || b.kind === 'decal' ? MIN_PHOTO_SCALE : MIN_TEXT_SCALE;
+          const minScale = b.kind === 'image' || b.kind === 'decal' || b.kind === 'charm' ? MIN_PHOTO_SCALE : MIN_TEXT_SCALE;
           scale = Math.min(MAX_TEXT_SCALE, Math.max(minScale, (s0 * distance(a, c)) / Math.max(distance(a0, c0), 1)));
           if (Math.abs(scale - 1) < SNAP_SCALE) scale = 1;
-          rotate = snapAngle(normalize(r0 + angleDeg(a, c) - angleDeg(a0, c0)));
+          // Брелок висит по силе тяжести — не поворачивается
+          if (b.kind !== 'charm') rotate = snapAngle(normalize(r0 + angleDeg(a, c) - angleDeg(a0, c0)));
         }
         // Середина надписи идёт за пальцами — повёрнутая и растянутая вокруг них
         const k = scale / s0;
@@ -1218,7 +1170,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     // (просьба автора)
     const hit = blockAt(p);
     if (turning || stamp) return;
-    if (hit && hit.kind !== 'image' && hit.kind !== 'decal') {
+    if (hit && hit.kind !== 'image' && hit.kind !== 'decal' && hit.kind !== 'charm') {
       if (document.activeElement === blockElement(hit.id)) return;
       flushSync(() => setSelected(hit.id));
       edit(hit.id);
@@ -1411,26 +1363,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // перенос, поворот, шрифт); при движении камеры — в onFrame
   useLayoutEffect(() => selection.current?.update());
 
-  // Брелоки — посередине той части своей страницы, что на экране (корешок —
-  // на x камеры; левая страница левее него, правая — правее). Видно от
-  // страницы меньше CHARM_ROOM_X — брелок прячется. После каждой перерисовки
-  // и при движении камеры (onFrame); меняется только transform
-  const charmEls = useRef<Partial<Record<Side, HTMLDivElement | null>>>({});
-  const viewWidth = useRef(window.innerWidth);
-  const placeCharms = () => {
-    const w = viewWidth.current;
-    const spineX = camera.current.x;
-    for (const sd of ['left', 'right'] as const) {
-      const el = charmEls.current[sd];
-      if (!el) continue;
-      const from = sd === 'left' ? 0 : Math.max(0, spineX);
-      const to = sd === 'left' ? Math.min(w, spineX) : w;
-      el.style.transform = `translateX(${(from + to) / 2}px)`;
-      el.style.visibility = to - from < CHARM_ROOM_X ? 'hidden' : '';
-    }
-  };
-  useLayoutEffect(placeCharms);
-
   // Повернули телефон: одна страница ↔ разворот, и новый вид сразу с начала
   // листа в стандартном размере (полотно и само так делает при смене размера
   // экрана — здесь ещё раз, уже с новым видом). Ждём кадр: flushSync нельзя
@@ -1547,9 +1479,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     const s = spreadOf(n);
     const cur = spreads[s];
     if (!cur) return;
-    const charms = { ...cur.charms };
-    delete charms[sideOf(n)];
-    const sp = { ...cur, blocks: cur.blocks.filter(b => sideOfBlock(b) !== sideOf(n)), charms: charms.left || charms.right ? charms : undefined };
+    const sp = { ...cur, blocks: cur.blocks.filter(b => sideOfBlock(b) !== sideOf(n)) };
     const next = { ...spreads, [s]: sp };
     if (!isKept(sp)) delete next[s];
     commit(next);
@@ -1775,8 +1705,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           camera.current = cam;
           paper.current?.update(cam, size);
           selection.current?.update();
-          viewWidth.current = size.w;
-          placeCharms();
           if (moved) followCaret();
         }}
         onTap={onTap}
@@ -1811,6 +1739,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
                   <ImageItem block={b} />
                 ) : b.kind === 'decal' ? (
                   <DecalItem block={b} />
+                ) : b.kind === 'charm' ? (
+                  <CharmItem block={b} kick={kick} />
                 ) : (
                   <TextBlock
                     block={b}
@@ -1936,6 +1866,23 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           />
           {selectedBlock.locked ? (
             <LockedToolbar history={toolbarTop} onDone={deselect} onHeight={setToolbarHeight} />
+          ) : selectedBlock.kind === 'charm' ? (
+            <CharmToolbar
+              block={selectedBlock}
+              onGlitter={(glitter, final) => patchBlock(selectedBlock.id, { glitter }, final)}
+              // Размер — вокруг точки подвеса: она остаётся на месте
+              onSize={(width, final) =>
+                patchBlock(selectedBlock.id, { width, x: selectedBlock.x + ((selectedBlock.width ?? CHARM_SIZE) - width) / 2 }, final)
+              }
+              onOpacity={(opacity, final) => patchBlock(selectedBlock.id, { opacity: opacity < 1 ? opacity : undefined }, final)}
+              onDelete={() => {
+                removeBlock(selectedBlock.id);
+                deselect();
+              }}
+              onDone={deselect}
+              onHeight={setToolbarHeight}
+              history={toolbarTop}
+            />
           ) : selectedBlock.kind === 'image' || selectedBlock.kind === 'decal' ? (
             <ImageToolbar
               block={selectedBlock}
@@ -1986,46 +1933,10 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         </>
       )}
 
-      {/* Брелоки — сверху посередине видимой части своей страницы (просьба
-          автора): вертикально это середина экрана, под островком */}
-      {(['left', 'right'] as const).map(sd => {
-        const c = charms[sd];
-        return (
-          c && (
-            <CharmItem
-              key={sd}
-              ref={el => {
-                charmEls.current[sd] = el;
-              }}
-              charm={c}
-              kick={kick}
-              selected={charmSel === sd}
-              onSelect={() => selectCharm(sd)}
-            />
-          )
-        );
-      })}
-
-      {/* Выбран брелок — внизу его панель (кнопки прячем) */}
-      {charmSel && selectedCharm && (
-        <CharmToolbar
-          charm={selectedCharm}
-          onGlitter={(glitter, final) => setCharm(charmSel, { ...selectedCharm, glitter }, final)}
-          onSize={(size, final) => setCharm(charmSel, { ...selectedCharm, size }, final)}
-          onDelete={() => {
-            setCharm(charmSel, undefined);
-            setCharmSel(null);
-          }}
-          onDone={() => setCharmSel(null)}
-          onHeight={setToolbarHeight}
-          history={historyButtons}
-        />
-      )}
-
       {/* Пока надпись выбрана, внизу — её панель: кнопки прячем */}
       {/* Пока лист перелистывается, кнопки плавно гаснут и потом так же
           появляются (просьба автора; App.css: .is-faded) */}
-      {!selectedBlock && !selectedCharm && (
+      {!selectedBlock && (
         <>
           {/* Ряд внизу: меню — ровно посередине экрана (просьба автора: два
               слева, два справа) */}
@@ -2052,7 +1963,12 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               }}
               onPaste={() => window.setTimeout(() => void pasteFromMenu(), MENU_GONE_MS)}
               canPaste={clipboardMayHaveContent}
-              onCharm={addCharm}
+              onCharm={(decal, glitter) => {
+                // Из того же нажатия на iPhone — вопрос про датчик движения
+                askMotion();
+                deselect();
+                setStamp({ decal, glitter, charm: true });
+              }}
               onOpen={setAddOpen}
             />
           </div>
@@ -2062,7 +1978,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             <button
               type="button"
               className={`round-button stamp-cancel${turning ? ' is-faded' : ''}${addOpen ? ' is-blocked' : ''}`}
-              aria-label="Закончить наклеивать"
+              aria-label={stamp.charm ? 'Закончить вешать брелоки' : 'Закончить наклеивать'}
               onClick={() => setStamp(null)}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2142,6 +2058,8 @@ function PageSide({ spread, side, blocks, date, day, look }: PageSideProps) {
               <ImageItem key={b.id} block={b} />
             ) : b.kind === 'decal' ? (
               <DecalItem key={b.id} block={b} />
+            ) : b.kind === 'charm' ? (
+              <CharmItem key={b.id} block={b} face />
             ) : (
               <TextBlock key={b.id} block={b} width={maxWidthOf(b)} face />
             )

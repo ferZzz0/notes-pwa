@@ -1,20 +1,32 @@
-import { useEffect, useRef, type CSSProperties, type Ref } from 'react';
-import type { Charm as CharmLook } from '../notes';
-import { decalSrc } from '../textStyle';
+import { useEffect, useRef, type CSSProperties } from 'react';
+import type { Block } from '../notes';
+import { DEFAULT_GLITTER, decalOf, decalSrc } from '../textStyle';
 import { Glitter } from './Glitter';
 import './Charm.css';
 
-// Брелок под островком iPhone (просьба автора): наклейка на цепочке висит
-// сверху посередине экрана, пока телефон вертикально (горизонтально — у
-// каждой страницы разворота свой, посередине её видимой части), и качается, как
-// маятник: от тряски и наклона телефона (датчик движения), от касания и от
-// перелистывания. Цепочка у всех одна; какая наклейка — выбирают в «+»,
-// сколько на ней блёсток и её размер — на панели брелка (касание по нему его
-// выбирает); хранится у страницы (Spread.charms)
+// Брелок (просьба автора: сначала — один под островком iPhone, потом «как
+// стикеры, сколько угодно и в любое место»): наклейка на цепочке, подвешенная
+// в точке листа и качающаяся, как маятник, — от тряски и наклона телефона
+// (датчик движения), от касания и от перелистывания. Это вещь листа
+// (Block, kind 'charm'): x, y — левый верхний угол цепочки с наклейкой в
+// покое, точка подвеса — верх посередине (x + width/2, y); width — ширина
+// наклейки (px мира). Цепочка у всех одна
+
+// Цепочка (px мира, Charm.css): длина рисунка; наклейка заходит верхом на
+// колечко на OVERLAP + 8% своей ширины — оно будто продето в неё
+export const CHAIN_H = 120;
+const OVERLAP = 9;
+// Ширина наклейки (px мира): от и до; у нового брелка — CHARM_SIZE / зум (на
+// экране всегда одинаковый, как новая наклейка)
+export const CHARM_MIN = 80;
+export const CHARM_MAX = 280;
+export const CHARM_SIZE = 150;
+// Высота брелка в покое — цепочка и наклейка
+export const charmHeight = (w: number) => CHAIN_H + w - OVERLAP - 0.08 * w;
 
 // Маятник: длина (м — с ней качается, как настоящий брелок чуть длиннее
-// пальца), затухание (1/с), самый большой угол (рад — дальше цепочка не
-// пускает, отскакивает), самая большая скорость (рад/с)
+// пальца), самый большой угол (рад — дальше цепочка не пускает,
+// отскакивает), самая большая скорость (рад/с)
 const LENGTH = 0.12;
 // Брелок качался слишком охотно (просьба автора: «менее чувствительным»):
 // затухание сильнее, скорость ниже, толчки слабее, а от ускорения самого
@@ -30,11 +42,6 @@ const SMOOTH = 0.06;
 const KICK = 1.5;
 const TAP = 2.5;
 const G = 9.81;
-
-// Размер брелка (px экрана): от и до, сначала
-export const CHARM_MIN = 44;
-export const CHARM_MAX = 120;
-export const CHARM_SIZE = 72;
 
 // Датчик: у iPhone accelerationIncludingGravity — сама сила тяжести (вниз:
 // y < 0, когда телефон стоит), по стандарту и на Android — наоборот. Знак
@@ -62,59 +69,84 @@ function toScreen(dx: number, dy: number): [number, number] {
   }
 }
 
+// Датчик один на все брелоки: сила тяжести на экране (м/с², y вниз) с долей
+// тряски. Брелоки подписываются (listen): показания пришли — wake
+const motion = { gx: 0, gy: G, sign: APPLE ? 1 : -1, upright: 0, base: null as { x: number; y: number } | null };
+const wakers = new Set<() => void>();
+function onMotion(e: DeviceMotionEvent) {
+  const a = e.accelerationIncludingGravity;
+  if (a?.x == null || a.y == null) return;
+  // Показания (сила тяжести и ускорение самого телефона) в координатах экрана
+  const [rx, ry] = toScreen(a.x, a.y);
+  // Знак показаний: усреднённо они должны тянуть к низу экрана
+  motion.upright += (ry - motion.upright) * 0.02;
+  if (Math.abs(motion.upright) > 4) {
+    const next = motion.upright > 0 ? 1 : -1;
+    if (next !== motion.sign) motion.base = null;
+    motion.sign = next;
+  }
+  const x = motion.sign * rx;
+  const y = motion.sign * ry;
+  // Сила тяжести — сглаженные показания; остальное — тряска: от неё только
+  // доля SHAKE, и без дрожи руки (меньше CALM)
+  const base = motion.base ? { x: motion.base.x + (x - motion.base.x) * SMOOTH, y: motion.base.y + (y - motion.base.y) * SMOOTH } : { x, y };
+  motion.base = base;
+  const sx = x - base.x;
+  const sy = y - base.y;
+  const shake = Math.hypot(sx, sy);
+  const k = shake > CALM ? (SHAKE * (shake - CALM)) / shake : 0;
+  motion.gx = base.x + sx * k;
+  motion.gy = base.y + sy * k;
+  for (const wake of wakers) wake();
+}
+function listen(wake: () => void) {
+  if (wakers.size === 0) window.addEventListener('devicemotion', onMotion);
+  wakers.add(wake);
+  return () => {
+    wakers.delete(wake);
+    if (wakers.size === 0) window.removeEventListener('devicemotion', onMotion);
+  };
+}
+
 type MotionPermission = { requestPermission?: () => Promise<'granted' | 'denied'> };
 
 // Разрешение на датчик движения: на iPhone его можно спросить только прямо
-// из нажатия (выбрали брелок в настройках листа, коснулись брелка). Где
-// спрашивать не надо — ничего не делает
+// из нажатия (выбрали брелок в «+», коснулись брелка). Где спрашивать не
+// надо — ничего не делает
 export function askMotion() {
   const ask = (window.DeviceMotionEvent as unknown as MotionPermission | undefined)?.requestPermission;
   if (typeof ask === 'function') void ask().catch(() => {});
 }
 
-// ref — корень: Notebook ставит его посередине видимой части страницы;
-// selected — выбран (рамка), onSelect — коснулись
-export function Charm({
-  charm,
-  kick,
-  selected = false,
-  onSelect,
-  ref
-}: {
-  charm: CharmLook;
-  kick: number;
-  selected?: boolean;
-  onSelect?: () => void;
-  ref?: Ref<HTMLDivElement>;
-}) {
+// Качнуть брелок id (его коснулись); dir — в какую сторону
+const pushers = new Map<string, (speed: number) => void>();
+export function pokeCharm(id: string, dir = Math.random() < 0.5 ? -1 : 1) {
+  pushers.get(id)?.(dir * TAP);
+}
+
+// face — «картинкой» (переворот листа, экспорт): висит отвесно, не качается.
+// kick — сколько раз перелистывали: от каждого раза качается
+export function CharmItem({ block, kick = 0, face = false }: { block: Block; kick?: number; face?: boolean }) {
   const swing = useRef<HTMLDivElement>(null);
-  // Состояние маятника: угол (рад, 0 — висит прямо вниз, по часовой — как
-  // rotate()), скорость, сила тяжести на экране (м/с², y вниз) и толчок
-  const engine = useRef<{ push: (speed: number) => void } | null>(null);
+  const push = useRef<((speed: number) => void) | null>(null);
+  const size = block.width ?? CHARM_SIZE;
+  const scale = block.scale ?? 1;
 
   useEffect(() => {
     const el = swing.current;
-    if (!el) return;
+    if (face || !el) return;
+    // Угол (рад, 0 — висит прямо вниз, по часовой — как rotate()) и скорость
     let angle = 0;
     let speed = 0;
-    let gx = 0;
-    let gy = G;
     // При какой силе тяжести маятник остановился — сдвинулась заметно, снова качаем
-    let restX = gx;
-    let restY = gy;
-    let sign = APPLE ? 1 : -1;
-    let upright = 0;
-    // Сглаженная сила тяжести (наклон телефона); null — ещё не было показаний
-    let base: { x: number; y: number } | null = null;
+    let restX = motion.gx;
+    let restY = motion.gy;
     let frame = 0;
     let last = 0;
 
-    const draw = () => {
-      el.style.transform = `rotate(${angle}rad)`;
-    };
     const step = (h: number) => {
       // Ускорение груза вдоль дуги: проекция силы тяжести на касательную
-      const along = -gx * Math.cos(angle) - gy * Math.sin(angle);
+      const along = -motion.gx * Math.cos(angle) - motion.gy * Math.sin(angle);
       speed += (along / LENGTH - DAMPING * speed) * h;
       speed = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, speed));
       angle += speed * h;
@@ -128,13 +160,13 @@ export function Charm({
       last = t;
       const n = Math.ceil(dt / (1 / 240));
       for (let i = 0; i < n; i++) step(dt / n);
-      draw();
+      el.style.transform = `rotate(${angle}rad)`;
       // Успокоился там, куда тянет сила тяжести, — стоп до следующего толчка
-      const rest = Math.atan2(-gx, gy);
+      const rest = Math.atan2(-motion.gx, motion.gy);
       if (Math.abs(speed) < 0.01 && Math.abs(angle - rest) < 0.003) {
         frame = 0;
-        restX = gx;
-        restY = gy;
+        restX = motion.gx;
+        restY = motion.gy;
         return;
       }
       frame = requestAnimationFrame(tick);
@@ -144,57 +176,49 @@ export function Charm({
       last = 0;
       frame = requestAnimationFrame(tick);
     };
-
-    const onMotion = (e: DeviceMotionEvent) => {
-      const a = e.accelerationIncludingGravity;
-      if (a?.x == null || a.y == null) return;
-      // Показания (сила тяжести и ускорение самого телефона) в координатах экрана
-      const [rx, ry] = toScreen(a.x, a.y);
-      // Знак показаний: усреднённо они должны тянуть к низу экрана
-      upright += (ry - upright) * 0.02;
-      if (Math.abs(upright) > 4) {
-        const next = upright > 0 ? 1 : -1;
-        if (next !== sign) base = null;
-        sign = next;
-      }
-      const x = sign * rx;
-      const y = sign * ry;
-      // Сила тяжести — сглаженные показания; остальное — тряска: от неё только
-      // доля SHAKE, и без дрожи руки (меньше CALM)
-      base = base ? { x: base.x + (x - base.x) * SMOOTH, y: base.y + (y - base.y) * SMOOTH } : { x, y };
-      const sx = x - base.x;
-      const sy = y - base.y;
-      const shake = Math.hypot(sx, sy);
-      const k = shake > CALM ? (SHAKE * (shake - CALM)) / shake : 0;
-      gx = base.x + sx * k;
-      gy = base.y + sy * k;
-      if (!frame && Math.hypot(gx - restX, gy - restY) > 0.3) run();
+    const stop = listen(() => {
+      if (!frame && Math.hypot(motion.gx - restX, motion.gy - restY) > 0.3) run();
+    });
+    const pushIt = (v: number) => {
+      speed += v;
+      run();
     };
-    window.addEventListener('devicemotion', onMotion);
-    engine.current = {
-      push: v => {
-        speed += v;
-        run();
-      }
-    };
-    // Появился — чуть качнулся
-    speed = 1;
+    push.current = pushIt;
+    pushers.set(block.id, pushIt);
+    // Появился (повесили, перелистнули к нему) — чуть качнулся
+    speed = Math.random() < 0.5 ? -1 : 1;
     run();
     return () => {
-      window.removeEventListener('devicemotion', onMotion);
+      stop();
       cancelAnimationFrame(frame);
-      engine.current = null;
+      if (pushers.get(block.id) === pushIt) pushers.delete(block.id);
+      push.current = null;
     };
-  }, []);
+  }, [face, block.id]);
 
   // Перелистнули страницу — телефон «дёрнулся»
   useEffect(() => {
-    if (kick) engine.current?.push((Math.random() < 0.5 ? -1 : 1) * KICK * (1 + 0.5 * Math.random()));
+    if (kick) push.current?.((Math.random() < 0.5 ? -1 : 1) * KICK * (1 + 0.5 * Math.random()));
   }, [kick]);
 
+  const style = {
+    left: block.x,
+    top: block.y,
+    width: size,
+    '--charm-size': `${size}px`,
+    transform: scale !== 1 ? `scale(${scale})` : undefined,
+    opacity: block.opacity
+  } as CSSProperties;
   return (
-    <div ref={ref} className="charm" style={{ '--charm-size': `${charm.size}px` } as CSSProperties}>
-      <div className="charm-swing" ref={swing}>
+    <div
+      className="item-image item-charm"
+      style={style}
+      data-block={face ? undefined : block.id}
+      data-scale={scale !== 1 ? scale : undefined}
+      role="img"
+      aria-label={`Брелок «${decalOf(block.decal).label}»`}
+    >
+      <div className={face ? 'charm-swing' : 'charm-swing is-live'} ref={swing}>
         <svg className="charm-chain" viewBox="0 0 20 56" aria-hidden="true">
           <path className="charm-clasp" d="M6 0v3a4 4 0 0 0 8 0V0" />
           <g className="charm-links">
@@ -207,22 +231,10 @@ export function Charm({
           </g>
           <circle className="charm-ring" cx="10" cy="49" r="5.5" />
         </svg>
-        <button
-          type="button"
-          className={selected ? 'charm-body is-selected' : 'charm-body'}
-          aria-label="Брелок"
-          onPointerDown={e => {
-            // Касание — выбрать и качнуть; на iPhone заодно спросить про
-            // датчик движения
-            askMotion();
-            const r = e.currentTarget.getBoundingClientRect();
-            engine.current?.push(e.clientX < r.left + r.width / 2 ? TAP : -TAP);
-            onSelect?.();
-          }}
-        >
-          <img src={decalSrc(charm.decal)} alt="" draggable={false} />
-          <Glitter seed={`charm-${charm.decal}`} amount={charm.glitter} />
-        </button>
+        <div className="charm-body">
+          <img src={decalSrc(decalOf(block.decal).id)} alt="" draggable={false} />
+          <Glitter seed={block.id} amount={block.glitter ?? DEFAULT_GLITTER} />
+        </div>
       </div>
     </div>
   );
