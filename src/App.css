@@ -25,6 +25,14 @@
   pointer-events: none;
 }
 
+/* Настройки листа — отдельно от ряда: в правом нижнем углу, ниже ряда */
+.page-settings-button {
+  position: fixed;
+  right: calc(16px + var(--safe-right));
+  bottom: calc(10px + var(--safe-bottom));
+  z-index: 7;
+}
+
 .bottom-center > * {
   pointer-events: auto;
 }

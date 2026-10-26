@@ -146,6 +146,8 @@ const STICKER_SIZE = { w: 230, h: 210 };
 // рядом с ней оставалась наша — две кнопки, жалоба автора). Таймер короче
 // секунды Safari ещё считает ответом на касание
 const MENU_GONE_MS = 200;
+// iPhone и iPad (iPad представляется компьютером Mac, но с сенсорным экраном)
+const APPLE_TOUCH = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 // «Отменить»: столько последних действий помним; набор в одной надписи с
 // паузами короче MERGE_MS — одно действие
 const HISTORY_SIZE = 100;
@@ -796,6 +798,22 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       if (e instanceof DOMException && e.name === 'NotAllowedError') return;
       if (clip) await pasteClip(p);
       else clipboardFailed(e);
+    }
+  };
+
+  // Есть ли что вставить (пункт «Вставить» в «+»). На iPhone не узнать:
+  // Safari на каждое чтение скопированного в другом приложении показывает
+  // свою кнопку — пункт есть всегда. Где разрешение читать буфер уже дано
+  // (компьютер, Android), читаем его молча: пусто — пункта нет (просьба
+  // автора). Не спросить молча — пункт есть
+  const clipboardMayHaveContent = async (): Promise<boolean> => {
+    if (APPLE_TOUCH) return true;
+    try {
+      const status = await navigator.permissions.query({ name: 'clipboard-read' as PermissionName });
+      if (status.state !== 'granted') return true;
+      return (await readClipboard()) !== null;
+    } catch {
+      return true;
     }
   };
 
@@ -1847,8 +1865,15 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       {/* Пока надпись выбрана, внизу — её панель: кнопки прячем */}
       {!turning && !selectedBlock && (
         <>
+          {/* Ряд внизу: меню — ровно посередине экрана (просьба автора: два
+              слева, два справа) */}
           <div className="bottom-center">
             {historyButtons}
+            <button type="button" className="round-button" aria-label="Главное меню" onClick={onMenu}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5.5h6v6H4zM14 5.5h6v6h-6zM4 15.5h6v4H4zM14 15.5h6v4h-6z" />
+              </svg>
+            </button>
             {/* Лист — в стартовое положение: начало листа, обычный размер (просьба автора) */}
             <button type="button" className="round-button" aria-label="К началу листа" onClick={() => void canvas.current?.goHome()}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1856,33 +1881,29 @@ export function Notebook({ source, onMenu, onDay }: Props) {
                 <path d="M3.5 11.5 12 4l8.5 7.5M6 9.5V20h4.5v-5.5h3V20H18V9.5" />
               </svg>
             </button>
-            <button type="button" className="round-button" aria-label="Главное меню" onClick={onMenu}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 5.5h6v6H4zM14 5.5h6v6h-6zM4 15.5h6v4H4zM14 15.5h6v4h-6z" />
-              </svg>
-            </button>
             <AddMenu
               onPhoto={file => void addPhoto(file)}
               onSticker={addSticker}
               onPaste={() => window.setTimeout(() => void pasteFromMenu(), MENU_GONE_MS)}
+              canPaste={clipboardMayHaveContent}
             />
-            {/* Настройки открытого листа (просьба автора: на месте отладочной
-                шестерёнки — отладка теперь в настройках главного меню) */}
-            <button
-              type="button"
-              className="round-button"
-              aria-label="Настройки листа"
-              onClick={() => {
-                deselect();
-                setPageMenu(page);
-              }}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="3.2" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.4-1.51 1z" />
-              </svg>
-            </button>
           </div>
+          {/* Настройки открытого листа — отдельно от ряда, в правом нижнем
+              углу (просьба автора; отладка — в настройках главного меню) */}
+          <button
+            type="button"
+            className="round-button page-settings-button"
+            aria-label="Настройки листа"
+            onClick={() => {
+              deselect();
+              setPageMenu(page);
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3.2" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.4-1.51 1z" />
+            </svg>
+          </button>
         </>
       )}
     </>

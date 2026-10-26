@@ -7,6 +7,8 @@ type Props = {
   onSticker: (sticker: StickerId) => void;
   // «Вставить» из буфера обмена (зовётся сразу после того, как меню закрыли)
   onPaste?: () => void;
+  // Есть ли что вставить: false — буфер точно пуст (тогда пункта нет)
+  canPaste?: () => Promise<boolean>;
 };
 
 // Выбор фото: на каждое нажатие — новое поле выбора файла (в документе —
@@ -34,8 +36,18 @@ function pickPhoto(onPhoto: (file: File) => void) {
 
 // «+» внизу экрана (рядом с шестерёнкой): добавить на лист фото из галереи
 // (или снять) либо готовый стикер, на котором сразу можно писать.
-export function AddMenu({ onPhoto, onSticker, onPaste }: Props) {
+export function AddMenu({ onPhoto, onSticker, onPaste, canPaste }: Props) {
   const [open, setOpen] = useState(false);
+  // Буфер точно пуст — пункта «Вставить» нет (просьба автора); узнаём при
+  // каждом открытии меню, а пока не узнали — пункт есть
+  const [empty, setEmpty] = useState(false);
+  const toggle = () => {
+    if (!open) {
+      setEmpty(false);
+      void canPaste?.().then(ok => setEmpty(!ok));
+    }
+    setOpen(!open);
+  };
 
   return (
     <>
@@ -44,7 +56,7 @@ export function AddMenu({ onPhoto, onSticker, onPaste }: Props) {
         className={open ? 'add-button round-button is-open' : 'add-button round-button'}
         aria-label="Добавить"
         aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        onClick={toggle}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 5v14M5 12h14" />
@@ -58,7 +70,7 @@ export function AddMenu({ onPhoto, onSticker, onPaste }: Props) {
             {/* Вставка — только здесь (просьба автора), из общего буфера
                 обмена. Меню прячется уже под пальцем: пока Safari показывает
                 свою кнопку «Вставить», страница не перерисовывается */}
-            {onPaste && (
+            {onPaste && !empty && (
               <button
                 type='button'
                 className='add-paste'
