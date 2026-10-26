@@ -121,10 +121,7 @@
 
 /* Линии под текстом */
 .mark-line,
-.mark-double,
-.mark-wavy,
-.mark-dotted,
-.mark-dashed {
+.mark-wavy {
   text-decoration-line: underline;
   text-decoration-color: var(--mark-c);
   text-decoration-thickness: 0.07em;
@@ -132,22 +129,8 @@
   text-decoration-skip-ink: none;
 }
 
-.mark-double {
-  text-decoration-style: double;
-  text-decoration-thickness: 0.05em;
-}
-
 .mark-wavy {
   text-decoration-style: wavy;
-}
-
-.mark-dotted {
-  text-decoration-style: dotted;
-  text-decoration-thickness: 0.1em;
-}
-
-.mark-dashed {
-  text-decoration-style: dashed;
 }
 
 /* Шрифты. У каждого свои размер и высота строки — чтобы надписи выглядели

@@ -124,36 +124,8 @@
   overflow-wrap: anywhere;
 }
 
-/* Поле названия — та же наклейка: несколько строк, растёт вместе с текстом */
-.diary-input {
-  display: block;
-  border: 2px solid var(--accent);
-  outline: none;
-  resize: none;
-  overflow: hidden;
-}
-
-/* Цвет обложки — кружки под названием, пока его правят */
-/* Цвет обложки: кружок с радужным ободком — открывает палитру */
-.diary-color {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
-}
-
-.diary-color span {
-  width: 22px;
-  height: 22px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-}
-
-/* Палитра цвета обложки — посередине экрана, касание мимо закрывает */
+/* Окно дневника — посередине экрана: название, обложка, палитра цвета;
+   касание мимо закрывает */
 .diary-color-backdrop {
   position: fixed;
   inset: 0;
@@ -170,6 +142,7 @@
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  width: min(280px, calc(100% - 32px));
   padding: 16px 18px;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -196,8 +169,33 @@
   font-size: 18px;
 }
 
-.diary-color-done {
-  padding: 8px 22px;
+/* Название — поле над обложкой */
+.diary-name-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: 26px/1.1 'Caveat Variable', cursive;
+  text-align: center;
+  outline: none;
+}
+
+.diary-name-input:focus {
+  border-color: var(--ink);
+}
+
+.diary-panel-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.diary-color-done,
+.diary-delete {
+  padding: 8px 18px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: transparent;
@@ -206,12 +204,8 @@
 }
 
 .diary-delete {
-  padding: 6px 10px;
-  border: none;
-  border-radius: 8px;
-  background: rgb(255 255 255 / 0.9);
-  color: #c0392b;
-  font: 600 13px/1.2 var(--ui-font);
+  border-color: var(--danger-line);
+  color: var(--danger);
 }
 
 /* Карандаш — переименовать — в углу обложки */

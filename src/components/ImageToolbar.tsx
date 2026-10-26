@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { knownImageUrl } from '../images';
 import type { Block } from '../notes';
 import { FILTERS, FRAMES, filterOf, frameOf } from '../textStyle';
-import { ConfirmDelete, LayerButtons, OpacityIcon, OpacityMenu, keepFocus, menuRoom, useToolbarHeight } from './TextToolbar';
+import { ConfirmDelete, LayerButtons, OpacitySlider, StyleSection, keepFocus, menuRoom, useToolbarHeight } from './TextToolbar';
 import './TextToolbar.css';
 
 type Props = {
@@ -18,11 +18,11 @@ type Props = {
   history?: ReactNode;
 };
 
-type Menu = 'frame' | 'filter' | 'opacity' | 'layer' | 'delete' | null;
+type Menu = 'style' | 'layer' | 'delete' | null;
 
-// Панель выбранного фото — как у надписи (TextToolbar.css): рамка и фильтр
-// (выпадающие списки), прозрачность (ползунок), слой (наверх / вниз),
-// удалить (с подтверждением), готово. Двигают, поворачивают и меняют размер фото
+// Панель выбранного фото — как у надписи (TextToolbar.css): «Оформление» —
+// один список (рамка, фильтр, прозрачность — просьба автора), слой (наверх /
+// вниз), удалить (с подтверждением), готово. Двигают, поворачивают и меняют размер фото
 // пальцами, как надпись.
 export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onDone, onHeight, history }: Props) {
   const ref = useToolbarHeight(onHeight);
@@ -37,47 +37,49 @@ export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onD
     <div ref={ref} className="text-toolbar" role="toolbar" aria-label="Фото" onMouseDown={keepFocus}>
       {history && <div className="toolbar-history">{history}</div>}
 
-      {menu === 'frame' && (
-        <ul className="toolbar-menu" style={{ maxHeight: room }} role="listbox" aria-label="Рамка">
-          {FRAMES.map(f => (
-            <li key={f.id}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={f.id === frame}
-                className={`toolbar-menu-item${f.id === frame ? ' is-active' : ''}`}
-                onClick={() => onPatch({ frame: f.id === 'none' ? undefined : f.id })}
-              >
-                <span className={`toolbar-frame-preview frame-${f.id}`}>
-                  <span />
-                </span>
-                {f.label}
-              </button>
-            </li>
-          ))}
-        </ul>
+      {menu === 'style' && (
+        <div className="toolbar-menu toolbar-style" style={{ maxHeight: room }} role="dialog" aria-label="Оформление">
+          <StyleSection title="Рамка">
+            <div className="toolbar-choices" role="radiogroup" aria-label="Рамка">
+              {FRAMES.map(f => (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={f.id === frame}
+                  className={f.id === frame ? 'is-active' : undefined}
+                  onClick={() => onPatch({ frame: f.id === 'none' ? undefined : f.id })}
+                >
+                  <span className={`toolbar-frame-preview frame-${f.id}`}>
+                    <span />
+                  </span>
+                  <small>{f.label}</small>
+                </button>
+              ))}
+            </div>
+          </StyleSection>
+          <StyleSection title="Фильтр">
+            <div className="toolbar-choices" role="radiogroup" aria-label="Фильтр">
+              {FILTERS.map(f => (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={f.id === filter}
+                  className={f.id === filter ? 'is-active' : undefined}
+                  onClick={() => onPatch({ filter: f.id === 'none' ? undefined : f.id })}
+                >
+                  {url && <img className="toolbar-filter-preview" src={url} alt="" style={{ filter: f.css }} />}
+                  <small>{f.label}</small>
+                </button>
+              ))}
+            </div>
+          </StyleSection>
+          <StyleSection title="Прозрачность">
+            <OpacitySlider value={block.opacity} onPick={onOpacity} />
+          </StyleSection>
+        </div>
       )}
-
-      {menu === 'filter' && (
-        <ul className="toolbar-menu" style={{ maxHeight: room }} role="listbox" aria-label="Фильтр">
-          {FILTERS.map(f => (
-            <li key={f.id}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={f.id === filter}
-                className={`toolbar-menu-item${f.id === filter ? ' is-active' : ''}`}
-                onClick={() => onPatch({ filter: f.id === 'none' ? undefined : f.id })}
-              >
-                {url && <img className="toolbar-filter-preview" src={url} alt="" style={{ filter: f.css }} />}
-                {f.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {menu === 'opacity' && <OpacityMenu value={block.opacity} onPick={onOpacity} />}
 
       {menu === 'layer' && (
         <div className="toolbar-menu" role="dialog" aria-label="Слой">
@@ -87,19 +89,10 @@ export function ImageToolbar({ block, onPatch, onOpacity, onLayer, onDelete, onD
 
       {menu === 'delete' && <ConfirmDelete what="фото" onDelete={onDelete} onCancel={() => setMenu(null)} />}
 
-      <button type="button" className={menu === 'frame' ? 'is-active' : undefined} aria-label="Рамка" onClick={() => toggle('frame')}>
+      <button type="button" className={menu === 'style' ? 'is-active' : undefined} aria-label="Оформление" aria-expanded={menu === 'style'} onClick={() => toggle('style')}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 4h16v16H4zM8 8h8v8H8z" />
         </svg>
-      </button>
-      <button type="button" className={menu === 'filter' ? 'is-active' : undefined} aria-label="Фильтр" onClick={() => toggle('filter')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="8.5" />
-          <path d="M12 3.5a8.5 8.5 0 0 1 0 17z" style={{ fill: 'currentColor' }} />
-        </svg>
-      </button>
-      <button type="button" className={menu === 'opacity' ? 'is-active' : undefined} aria-label="Прозрачность" onClick={() => toggle('opacity')}>
-        <OpacityIcon />
       </button>
       <button type="button" className={menu === 'layer' ? 'is-active' : undefined} aria-label="Слой" onClick={() => toggle('layer')}>
         <svg viewBox="0 0 24 24" aria-hidden="true">

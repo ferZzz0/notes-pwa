@@ -20,6 +20,7 @@ import {
   spreadOf,
   type Block,
   type Clip,
+  type LookLog,
   type PageLook,
   type Source,
   type Spread,
@@ -215,8 +216,8 @@ function stampDates(next: Spreads, old: Spreads): Spreads {
 
 // Страница сама по себе — чтобы удалить лист или вставить новый (следующие
 // сдвигаются, и левые страницы становятся правыми и наоборот): её надписи и
-// фото в координатах правой страницы, её оформление
-type PageData = { blocks: Block[]; look?: PageLook };
+// фото в координатах правой страницы, её оформление и его история
+type PageData = { blocks: Block[]; look?: PageLook; log?: LookLog };
 
 // x на странице side → x на правой странице и обратно: левая [−850, 0)
 // ложится на [0, 850), а то, что за её внешним краем (лист вырос наружу), —
@@ -236,7 +237,8 @@ function toPages(spreads: Spreads): PageData[] {
         // может уехать на другой разворот
         .map(b => ({ ...b, x: toRightX(b.x, side), day: b.day ?? sp.created }));
       const look = sp.looks?.[side];
-      if (blocks.length > 0 || look) pages[2 * s + (side === 'left' ? 0 : 1)] = { blocks, look };
+      const log = sp.lookLog?.[side];
+      if (blocks.length > 0 || look || log) pages[2 * s + (side === 'left' ? 0 : 1)] = { blocks, look, log };
     }
   }
   return Array.from(pages, p => p ?? { blocks: [] });
@@ -245,24 +247,41 @@ function toPages(spreads: Spreads): PageData[] {
 function fromPages(pages: PageData[]): Spreads {
   const out: Spreads = {};
   pages.forEach((p, i) => {
-    if (p.blocks.length === 0 && !p.look) return;
+    if (p.blocks.length === 0 && !p.look && !p.log) return;
     const side = sideOf(i + 1);
     const sp = (out[spreadOf(i + 1)] ??= { blocks: [] });
     sp.blocks.push(...p.blocks.map(b => ({ ...b, x: fromRightX(b.x, side) })));
     if (p.look) sp.looks = { ...sp.looks, [side]: p.look };
+    if (p.log) sp.lookLog = { ...sp.lookLog, [side]: p.log };
   });
   return out;
 }
 
-// Разворот, у страницы side которого оформление look (пустое — как у
-// приложения: не храним); разворот, где ничего не осталось, — убрать
-function withLook(all: Spreads, s: number, side: Side, look: PageLook): Spreads {
-  const cur = all[s] ?? { blocks: [] };
+// Сколько шагов оформления страницы помнит её «Отменить»
+const LOOK_LOG_SIZE = 50;
+
+// Оформление без пустых полей (пустое — как у приложения)
+function cleanLook(look: PageLook): PageLook {
   const clean: PageLook = {};
   if (look.paper) clean.paper = look.paper;
   if (look.labels) clean.labels = look.labels;
+  return clean;
+}
+const sameLook = (a: PageLook, b: PageLook) => JSON.stringify(cleanLook(a)) === JSON.stringify(cleanLook(b));
+
+// Разворот, у страницы side которого оформление look (пустое — как у
+// приложения: не храним) и история log (undefined — прежняя, null — убрать);
+// разворот, где ничего не осталось, — убрать
+function withLook(all: Spreads, s: number, side: Side, look: PageLook, log?: LookLog | null): Spreads {
+  const cur = all[s] ?? { blocks: [] };
+  const clean = cleanLook(look);
   const looks = { ...cur.looks, [side]: clean.paper || clean.labels ? clean : undefined };
-  const sp: Spread = { ...cur, looks: looks.left || looks.right ? looks : undefined };
+  const logs = log === undefined ? cur.lookLog : { ...cur.lookLog, [side]: log ?? undefined };
+  const sp: Spread = {
+    ...cur,
+    looks: looks.left || looks.right ? looks : undefined,
+    lookLog: logs?.left || logs?.right ? logs : undefined
+  };
   const next = { ...all, [s]: sp };
   if (!isKept(sp)) delete next[s];
   return next;
@@ -1310,21 +1329,46 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     onDay(dir === 'next' ? 1 : -1);
   };
 
-  // --- Настройки листа (шестерёнка в углу страницы) ---
+  // --- Настройки листа (шестерёнка в нижнем ряду) ---
   // Открыта панель страницы n (с 1)
   const [pageMenu, setPageMenu] = useState<number | null>(null);
   const lookOf = (all: Spreads, n: number): PageLook => all[spreadOf(n)]?.looks?.[sideOf(n)] ?? {};
+  const logOf = (all: Spreads, n: number): LookLog => all[spreadOf(n)]?.lookLog?.[sideOf(n)] ?? { past: [], future: [] };
+
+  // Новое оформление страницы n — в запись, а прежнее (то, что записано, а
+  // не показано, пока ведут по палитре) — в историю страницы
+  const lookChanged = (all: Spreads, n: number, look: PageLook): Spreads => {
+    const before = lookOf(saved.current!.spreads, n);
+    if (sameLook(before, look)) return withLook(all, spreadOf(n), sideOf(n), look);
+    const past = [...logOf(saved.current!.spreads, n).past, cleanLook(before)].slice(-LOOK_LOG_SIZE);
+    return withLook(all, spreadOf(n), sideOf(n), look, { past, future: [] });
+  };
 
   // Цвет бумаги или надписей страницы n: пока палец на палитре — только на
-  // экране, отпустили — в запись (отменяется)
+  // экране, отпустили — в запись и историю страницы
   const setLook = (n: number, patch: PageLook, final: boolean) =>
     setSpreads(prev => {
-      const next = withLook(prev, spreadOf(n), sideOf(n), { ...lookOf(prev, n), ...patch });
-      return final ? persist(next) : next;
+      const look = { ...lookOf(prev, n), ...patch };
+      return final ? persist(lookChanged(prev, n, look)) : withLook(prev, spreadOf(n), sideOf(n), look);
     });
 
   // Оформление как у страницы from
-  const copyLook = (n: number, from: number) => commit(withLook(spreads, spreadOf(n), sideOf(n), lookOf(spreads, from)));
+  const copyLook = (n: number, from: number) => commit(lookChanged(spreads, n, lookOf(spreads, from)));
+
+  // «Отменить» / «Вернуть» в настройках листа — только оформление этой
+  // страницы, по её собственной истории (просьба автора)
+  const lookUndo = (n: number) => {
+    const log = logOf(spreads, n);
+    const prev = log.past.at(-1);
+    if (!prev) return;
+    commit(withLook(spreads, spreadOf(n), sideOf(n), prev, { past: log.past.slice(0, -1), future: [...log.future, cleanLook(lookOf(spreads, n))] }));
+  };
+  const lookRedo = (n: number) => {
+    const log = logOf(spreads, n);
+    const next = log.future.at(-1);
+    if (!next) return;
+    commit(withLook(spreads, spreadOf(n), sideOf(n), next, { past: [...log.past, cleanLook(lookOf(spreads, n))], future: log.future.slice(0, -1) }));
+  };
 
   // Убрать со страницы всё (оформление остаётся)
   const clearPage = (n: number) => {
@@ -1643,7 +1687,10 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           page={dayDate ? null : pageMenu}
           pair={dayDate || single ? null : [2 * spread + 1, 2 * spread + 2]}
           onPage={setPageMenu}
-          history={historyButtons}
+          canUndo={logOf(spreads, pageMenu).past.length > 0}
+          canRedo={logOf(spreads, pageMenu).future.length > 0}
+          onUndo={() => lookUndo(pageMenu)}
+          onRedo={() => lookRedo(pageMenu)}
           look={lookOf(spreads, pageMenu)}
           pages={toPages(spreads).length}
           onLook={(patch, final) => setLook(pageMenu, patch, final)}

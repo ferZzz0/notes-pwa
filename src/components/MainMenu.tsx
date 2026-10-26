@@ -11,27 +11,19 @@ type Props = {
   notebooks: NotebookInfo[];
   onOpen: (id: string) => void;
   onDay: (date: string) => void;
-  // Новый дневник; возвращает его id — сразу даём его назвать
-  onCreate: () => string;
+  // Новый дневник; возвращает его — сразу даём его назвать
+  onCreate: () => NotebookInfo;
   onRename: (id: string, name: string) => void;
   // Другой цвет обложки
   onRecolor: (id: string, color: string) => void;
   onDelete: (id: string) => void;
 };
 
-// Поле имени растёт по высоте вместе с текстом — как сама наклейка, а не
-// уезжает вбок в одну строку
-const fitName = (el: HTMLTextAreaElement) => {
-  el.style.height = 'auto';
-  el.style.height = `${el.scrollHeight}px`;
-};
-
-// Поле имени дневника получает фокус прямо в нажатии — иначе iOS не покажет
+// Поле названия получает фокус прямо в нажатии — иначе iOS не покажет
 // клавиатуру. Курсор — в конце названия, без выделения (просьба автора)
-const focusName = (id: string) => {
-  const input = document.getElementById(`diary-name-${id}`);
-  if (input instanceof HTMLTextAreaElement) {
-    fitName(input);
+const focusName = () => {
+  const input = document.getElementById('diary-name');
+  if (input instanceof HTMLInputElement) {
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
   }
@@ -44,12 +36,12 @@ const COVER_WHEEL_SIZE = 200;
 // удалить) и календарь — касание по дню открывает лист этого дня.
 // Горизонтально — две колонки, вертикально — одна под другой.
 export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecolor, onDelete }: Props) {
-  // Дневник, который сейчас называют, и тот, который хотят удалить
+  // Дневник, который правят (окно поверх меню), его название в поле, и тот,
+  // который хотят удалить
   const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
   const [deleting, setDeleting] = useState<NotebookInfo | null>(null);
-  // Дневник, которому выбирают цвет обложки (палитра поверх меню)
-  const [coloring, setColoring] = useState<string | null>(null);
-  const colored = notebooks.find(n => n.id === coloring);
+  const edited = notebooks.find(n => n.id === editing);
   // Всё меню помещается на экране — вверх-вниз оно не двигается (просьба
   // автора: иначе его можно было потянуть и оно «пружинило»)
   const menu = useRef<HTMLDivElement>(null);
@@ -64,19 +56,21 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecol
     return () => observer.disconnect();
   }, []);
 
-  // Начать называть дневник (новый — создаётся в том же нажатии)
-  const startEditing = (pick: () => string) => {
-    let id = '';
+  // Окно дневника (просьба автора): карандаш — название в поле, обложка,
+  // палитра цвета, «Удалить дневник». Новый дневник создаётся в том же
+  // нажатии, и в поле сразу можно печатать
+  const startEditing = (info: NotebookInfo, focus: boolean) => {
     flushSync(() => {
-      id = pick();
-      setEditing(id);
+      setEditing(info.id);
+      setDraft(info.name);
     });
-    focusName(id);
+    if (focus) focusName();
   };
 
-  const finish = (info: NotebookInfo, value: string) => {
-    const name = value.trim();
-    if (name && name !== info.name) onRename(info.id, name);
+  // Название — когда окно закрывают (пустое — прежнее)
+  const finish = () => {
+    const name = draft.trim();
+    if (edited && name && name !== edited.name) onRename(edited.id, name);
     setEditing(null);
   };
 
@@ -88,77 +82,17 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecol
           <div className="diaries">
             {notebooks.map(n => (
               <div key={n.id} className="diary" style={{ '--cover': n.color } as CSSProperties}>
-                {editing === n.id ? (
-                  <div className="diary-cover diary-editing">
-                    <textarea
-                      id={`diary-name-${n.id}`}
-                      className="diary-label diary-input"
-                      defaultValue={n.name}
-                      rows={1}
-                      maxLength={40}
-                      spellCheck={false}
-                      autoCorrect="off"
-                      enterKeyHint="done"
-                      aria-label="Название дневника"
-                      onInput={e => fitName(e.currentTarget)}
-                      // Название — без переносов строк: Enter — готово
-                      onKeyDown={e => {
-                        if (e.key !== 'Enter') return;
-                        e.preventDefault();
-                        finish(n, e.currentTarget.value);
-                      }}
-                      onBlur={e => finish(n, e.currentTarget.value)}
-                    />
-                    {/* Цвет обложки — на круговой палитре (просьба автора):
-                        название готово, палитра — поверх меню */}
-                    <button
-                      type="button"
-                      className="diary-color"
-                      aria-label="Цвет обложки"
-                      onMouseDown={e => e.preventDefault()}
-                      onClick={() => {
-                        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-                        setEditing(null);
-                        setColoring(n.id);
-                      }}
-                    >
-                      <span style={{ background: n.color }} />
-                    </button>
-                    {notebooks.length > 1 && (
-                      <button
-                        type="button"
-                        className="diary-delete"
-                        // Нажатие не должно сначала закрыть поле (blur) и спрятать кнопку
-                        onMouseDown={e => e.preventDefault()}
-                        onClick={() => {
-                          setEditing(null);
-                          setDeleting(n);
-                        }}
-                      >
-                        Удалить дневник
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <button type="button" className="diary-cover" onClick={() => onOpen(n.id)}>
-                      <span className="diary-label">{n.name}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="diary-rename"
-                      aria-label={`Переименовать «${n.name}»`}
-                      onClick={() => startEditing(() => n.id)}
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />
-                      </svg>
-                    </button>
-                  </>
-                )}
+                <button type="button" className="diary-cover" onClick={() => onOpen(n.id)}>
+                  <span className="diary-label">{n.name}</span>
+                </button>
+                <button type="button" className="diary-rename" aria-label={`Изменить «${n.name}»`} onClick={() => startEditing(n, false)}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />
+                  </svg>
+                </button>
               </div>
             ))}
-            <button type="button" className="diary-new" onClick={() => startEditing(onCreate)}>
+            <button type="button" className="diary-new" onClick={() => startEditing(onCreate(), true)}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 5v14M5 12h14" />
               </svg>
@@ -176,17 +110,46 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onRecol
       {/* Настройки приложения — справа вверху */}
       <AppSettings />
 
-      {colored && (
+      {edited && (
         <>
-          <div className="diary-color-backdrop" onClick={() => setColoring(null)} />
-          <div className="diary-color-panel" role="dialog" aria-label="Цвет обложки">
-            <div className="diary-color-preview" style={{ '--cover': colored.color } as CSSProperties}>
-              <span className="diary-label">{colored.name}</span>
+          <div className="diary-color-backdrop" onClick={finish} />
+          <div className="diary-color-panel" role="dialog" aria-label="Дневник">
+            <input
+              id="diary-name"
+              className="diary-name-input"
+              value={draft}
+              maxLength={40}
+              spellCheck={false}
+              autoCorrect="off"
+              enterKeyHint="done"
+              aria-label="Название дневника"
+              onChange={e => setDraft(e.target.value)}
+              // Enter — название готово (клавиатура прячется, окно остаётся)
+              onKeyDown={e => {
+                if (e.key === 'Enter') e.currentTarget.blur();
+              }}
+            />
+            <div className="diary-color-preview" style={{ '--cover': edited.color } as CSSProperties}>
+              <span className="diary-label">{draft.trim() || edited.name}</span>
             </div>
-            <ColorWheel color={colored.color} size={COVER_WHEEL_SIZE} label="Цвет обложки" onPick={c => onRecolor(colored.id, c)} />
-            <button type="button" className="diary-color-done" onClick={() => setColoring(null)}>
-              Готово
-            </button>
+            <ColorWheel color={edited.color} size={COVER_WHEEL_SIZE} label="Цвет обложки" onPick={c => onRecolor(edited.id, c)} />
+            <div className="diary-panel-actions">
+              {notebooks.length > 1 && (
+                <button
+                  type="button"
+                  className="diary-delete"
+                  onClick={() => {
+                    setEditing(null);
+                    setDeleting(edited);
+                  }}
+                >
+                  Удалить дневник
+                </button>
+              )}
+              <button type="button" className="diary-color-done" onClick={finish}>
+                Готово
+              </button>
+            </div>
           </div>
         </>
       )}

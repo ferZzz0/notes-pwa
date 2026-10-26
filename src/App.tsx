@@ -57,7 +57,7 @@ export default function App() {
               color: COVER_COLORS[notebooks.length % COVER_COLORS.length]
             };
             setNotebooks([...notebooks, info]);
-            return info.id;
+            return info;
           }}
           onRename={(id, name) => setNotebooks(notebooks.map(n => (n.id === id ? { ...n, name } : n)))}
           onRecolor={(id, color) => setNotebooks(notebooks.map(n => (n.id === id ? { ...n, color } : n)))}

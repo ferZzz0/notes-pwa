@@ -161,49 +161,6 @@
   }
 }
 
-.toolbar-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 44px;
-  padding: 4px 12px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--ink);
-  font: 16px/1.2 var(--ui-font);
-  text-align: left;
-}
-
-.toolbar-menu-item.is-active {
-  background: color-mix(in srgb, var(--ink) 12%, transparent);
-}
-
-/* Шрифты в списке — каждый своим шрифтом (классы .font-* — TextBlock.css),
-   рукописные покрупнее */
-.toolbar-menu-font .font-hand,
-.toolbar-menu-font .font-script {
-  font-size: 24px;
-}
-
-.toolbar-menu-font .font-marker {
-  font-size: 18px;
-}
-
-.toolbar-menu-font .font-mono {
-  font-weight: 600;
-}
-
-/* Образец эффекта или маркера — цветом и шрифтом надписи */
-.toolbar-menu-preview {
-  min-width: 56px;
-  color: var(--ink-color);
-  font-size: 26px;
-  line-height: 36px;
-  text-align: center;
-}
-
 /* Подтверждение удаления — не полупрозрачное, как списки, а плотное и с
    красной каймой: на бумаге оно не должно сливаться (просьба автора) */
 .toolbar-menu.toolbar-confirm {
@@ -312,39 +269,6 @@
     align-items: center;
     width: max-content;
   }
-}
-
-.toolbar-marker-shapes {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  width: 100%;
-}
-
-.toolbar-marker-shapes button {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  padding: 6px 4px 4px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--muted);
-}
-
-.toolbar-marker-shapes button.is-active {
-  background: color-mix(in srgb, var(--ink) 12%, transparent);
-}
-
-.toolbar-marker-sample {
-  color: var(--ink-color);
-  font-size: 24px;
-  line-height: 32px;
-}
-
-.toolbar-marker-shapes small {
-  font: 11px/1.2 var(--ui-font);
-  white-space: nowrap;
 }
 
 .toolbar-sticker {
@@ -520,4 +444,95 @@
   color: var(--ink);
   font: 600 15px/1 var(--ui-font);
   text-align: right;
+}
+
+/* «Оформление» — один выезжающий список (просьба автора): разделы с
+   заголовками (у надписи — шрифт, эффект, маркер, прозрачность; у фото —
+   рамка, фильтр, прозрачность), варианты — плитками по три */
+.toolbar-style {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(360px, calc(100vw - 24px));
+  padding: 10px 10px 12px;
+}
+
+.toolbar-section-title {
+  margin: 0 0 6px 4px;
+  color: var(--muted);
+  font: 600 11px/1.2 var(--ui-font);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.toolbar-choices {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 100%;
+}
+
+.toolbar-choices button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 4px 4px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+}
+
+.toolbar-choices button.is-active {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.toolbar-choices small {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font: 11px/1.2 var(--ui-font);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Шрифты — по два в ряд, каждый своим шрифтом (классы .font-* —
+   TextBlock.css), рукописные покрупнее */
+.toolbar-fonts {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.toolbar-fonts span {
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.toolbar-fonts .font-hand,
+.toolbar-fonts .font-script {
+  font-size: 22px;
+}
+
+.toolbar-fonts .font-mono {
+  font-weight: 600;
+}
+
+/* Образец эффекта или маркера — цветом и шрифтом надписи */
+.toolbar-choice-sample {
+  color: var(--ink-color);
+  font-size: 24px;
+  line-height: 32px;
+}
+
+/* Маркер в списке: формы, под ними палитра (горизонтально — рядом) */
+.toolbar-style .toolbar-marker {
+  width: 100%;
+  padding: 0;
+}
+
+.toolbar-style .toolbar-opacity {
+  min-width: 0;
+  padding: 4px 6px;
 }

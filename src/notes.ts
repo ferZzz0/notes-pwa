@@ -69,17 +69,23 @@ export type TextStyle = { color?: string; font?: FontId };
 // Оформление страницы (настройки листа): цвет бумаги и цвет её номера и
 // даты (#rrggbb); нет — как у приложения
 export type PageLook = { paper?: string; labels?: string };
+// История оформления страницы — для «Отменить» / «Вернуть» в настройках
+// листа (только этой страницы; хранится вместе с ней — просьба автора)
+export type LookLog = { past: PageLook[]; future: PageLook[] };
 
 export type Spread = {
   // Когда на развороте впервые написали — ГГГГ-ММ-ДД по местному времени
   created?: string;
   blocks: Block[];
-  // Оформление левой и правой страниц
+  // Оформление левой и правой страниц и его история
   looks?: { left?: PageLook; right?: PageLook };
+  lookLog?: { left?: LookLog; right?: LookLog };
 };
 
-// Есть ли у разворота что хранить: что-то на листе или своё оформление
-export const isKept = (s: Spread) => s.blocks.some(b => !isBlank(b)) || !!(s.looks?.left || s.looks?.right);
+// Есть ли у разворота что хранить: что-то на листе, своё оформление или его
+// история
+export const isKept = (s: Spread) =>
+  s.blocks.some(b => !isBlank(b)) || !!(s.looks?.left || s.looks?.right || s.lookLog?.left || s.lookLog?.right);
 
 export type Spreads = Record<number, Spread>;
 

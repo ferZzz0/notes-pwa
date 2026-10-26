@@ -57,7 +57,7 @@ type Props = {
 };
 
 // Что открыто над панелью
-type Menu = 'color' | 'font' | 'effect' | 'marker' | 'sticker' | 'opacity' | 'layer' | 'delete' | null;
+type Menu = 'color' | 'style' | 'sticker' | 'layer' | 'delete' | null;
 
 // Нажатие на панель не забирает фокус у поля ввода — клавиатура остаётся
 export const keepFocus = (e: MouseEvent) => e.preventDefault();
@@ -66,6 +66,7 @@ export const keepFocus = (e: MouseEvent) => e.preventDefault();
 const MENU_MARGIN = 96;
 const WHEEL_SIZE = 180;
 const STICKER_WHEEL_SIZE = 150;
+const MARKER_WHEEL_SIZE = 140;
 
 // Сколько места над панелью — с открытой клавиатурой его мало
 export const menuRoom = (keyboard: number) => Math.max(120, window.innerHeight - keyboard - MENU_MARGIN);
@@ -104,10 +105,10 @@ export function ConfirmDelete({ what, onDelete, onCancel }: { what: string; onDe
 // Непрозрачность — от MIN_OPACITY до 1, шагом 5%
 const MIN_OPACITY = 0.1;
 
-// Прозрачность надписи или фото: ползунок над панелью (свой, на касаниях,
-// как палитра, — обычный ползунок забрал бы фокус у надписи и закрыл
-// клавиатуру). Меняется, пока ведёшь пальцем; отпустили — сохранить
-export function OpacityMenu({ value = 1, onPick }: { value?: number; onPick: (opacity: number, final: boolean) => void }) {
+// Прозрачность надписи или фото: ползунок (свой, на касаниях, как палитра, —
+// обычный ползунок забрал бы фокус у надписи и закрыл клавиатуру). Меняется,
+// пока ведёшь пальцем; отпустили — сохранить
+export function OpacitySlider({ value = 1, onPick }: { value?: number; onPick: (opacity: number, final: boolean) => void }) {
   const track = useRef<HTMLDivElement>(null);
   const pick = (e: PointerEvent<HTMLDivElement>, final: boolean) => {
     const r = track.current!.getBoundingClientRect();
@@ -116,7 +117,7 @@ export function OpacityMenu({ value = 1, onPick }: { value?: number; onPick: (op
   };
   const percent = Math.round(value * 100);
   return (
-    <div className="toolbar-menu toolbar-opacity" role="dialog" aria-label="Прозрачность">
+    <div className="toolbar-opacity">
       <div
         ref={track}
         className="opacity-track"
@@ -148,13 +149,13 @@ export function OpacityMenu({ value = 1, onPick }: { value?: number; onPick: (op
   );
 }
 
-// Значок прозрачности: капля, наполовину светлая
-export function OpacityIcon() {
+// Раздел общего списка оформления: заголовок и его варианты
+export function StyleSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3.5c3.2 4.3 6 7.4 6 10.6a6 6 0 0 1-12 0c0-3.2 2.8-6.3 6-10.6z" />
-      <path d="M6 14.1a6 6 0 0 0 12 0z" style={{ fill: 'currentColor', opacity: 0.45 }} />
-    </svg>
+    <section className="toolbar-section">
+      <p className="toolbar-section-title">{title}</p>
+      {children}
+    </section>
   );
 }
 
@@ -209,10 +210,10 @@ export function LayerButtons({ onLayer }: { onLayer: (dir: 'up' | 'down') => voi
 }
 
 // Панель выбранной надписи или стикера внизу экрана (а при открытой
-// клавиатуре — над ней): цвет текста (круговая палитра), шрифт и эффект
-// (выпадающие списки), маркер (готовые варианты; только у надписи с
-// текстом), у стикера — его форма, цвет и слой, прозрачность (ползунок),
-// удалить (с подтверждением), готово. Списки открываются над панелью, по одному.
+// клавиатуре — над ней): цвет текста (круговая палитра), «Аа» — один список
+// оформления (шрифт, эффект, маркер — на готовом тексте, прозрачность), у
+// стикера — его форма, цвет и слой, у надписи — слой, удалить (с
+// подтверждением), готово. Списки открываются над панелью, по одному.
 export function TextToolbar(props: Props) {
   const { block, keyboard, onColor, onFont, onEffect, onMarker, onMarkerColor, onCapture, rangeStyle, history, onMenu, onSticker, onOpacity, onLayer, onDelete, onDone, onHeight } = props;
   const ref = useToolbarHeight(onHeight);
@@ -264,67 +265,54 @@ export function TextToolbar(props: Props) {
         </div>
       )}
 
-      {menu === 'font' && (
-        <ul className="toolbar-menu" style={{ maxHeight: room }} role="listbox" aria-label="Шрифт">
-          {FONTS.map(f => (
-            <li key={f.id}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={f.id === font}
-                className={`toolbar-menu-item toolbar-menu-font${f.id === font ? ' is-active' : ''}`}
-                onClick={() => onFont(f.id)}
-              >
-                <span className={`font-${f.id}`}>{f.label}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {menu === 'effect' && (
-        <ul className="toolbar-menu" style={{ maxHeight: room }} role="listbox" aria-label="Эффект">
-          {EFFECTS.map(e => (
-            <li key={e.id}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={e.id === effect}
-                className={`toolbar-menu-item${e.id === effect ? ' is-active' : ''}`}
-                onClick={() => onEffect(e.id)}
-              >
-                <span className={`toolbar-menu-preview font-${font} effect-${e.id}`} style={inkStyle}>
-                  Аа
-                </span>
-                {e.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {menu === 'marker' && (
-        <div className="toolbar-menu toolbar-marker" style={{ maxHeight: room }} role="dialog" aria-label="Маркер">
-          <div className="toolbar-marker-shapes" role="radiogroup" aria-label="Форма маркера">
-            {MARKERS.map(m => (
-              <button
-                key={m.id}
-                type="button"
-                role="radio"
-                aria-checked={m.id === marker}
-                className={m.id === marker ? 'is-active' : undefined}
-                onClick={() => onMarker(m.id)}
-              >
-                <span className={`toolbar-marker-sample font-${font}`} style={inkStyle}>
-                  <span className={`mark-${m.id}`} style={{ '--mark': markColor } as CSSProperties}>
-                    текст
+      {/* Шрифт, эффект, маркер и прозрачность — один выезжающий список (просьба
+          автора); выбор его не закрывает */}
+      {menu === 'style' && (
+        <div className="toolbar-menu toolbar-style" style={{ maxHeight: room }} role="dialog" aria-label="Оформление">
+          <StyleSection title="Шрифт">
+            <div className="toolbar-choices toolbar-fonts" role="radiogroup" aria-label="Шрифт">
+              {FONTS.map(f => (
+                <button key={f.id} type="button" role="radio" aria-checked={f.id === font} className={f.id === font ? 'is-active' : undefined} onClick={() => onFont(f.id)}>
+                  <span className={`font-${f.id}`}>{f.label}</span>
+                </button>
+              ))}
+            </div>
+          </StyleSection>
+          <StyleSection title="Эффект">
+            <div className="toolbar-choices" role="radiogroup" aria-label="Эффект">
+              {EFFECTS.map(e => (
+                <button key={e.id} type="button" role="radio" aria-checked={e.id === effect} className={e.id === effect ? 'is-active' : undefined} onClick={() => onEffect(e.id)}>
+                  <span className={`toolbar-choice-sample font-${font} effect-${e.id}`} style={inkStyle}>
+                    Аа
                   </span>
-                </span>
-                <small>{m.label}</small>
-              </button>
-            ))}
-          </div>
-          <ColorWheel color={markColor} base="light" size={STICKER_WHEEL_SIZE} label="Цвет маркера" onPick={onMarkerColor} />
+                  <small>{e.label}</small>
+                </button>
+              ))}
+            </div>
+          </StyleSection>
+          {/* Маркер — на готовый текст */}
+          {block.text.trim() !== '' && (
+            <StyleSection title="Маркер">
+              <div className="toolbar-marker">
+                <div className="toolbar-choices" role="radiogroup" aria-label="Форма маркера">
+                  {MARKERS.map(m => (
+                    <button key={m.id} type="button" role="radio" aria-checked={m.id === marker} className={m.id === marker ? 'is-active' : undefined} onClick={() => onMarker(m.id)}>
+                      <span className={`toolbar-choice-sample font-${font}`} style={inkStyle}>
+                        <span className={`mark-${m.id}`} style={{ '--mark': markColor } as CSSProperties}>
+                          текст
+                        </span>
+                      </span>
+                      <small>{m.label}</small>
+                    </button>
+                  ))}
+                </div>
+                <ColorWheel color={markColor} base="light" size={MARKER_WHEEL_SIZE} label="Цвет маркера" onPick={onMarkerColor} />
+              </div>
+            </StyleSection>
+          )}
+          <StyleSection title="Прозрачность">
+            <OpacitySlider value={block.opacity} onPick={onOpacity} />
+          </StyleSection>
         </div>
       )}
 
@@ -355,8 +343,6 @@ export function TextToolbar(props: Props) {
         </div>
       )}
 
-      {menu === 'opacity' && <OpacityMenu value={block.opacity} onPick={onOpacity} />}
-
       {/* Слой — как у фото (просьба автора); у стикера он в меню «Стикер» */}
       {menu === 'layer' && (
         <div className="toolbar-menu" role="dialog" aria-label="Слой">
@@ -377,29 +363,14 @@ export function TextToolbar(props: Props) {
 
       {opener('color', 'Цвет', <span className="text-toolbar-swatch" style={{ '--color': color } as CSSProperties} />, 'text-toolbar-color')}
       {opener(
-        'font',
-        'Шрифт',
+        'style',
+        'Оформление',
         <>
           <span className={`font-${font}`}>Аа</span>
           <Chevron />
         </>,
         'text-toolbar-font'
       )}
-      {opener(
-        'effect',
-        'Эффект',
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M11 3.5l1.9 5.6 5.6 1.9-5.6 1.9L11 18.5l-1.9-5.6L3.5 11l5.6-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
-        </svg>
-      )}
-      {block.text.trim() !== '' &&
-        opener(
-          'marker',
-          'Маркер',
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M14.5 4.5l5 5-8 8-4-1-1-4zM6.5 12.5l5 5M4 20.5h7" />
-          </svg>
-        )}
       {isSticker &&
         opener(
           'sticker',
@@ -408,7 +379,6 @@ export function TextToolbar(props: Props) {
             <path d="M4.5 4.5h15v10l-5 5h-10zM19.5 14.5h-5v5" />
           </svg>
         )}
-      {opener('opacity', 'Прозрачность', <OpacityIcon />)}
       {!isSticker &&
         opener(
           'layer',

@@ -1,13 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { saveImage } from '../exportPage';
 import type { PageLook } from '../notes';
-import type { WheelBase } from '../textStyle';
-import { isDark } from '../theme';
-import { ColorWheel } from './TextToolbar';
+import { toTone, type Tone } from '../textStyle';
+import { isDark, loadBrand } from '../theme';
+import { ConfirmDialog } from './ConfirmDialog';
+import { TonePalette } from './TonePalette';
 import './PageSettings.css';
 
-// Размер палитры (px)
-const WHEEL_SIZE = 150;
+// Бумага «как у приложения» (index.css: --paper) — от неё считается её
+// тёмный вариант
+const DEFAULT_PAPER = '#fffdf6';
 
 type Props = {
   // Номер листа; у листа дня — null
@@ -15,9 +17,12 @@ type Props = {
   // На развороте — его две страницы: какую настраивать, выбирают вверху
   pair: [number, number] | null;
   onPage: (page: number) => void;
-  // «Отменить» и «Вернуть» — те же, что внизу: оформление отменяется, как
-  // любая правка (просьба автора)
-  history: ReactNode;
+  // «Отменить» и «Вернуть» — оформление только этой страницы, по её
+  // собственной истории (хранится вместе с листом — просьба автора)
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
   look: PageLook;
   // Сколько листов в дневнике (для «как на листе…»)
   pages: number;
@@ -38,11 +43,29 @@ type Confirm = 'clear' | 'delete' | null;
 type Shot = 'busy' | 'error' | { file: File; url: string } | null;
 
 // Настройки листа — шестерёнка в нижнем ряду (просьба автора):
-// цвет бумаги и цвет надписей листа (номер, дата) на круговой палитре,
+// цвет бумаги и цвет надписей листа (номер, дата) на палитре светлых или
+// тёмных цветов,
 // «как у приложения», оформление как у другого листа; очистить лист, удалить
 // его (следующие сдвигаются назад), добавить пустой после (следующие —
 // вперёд). У листа дня — только цвета и очистка
-export function PageSettings({ page, pair, onPage, history, look, pages, onLook, onCopyFrom, onClear, onDelete, onInsertAfter, onExport, onClose }: Props) {
+export function PageSettings({
+  page,
+  pair,
+  onPage,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+  look,
+  pages,
+  onLook,
+  onCopyFrom,
+  onClear,
+  onDelete,
+  onInsertAfter,
+  onExport,
+  onClose
+}: Props) {
   const [target, setTarget] = useState<Target>('paper');
   const [shot, setShot] = useState<Shot>(null);
   // Превью больше не нужно — его адрес освобождаем
@@ -68,13 +91,24 @@ export function PageSettings({ page, pair, onPage, history, look, pages, onLook,
   const others = Array.from({ length: Math.max(pages, page ?? 0) }, (_, i) => i + 1).filter(n => n !== page);
   const [from, setFrom] = useState(others[0] ?? 0);
   const color = target === 'paper' ? look.paper : look.labels;
-  // Палитра от белого (светлые цвета) или от чёрного (тёмные): бумага
-  // обычно светлая, надписи — тёмные; на тёмном листе — наоборот
-  const [bases, setBases] = useState<Record<Target, WheelBase>>(() => ({
+  // Какие цвета на палитре — светлые или тёмные (просьба автора: только
+  // такие). Бумага обычно светлая, надписи — тёмные; на тёмном листе —
+  // наоборот
+  const [tones, setTones] = useState<Record<Target, Tone>>(() => ({
     paper: isDark(look.paper) ? 'dark' : 'light',
     labels: look.labels && !isDark(look.labels) ? 'light' : 'dark'
   }));
-  const base = bases[target];
+  const tone = tones[target];
+  // Переключили — и выбранный цвет сразу становится светлым или тёмным того
+  // же оттенка (без своего — тот, что как у приложения)
+  const switchTone = (next: Tone) => {
+    setTones({ ...tones, [target]: next });
+    const current = color ?? (target === 'paper' ? DEFAULT_PAPER : loadBrand());
+    const now: Tone = isDark(current) ? 'dark' : 'light';
+    if (now === next) return;
+    const c = toTone(current, now, next);
+    onLook(target === 'paper' ? { paper: c } : { labels: c }, true);
+  };
 
   return (
     <>
@@ -92,7 +126,20 @@ export function PageSettings({ page, pair, onPage, history, look, pages, onLook,
           ) : (
             <p className="page-settings-title">{page ? `Лист ${page}` : 'Лист дня'}</p>
           )}
-          <div className="page-settings-history">{history}</div>
+          <div className="page-settings-history">
+            <button type="button" className="round-button" aria-label="Отменить оформление" disabled={!canUndo} onClick={onUndo}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 14 4 9l5-5" />
+                <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+              </svg>
+            </button>
+            <button type="button" className="round-button" aria-label="Вернуть оформление" disabled={!canRedo} onClick={onRedo}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m15 14 5-5-5-5" />
+                <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div className="page-settings-tabs" role="tablist">
@@ -113,16 +160,15 @@ export function PageSettings({ page, pair, onPage, history, look, pages, onLook,
             className={target === 'labels' ? 'is-active' : undefined}
             onClick={() => setTarget('labels')}
           >
-            <span className="page-settings-dot" style={{ background: look.labels ?? 'var(--page-ink)' }} />
+            <span className="page-settings-dot" style={{ background: look.labels ?? (isDark(look.paper) ? 'color-mix(in srgb, var(--brand) 30%, #fff)' : 'var(--page-ink)') }} />
             Номер и дата
           </button>
         </div>
 
         <div className="page-settings-color">
-          <ColorWheel
+          <TonePalette
             color={color}
-            base={base}
-            size={WHEEL_SIZE}
+            tone={tone}
             label={target === 'paper' ? 'Цвет листа' : 'Цвет номера и даты'}
             onPick={(c, final) => onLook(target === 'paper' ? { paper: c } : { labels: c }, final)}
           />
@@ -133,9 +179,9 @@ export function PageSettings({ page, pair, onPage, history, look, pages, onLook,
                   key={b}
                   type="button"
                   role="radio"
-                  aria-checked={base === b}
-                  className={base === b ? 'is-active' : undefined}
-                  onClick={() => setBases({ ...bases, [target]: b })}
+                  aria-checked={tone === b}
+                  className={tone === b ? 'is-active' : undefined}
+                  onClick={() => switchTone(b)}
                 >
                   {b === 'light' ? 'Светлые' : 'Тёмные'}
                 </button>
@@ -188,44 +234,38 @@ export function PageSettings({ page, pair, onPage, history, look, pages, onLook,
           )}
         </div>
 
-        {confirm ? (
-          <div className="page-settings-confirm" role="alertdialog">
-            <p>{confirm === 'clear' ? 'Убрать с листа всё, что на нём есть?' : 'Удалить лист? Следующие сдвинутся на его место.'}</p>
-            <div>
-              <button
-                type="button"
-                className="page-settings-danger"
-                onClick={() => {
-                  setConfirm(null);
-                  if (confirm === 'clear') onClear();
-                  else onDelete();
-                }}
-              >
-                {confirm === 'clear' ? 'Очистить' : 'Удалить'}
-              </button>
-              <button type="button" onClick={() => setConfirm(null)}>
-                Отмена
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="page-settings-actions">
-            {page !== null && (
-              <button type="button" onClick={onInsertAfter}>
-                Добавить лист после
-              </button>
-            )}
-            <button type="button" onClick={() => setConfirm('clear')}>
-              Очистить лист
+        <div className="page-settings-actions">
+          {page !== null && (
+            <button type="button" onClick={onInsertAfter}>
+              Добавить лист после
             </button>
-            {page !== null && (
-              <button type="button" className="page-settings-danger-outline" onClick={() => setConfirm('delete')}>
-                Удалить лист
-              </button>
-            )}
-          </div>
-        )}
+          )}
+          <button type="button" onClick={() => setConfirm('clear')}>
+            Очистить лист
+          </button>
+          {page !== null && (
+            <button type="button" className="page-settings-danger-outline" onClick={() => setConfirm('delete')}>
+              Удалить лист
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Подтверждение — окном посреди экрана, как у удаления (просьба автора) */}
+      {confirm && (
+        <ConfirmDialog
+          title={confirm === 'clear' ? (page ? `Очистить лист ${page}?` : 'Очистить лист?') : `Удалить лист ${page}?`}
+          note={confirm === 'clear' ? 'С листа уберётся всё, что на нём есть.' : 'Следующие листы сдвинутся на его место.'}
+          confirm={confirm === 'clear' ? 'Очистить' : 'Удалить'}
+          cancel="Отмена"
+          onConfirm={() => {
+            setConfirm(null);
+            if (confirm === 'clear') onClear();
+            else onDelete();
+          }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </>
   );
 }
