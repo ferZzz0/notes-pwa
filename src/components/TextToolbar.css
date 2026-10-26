@@ -53,11 +53,17 @@
 
 .toolbar-history {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
   bottom: calc(100% + 8px);
+  /* Не уже панели, группы — по её краям; у узкой панели (брелок,
+     «Закреплено») — шире неё, посередине, и между «Вернуть» и замком не
+     меньше gap (жалоба автора: стояли вплотную) */
+  transform: translateX(-50%);
+  width: max-content;
+  min-width: 100%;
   display: flex;
   justify-content: space-between;
+  gap: 24px;
   /* Между кнопками — касание листа */
   pointer-events: none;
 }
