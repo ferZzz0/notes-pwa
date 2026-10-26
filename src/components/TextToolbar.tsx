@@ -230,10 +230,12 @@ export function TextToolbar(props: Props) {
   const fill = stickerFill(block.sticker, block.fill);
   const room = menuRoom(keyboard);
 
+  // Список выводит надпись из ввода (onMenu) — кроме слоя: две кнопки над
+  // панелью клавиатуре не мешают, и она остаётся (просьба автора)
   const toggle = (m: Menu) => {
     const next = menu === m ? null : m;
     setMenu(next);
-    onMenu?.(next !== null);
+    onMenu?.(next !== null && next !== 'layer');
   };
   // Кнопка, открывающая список
   const opener = (m: Exclude<Menu, null>, label: string, content: ReactNode, className = '') => (

@@ -101,6 +101,9 @@ const GRAB_PAD = 16;
 const MIN_TEXT_SCALE = 0.4;
 const MIN_PHOTO_SCALE = 0.1;
 const MAX_TEXT_SCALE = 4;
+// Размер шрифта новой надписи по зуму — в этих пределах
+const MIN_TEXT_SIZE = 0.2;
+const MAX_TEXT_SIZE = 3;
 const SNAP_DEG = 4;
 const SNAP_SCALE = 0.06;
 // Перелистывание (мс): горизонтально — быстро (просьба автора: сначала в 5 раз
@@ -311,7 +314,12 @@ const sideOfBlock = (b: Block): Side => (b.x < 0 ? 'left' : 'right');
 
 // Наибольшая ширина строк надписи: у левой страницы — не дальше корешка;
 // своя ширина (ручка на рамке) — не шире этого предела
-const widthLimitOf = (b: Block) => (b.x < 0 ? Math.max(MIN_TEXT_WIDTH, Math.min(TEXT_WIDTH, -b.x - SPINE_GAP)) : TEXT_WIDTH);
+// Ширина строк по умолчанию — по размеру шрифта: мелкая надпись (на
+// приближенном листе) переносится раньше и не уходит за экран
+const widthLimitOf = (b: Block) => {
+  const own = TEXT_WIDTH * (b.textSize ?? 1);
+  return b.x < 0 ? Math.max(Math.min(MIN_TEXT_WIDTH, own), Math.min(own, -b.x - SPINE_GAP)) : own;
+};
 const maxWidthOf = (b: Block) => (b.kind !== 'image' && b.width ? Math.min(b.width, widthLimitOf(b)) : widthLimitOf(b));
 // Уже этого (px мира) надпись ручкой не сжать
 const MIN_WRAP_WIDTH = 120;
@@ -546,8 +554,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // ничего и не написали, — сразу; а ту, где был текст, стёрли целиком —
   // только после подтверждения (отмена возвращает текст)
   const dropIfEmpty = (id: string) => {
-    // Из ввода вышли сами — на время списка на панели
-    if (menuHold.current) return;
+    // Из ввода вышли сами — на время списка на панели или перестановки слоя
+    if (menuHold.current || reordering.current) return;
     panCaret.current = null;
     setFocused(f => (f === id ? null : f));
     setTyping(false);
@@ -559,14 +567,31 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   };
 
   // Наверх / вниз среди всего на листе: порядок в списке — порядок слоёв
-  const reorder = (id: string, dir: 'up' | 'down') =>
-    setSpreads(prev => {
-      const cur = prev[spread];
-      const b = cur?.blocks.find(x => x.id === id);
-      if (!cur || !b) return prev;
-      const rest = cur.blocks.filter(x => x.id !== id);
-      return persist({ ...prev, [spread]: { ...cur, blocks: dir === 'up' ? [...rest, b] : [b, ...rest] } });
-    });
+  // Если в надписи печатают — она остаётся в вводе: при перестановке в
+  // документе элемент теряет фокус, и клавиатура пряталась (жалоба автора);
+  // фокус и выделение возвращаем сразу, в том же нажатии (iOS иначе не
+  // покажет клавиатуру)
+  const reordering = useRef(false);
+  const reorder = (id: string, dir: 'up' | 'down') => {
+    const el = blockElement(id);
+    const typingHere = !!el && document.activeElement === el;
+    const range = typingHere ? getRange(el) : null;
+    reordering.current = true;
+    flushSync(() =>
+      setSpreads(prev => {
+        const cur = prev[spread];
+        const b = cur?.blocks.find(x => x.id === id);
+        if (!cur || !b) return prev;
+        const rest = cur.blocks.filter(x => x.id !== id);
+        return persist({ ...prev, [spread]: { ...cur, blocks: dir === 'up' ? [...rest, b] : [b, ...rest] } });
+      })
+    );
+    reordering.current = false;
+    const now = blockElement(id);
+    if (!typingHere || !now || document.activeElement === now) return;
+    now.focus({ preventScroll: true });
+    if (range) setRange(now, range);
+  };
 
   // Добавить на открытый разворот (стикер или фото) и выбрать
   const addBlock = (block: Block) => {
@@ -626,14 +651,23 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Новая надпись там, где коснулись (p, мир): текст начинается чуть левее
   // и выше пальца, на левой странице — не за корешком. Цвет и шрифт — как у
   // прошлой надписи
-  const newText = (p: Point, text = ''): Block => ({
-    id: newBlockId(),
-    x: p.x < 0 ? Math.min(p.x - NEW_TEXT_OFFSET.x, -MIN_TEXT_WIDTH - SPINE_GAP) : Math.max(p.x - NEW_TEXT_OFFSET.x, 0),
-    y: Math.max(0, p.y - NEW_TEXT_OFFSET.y),
-    text,
-    ...(style.color ? { color: style.color } : {}),
-    ...(style.font && style.font !== 'hand' ? { font: style.font } : {})
-  });
+  // Размер шрифта — по зуму листа (просьба автора): на экране надпись
+  // открывается обычной величины, а на листе приближенном она мельче,
+  // на отдалённом — крупнее
+  const newText = (p: Point, text = ''): Block => {
+    const zoom = canvas.current?.zoom() ?? 1;
+    const raw = Math.min(MAX_TEXT_SIZE, Math.max(MIN_TEXT_SIZE, 1 / zoom));
+    const size = Math.abs(raw - 1) < SNAP_SCALE ? 1 : Math.round(raw * 100) / 100;
+    return {
+      id: newBlockId(),
+      x: p.x < 0 ? Math.min(p.x - NEW_TEXT_OFFSET.x * size, -MIN_TEXT_WIDTH - SPINE_GAP) : Math.max(p.x - NEW_TEXT_OFFSET.x * size, 0),
+      y: Math.max(0, p.y - NEW_TEXT_OFFSET.y * size),
+      text,
+      ...(style.color ? { color: style.color } : {}),
+      ...(style.font && style.font !== 'hand' ? { font: style.font } : {}),
+      ...(size !== 1 ? { textSize: size } : {})
+    };
+  };
 
   // Вставленный текст — новая выбранная надпись в точке p; если это текст
   // надписи, скопированной кнопкой «Копировать», — она сама, со всем

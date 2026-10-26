@@ -42,31 +42,32 @@
   user-select: none;
 }
 
-/* Свой шрифт у куска текста — со своим размером (как у надписи этим шрифтом) */
+/* Свой шрифт у куска текста — со своим размером (как у надписи этим шрифтом).
+   --size — размер шрифта надписи (Block.textSize: новая надпись по зуму листа) */
 .run.font-hand {
-  font-size: 40px;
+  font-size: calc(40px * var(--size, 1));
 }
 
 .run.font-script {
-  font-size: 38px;
+  font-size: calc(38px * var(--size, 1));
 }
 
 .run.font-marker {
-  font-size: 32px;
+  font-size: calc(32px * var(--size, 1));
 }
 
 .run.font-print {
-  font-size: 30px;
+  font-size: calc(30px * var(--size, 1));
   font-weight: 400;
 }
 
 .run.font-serif {
-  font-size: 32px;
+  font-size: calc(32px * var(--size, 1));
   font-weight: 400;
 }
 
 .run.font-mono {
-  font-size: 30px;
+  font-size: calc(30px * var(--size, 1));
   font-weight: 600;
 }
 
@@ -161,40 +162,40 @@
 }
 
 .text-block.font-hand {
-  font-size: 40px;
-  line-height: 52px;
-  min-height: 64px;
+  font-size: calc(40px * var(--size, 1));
+  line-height: calc(52px * var(--size, 1));
+  min-height: calc(64px * var(--size, 1));
 }
 
 .text-block.font-script {
-  font-size: 38px;
-  line-height: 52px;
-  min-height: 64px;
+  font-size: calc(38px * var(--size, 1));
+  line-height: calc(52px * var(--size, 1));
+  min-height: calc(64px * var(--size, 1));
 }
 
 .text-block.font-marker {
-  font-size: 32px;
-  line-height: 46px;
-  min-height: 58px;
+  font-size: calc(32px * var(--size, 1));
+  line-height: calc(46px * var(--size, 1));
+  min-height: calc(58px * var(--size, 1));
 }
 
 .text-block.font-print {
-  font-size: 30px;
-  line-height: 42px;
-  min-height: 54px;
+  font-size: calc(30px * var(--size, 1));
+  line-height: calc(42px * var(--size, 1));
+  min-height: calc(54px * var(--size, 1));
 }
 
 .text-block.font-serif {
-  font-size: 32px;
-  line-height: 44px;
-  min-height: 56px;
+  font-size: calc(32px * var(--size, 1));
+  line-height: calc(44px * var(--size, 1));
+  min-height: calc(56px * var(--size, 1));
 }
 
 .text-block.font-mono {
-  font-size: 30px;
-  line-height: 42px;
+  font-size: calc(30px * var(--size, 1));
+  line-height: calc(42px * var(--size, 1));
   font-weight: 600;
-  min-height: 54px;
+  min-height: calc(54px * var(--size, 1));
 }
 
 /* --- Стикеры ---

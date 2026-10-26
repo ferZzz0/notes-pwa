@@ -35,6 +35,8 @@ export type CanvasHandle = {
   // Сдвинуть сразу, без анимации, по свежим границам листа (их только что
   // поменяли пропсы — например, лист удлинили под клавиатуру)
   jump: (dx: number, dy: number) => void;
+  // Во сколько раз лист сейчас крупнее стартового вида (1 — как в начале)
+  zoom: () => number;
 };
 
 type Props = {
@@ -158,7 +160,8 @@ export function Canvas({
       showHome: () => apiRef.current?.showHome(),
       visibleRect: () => apiRef.current!.visibleRect(),
       panBy: (dx, dy) => apiRef.current?.panBy(dx, dy) ?? Promise.resolve(),
-      jump: (dx, dy) => apiRef.current?.jump(dx, dy)
+      jump: (dx, dy) => apiRef.current?.jump(dx, dy),
+      zoom: () => apiRef.current?.zoom() ?? 1
     }),
     []
   );
@@ -397,6 +400,7 @@ export function Canvas({
         flush();
       },
       visibleRect: () => ({ x: -cam.x / cam.scale, y: -cam.y / cam.scale, w: size.w / cam.scale, h: size.h / cam.scale }),
+      zoom: () => cam.scale / homeCamera().scale,
       panBy: (dx, dy) => animateTo({ ...cam, x: cam.x + dx, y: cam.y + dy }, 250),
       jump: (dx, dy) => {
         bounds = computeBounds();

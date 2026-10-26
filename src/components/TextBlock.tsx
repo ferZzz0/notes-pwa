@@ -76,7 +76,8 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
     .filter(Boolean)
     .join(' ');
   const maxWidth = width + 2 * (sticker ? STICKER_PAD_X : BLEED_X);
-  const minWidth = sticker ? STICKER_MIN_WIDTH : MIN_WIDTH;
+  // Мельче шрифт (новая надпись на приближенном листе) — уже и наименьшая ширина
+  const minWidth = sticker ? STICKER_MIN_WIDTH : MIN_WIDTH * (block.textSize ?? 1);
   const runs = runsOf(block);
   const key = JSON.stringify([runs, block.marker ?? null, block.markerColor ?? null]);
 
@@ -117,6 +118,8 @@ export function TextBlock({ block, width, face = false, editing = false, onConte
     maxWidth,
     minWidth,
     '--ink-color': inkColor(block.color),
+    // Размер шрифта (новая надпись — по зуму листа; TextBlock.css: --size)
+    '--size': block.textSize,
     transform: rotate || scale !== 1 ? `rotate(${rotate}deg) scale(${scale})` : undefined,
     opacity: block.opacity
   } as CSSProperties;
