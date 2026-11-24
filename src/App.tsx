@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { deleteImage } from './images';
+import { collectUnusedImages } from './images';
 import {
   COVER_COLORS,
-  deleteNotebookData,
   loadNotebooks,
   loadView,
   localDate,
@@ -14,6 +13,7 @@ import {
 } from './notes';
 import { MainMenu } from './components/MainMenu';
 import { Notebook } from './components/Notebook';
+import { SaveWarning } from './components/SaveWarning';
 import { UpdatePrompt } from './components/UpdatePrompt';
 import './App.css';
 
@@ -35,9 +35,9 @@ export default function App() {
     setViewState(next);
     saveView(next);
   };
-  const setNotebooks = (next: NotebookInfo[]) => {
+  const setNotebooks = (next: NotebookInfo[], removedId?: string) => {
     setNotebooksState(next);
-    saveNotebooks(next);
+    saveNotebooks(next, removedId);
   };
 
   // Открытый блокнот могли удалить — тогда меню
@@ -62,8 +62,8 @@ export default function App() {
           onRename={(id, name) => setNotebooks(notebooks.map(n => (n.id === id ? { ...n, name } : n)))}
           onChange={(id, patch) => setNotebooks(notebooks.map(n => (n.id === id ? { ...n, ...patch } : n)))}
           onDelete={id => {
-            for (const image of deleteNotebookData(id)) void deleteImage(image);
-            setNotebooks(notebooks.filter(n => n.id !== id));
+            setNotebooks(notebooks.filter(n => n.id !== id), id);
+            void collectUnusedImages();
           }}
         />
       ) : (
@@ -76,6 +76,7 @@ export default function App() {
         />
       )}
       <UpdatePrompt />
+      <SaveWarning />
     </div>
   );
 }

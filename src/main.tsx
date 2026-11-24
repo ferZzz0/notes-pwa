@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { resetOnce } from './notes';
+import { keepLegacyResetMarker } from './notes';
 import { applyBrand, loadBrand } from './theme';
 // Рукописные шрифты для тетради; файлы шрифтов собираются в приложение,
 // поэтому работают и офлайн. У дополнительных — только кириллица и латиница
@@ -12,8 +12,7 @@ import '@fontsource/pangolin/cyrillic-400.css';
 import '@fontsource/pangolin/latin-400.css';
 import './index.css';
 
-// До того как тетрадь прочитает записи: разовая очистка, если она есть
-resetOnce();
+keepLegacyResetMarker();
 // Свой цвет приложения — до первой отрисовки, чтобы не мелькал синий
 applyBrand(loadBrand());
 

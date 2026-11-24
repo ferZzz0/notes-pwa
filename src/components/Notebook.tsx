@@ -1,20 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { pageImage } from '../exportPage';
-import { copyImage, imagePng, importImage, keepImages, pixelSize } from '../images';
+import { attachPhoto, collectUnusedImages, copyImage, imagePng, importImage, pixelSize } from '../images';
 import {
-  allImageIds,
   isBlank,
   isKept,
   loadClip,
   loadPage,
-  loadSpreads,
   loadStyle,
   localDate,
   newBlockId,
   saveClip,
   savePage,
-  saveSpreads,
   saveStyle,
   sideOf,
   spreadOf,
@@ -28,6 +25,7 @@ import {
   type TextStyle
 } from '../notes';
 import { usePortrait } from '../orientation';
+import { useNotebookDocument } from '../useNotebookDocument';
 import {
   applyToRange,
   compactRuns,
@@ -161,10 +159,6 @@ const STICKER_SIZE = { w: 230, h: 210 };
 const MENU_GONE_MS = 200;
 // iPhone и iPad (iPad представляется компьютером Mac, но с сенсорным экраном)
 const APPLE_TOUCH = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-// «Отменить»: столько последних действий помним; набор в одной надписи с
-// паузами короче MERGE_MS — одно действие
-const HISTORY_SIZE = 100;
-const MERGE_MS = 1500;
 
 const dateFormat = new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'long' });
 const dayFormat = new Intl.DateTimeFormat('ru', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -207,30 +201,6 @@ function pageDate(sp: Spread | undefined, side: Side): string | null {
   return first ? formatDays(first, last) : null;
 }
 
-// Блок без дат — для сравнения: изменилось ли в нём что-то, кроме них
-const undated = (b: Block) => JSON.stringify({ ...b, day: undefined, edited: undefined });
-
-// Даты блоков перед записью: новый или изменённый блок — день, когда
-// появился (day), и сегодня как день последнего изменения (edited, если не
-// тот же); остальные — как в прежней записи old
-function stampDates(next: Spreads, old: Spreads): Spreads {
-  const today = localDate();
-  const before = new Map<string, { block: Block; created?: string }>();
-  for (const sp of Object.values(old)) for (const block of sp.blocks) before.set(block.id, { block, created: sp.created });
-  const out: Spreads = {};
-  for (const [key, sp] of Object.entries(next)) {
-    const blocks = sp.blocks.map(b => {
-      const o = before.get(b.id);
-      if (o && undated(o.block) === undated(b)) {
-        return b.day === o.block.day && b.edited === o.block.edited ? b : { ...b, day: o.block.day, edited: o.block.edited };
-      }
-      const day = o?.block.day ?? b.day ?? o?.created ?? today;
-      return { ...b, day, edited: day < today ? today : undefined };
-    });
-    out[Number(key)] = { ...sp, blocks };
-  }
-  return out;
-}
 
 // Страница сама по себе — чтобы удалить лист или вставить новый (следующие
 // сдвигаются, и левые страницы становятся правыми и наоборот): её надписи и
@@ -418,10 +388,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const selection = useRef<SelectionHandle>(null);
   const camera = useRef<Camera>({ x: 0, y: 0, scale: 1 });
   const flipDone = useRef<(() => void) | null>(null);
-  const [spreads, setSpreads] = useState(() => loadSpreads(source));
-  // Записи прямо сейчас — для жеста, который длится дольше одной перерисовки
-  const spreadsRef = useRef(spreads);
-  spreadsRef.current = spreads;
   // Выбранная надпись (рамка и панель) и та, которую сейчас печатают
   const [selected, setSelected] = useState<string | null>(null);
   const [focused, setFocused] = useState<string | null>(null);
@@ -468,6 +434,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const [, setFontsLoaded] = useState(0);
 
   const spread = spreadOf(page);
+  const editor = useNotebookDocument(source, spread);
+  const { spreads, commit, preview } = editor;
   const side = sideOf(page);
   const display: PaperDisplay = single && !transit ? side : 'both';
   const home = homeOf(single ? side : 'both');
@@ -476,77 +444,20 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     b => display === 'both' || (display === 'left' ? b.x < 0 : b.x >= 0)
   );
   const selectedBlock = turning ? undefined : visibleBlocks.find(b => b.id === selected);
-  // То, что сейчас записано в память, — от него считаются история и даты
-  const saved = useRef<{ spreads: Spreads; json: string } | null>(null);
-  saved.current ??= { spreads, json: JSON.stringify(spreads) };
-  // «Отменить» / «Вернуть»: записи до и после действий (JSON) — только на
-  // открытом развороте (перелистнули — история с начала, иначе отмена
-  // меняла бы невидимую страницу). key и at — последнее действие: набор в
-  // одной надписи подряд сливается в одно
-  const history = useRef({ spread, past: [] as string[], future: [] as string[], key: '', at: 0 });
-  if (history.current.spread !== spread) history.current = { spread, past: [], future: [], key: '', at: 0 };
-
-  // Записать в память. Новые и изменённые блоки получают даты (stampDates),
-  // прежняя запись уходит в историю; key — что за действие (одинаковые
-  // подряд, с паузами короче MERGE_MS, — одно). Возвращает то, что записано.
-  // stamp = false — даты не трогаем: листы сдвинули (удалили или вставили
-  // лист), надписи переехали, но их никто не менял
-  const persist = (next: Spreads, key = '', stamp = true): Spreads => {
-    const prev = saved.current!;
-    const stamped = stamp ? stampDates(next, prev.spreads) : next;
-    const json = JSON.stringify(stamped);
-    if (json === prev.json) return prev.spreads;
-    const h = history.current;
-    const now = Date.now();
-    if (!key || key !== h.key || now - h.at > MERGE_MS) {
-      h.past.push(prev.json);
-      if (h.past.length > HISTORY_SIZE) h.past.shift();
-    }
-    h.key = key;
-    h.at = now;
-    h.future = [];
-    saved.current = { spreads: stamped, json };
-    saveSpreads(source, stamped);
-    return stamped;
-  };
-
-  const commit = (next: Spreads, key?: string, stamp?: boolean) => setSpreads(persist(next, key, stamp));
-
-  // Вернуть запись из истории (отмена / возврат)
-  // Панель редактирования остаётся открытой (просьба автора), если то, что
-  // выбрано, после отмены на листе есть; нет — выбор снимается
-  const restore = (json: string) => {
-    const next = JSON.parse(json) as Spreads;
-    saved.current = { spreads: next, json };
-    history.current.key = '';
-    saveSpreads(source, next);
-    setSpreads(next);
+  // После отмены выбранная вещь может исчезнуть с листа.
+  const afterRestore = (next: Spreads | undefined) => {
+    if (!next) return;
     captured.current = null;
     setRangeStyle(null);
     if (selected && !Object.values(next).some(s => s.blocks.some(b => b.id === selected))) deselect();
   };
-
-  const undo = () => {
-    const h = history.current;
-    const prev = h.past.pop();
-    if (prev === undefined) return;
-    h.future.push(saved.current!.json);
-    restore(prev);
-  };
-
-  const redo = () => {
-    const h = history.current;
-    const next = h.future.pop();
-    if (next === undefined) return;
-    h.past.push(saved.current!.json);
-    restore(next);
-  };
+  const undo = () => afterRestore(editor.undo());
+  const redo = () => afterRestore(editor.redo());
 
   // Картинки убранных фото стираются не сразу (удаление можно отменить), а
   // при следующем открытии тетради — все, которых нет ни на одном листе
   useEffect(() => {
-    const ids = allImageIds();
-    if (ids) void keepImages(ids);
+    void collectUnusedImages();
   }, []);
 
   // Набранное в надписи — её куски (текст — их сумма)
@@ -559,7 +470,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   };
 
   // Убрать надпись, стикер или фото с листа (картинку фото — потом, см.
-  // keepImages); пустой разворот не храним
+  // collectUnusedImages); пустой разворот не храним
   const removeBlock = (id: string) => {
     const cur = spreads[spread];
     if (!cur) return;
@@ -598,12 +509,12 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     const range = typingHere ? getRange(el) : null;
     reordering.current = true;
     flushSync(() =>
-      setSpreads(prev => {
+      commit(prev => {
         const cur = prev[spread];
         const b = cur?.blocks.find(x => x.id === id);
         if (!cur || !b) return prev;
         const rest = cur.blocks.filter(x => x.id !== id);
-        return persist({ ...prev, [spread]: { ...cur, blocks: dir === 'up' ? [...rest, b] : [b, ...rest] } });
+        return { ...prev, [spread]: { ...cur, blocks: dir === 'up' ? [...rest, b] : [b, ...rest] } };
       })
     );
     reordering.current = false;
@@ -615,9 +526,11 @@ export function Notebook({ source, onMenu, onDay }: Props) {
 
   // Добавить на открытый разворот (стикер или фото) и выбрать
   const addBlock = (block: Block) => {
-    const cur = spreads[spread] ?? { blocks: [] };
     flushSync(() => {
-      commit({ ...spreads, [spread]: { ...cur, created: cur.created ?? localDate(), blocks: [...cur.blocks, block] } });
+      commit(prev => {
+        const cur = prev[spread] ?? { blocks: [] };
+        return { ...prev, [spread]: { ...cur, created: cur.created ?? localDate(), blocks: [...cur.blocks, block] } };
+      });
       setSelected(block.id);
     });
   };
@@ -651,7 +564,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // ставим серединой в точку at (нет — посередине экрана), не шире и не
   // выше доли видимой части листа; маленькую картинку не растягиваем больше
   // её собственного размера на экране — она бы расплылась
-  const addPhoto = async (file: File, at?: Point) => {
+  const addPhoto = (file: File, at?: Point) => attachPhoto(async () => {
     const id = newBlockId();
     let ratio: number;
     let natural: number;
@@ -661,12 +574,13 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       setNotice({ icon: 'photo', title: 'Не получилось открыть фото', note: 'Попробуй выбрать другое.' });
       return;
     }
-    const v = canvas.current!.visibleRect();
+    if (!canvas.current) return;
+    const v = canvas.current.visibleRect();
     const width = Math.round(Math.min(v.w * PHOTO_SHARE.w, (v.h * PHOTO_SHARE.h) / ratio, natural / camera.current.scale));
     const c = at ?? viewCenter();
     const pos = place(width, c.x - width / 2, c.y - (width * ratio) / 2);
     addBlock({ id: newBlockId(), kind: 'image', image: id, width, ratio, ...pos, text: '' });
-  };
+  });
 
   // Новая надпись там, где коснулись (p, мир): текст начинается чуть левее
   // и выше пальца, на левой странице — не за корешком. Цвет и шрифт — как у
@@ -743,17 +657,19 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     const loaded = loadClip();
     if (!loaded) return;
     const { size: _size, locked: _locked, ...c } = loaded;
-    let image = c.image;
-    if (c.kind === 'image' && c.image) {
-      image = newBlockId();
-      if (!(await copyImage(c.image, image))) {
+    const w = c.kind === 'image' ? (c.width ?? 500) : c.kind === 'decal' ? (c.width ?? DECAL_SIZE) : c.kind === 'charm' ? (c.width ?? CHARM_SIZE) : c.kind === 'sticker' ? STICKER_SIZE.w : PASTE_TEXT_WIDTH;
+    const h = c.kind === 'image' ? w * (c.ratio ?? 0.75) : c.kind === 'decal' ? w : c.kind === 'charm' ? charmHeight(w) : STICKER_SIZE.h;
+    const block = { ...c, id: newBlockId(), ...place(w, at.x - w / 2, at.y - h / 2) };
+    const original = c.image;
+    if (c.kind !== 'image' || !original) return addBlock(block);
+    await attachPhoto(async () => {
+      const image = newBlockId();
+      if (!(await copyImage(original, image))) {
         setNotice({ icon: 'photo', title: 'Этого фото уже нет', note: 'Его картинка удалена — скопируй фото ещё раз.' });
         return;
       }
-    }
-    const w = c.kind === 'image' ? (c.width ?? 500) : c.kind === 'decal' ? (c.width ?? DECAL_SIZE) : c.kind === 'charm' ? (c.width ?? CHARM_SIZE) : c.kind === 'sticker' ? STICKER_SIZE.w : PASTE_TEXT_WIDTH;
-    const h = c.kind === 'image' ? w * (c.ratio ?? 0.75) : c.kind === 'decal' ? w : c.kind === 'charm' ? charmHeight(w) : STICKER_SIZE.h;
-    addBlock({ ...c, id: newBlockId(), image, ...place(w, at.x - w / 2, at.y - h / 2) });
+      if (canvas.current) addBlock({ ...block, image });
+    });
   };
 
   // «Вставить» из своего пузырька: картинка из буфера обмена — фото, текст —
@@ -837,13 +753,14 @@ export function Notebook({ source, onMenu, onDay }: Props) {
 
   // Изменить надпись открытого разворота. Пока ведут пальцем по палитре —
   // без записи в память (save = false), в конце — с записью
-  const patchBlock = (id: string, patch: Partial<Block>, save = true) =>
-    setSpreads(prev => {
+  const patchBlock = (id: string, patch: Partial<Block>, save = true) => {
+    const change = save ? commit : preview;
+    change(prev => {
       const cur = prev[spread];
       if (!cur) return prev;
-      const next = { ...prev, [spread]: { ...cur, blocks: cur.blocks.map(b => (b.id === id ? { ...b, ...patch } : b)) } };
-      return save ? persist(next) : next;
+      return { ...prev, [spread]: { ...cur, blocks: cur.blocks.map(b => (b.id === id ? { ...b, ...patch } : b)) } };
     });
+  };
 
   // Куда можно поставить надпись шириной w (текст, мир) с левым верхним углом
   // (x, y): не выше верха листа и не через корешок — целиком на той
@@ -915,7 +832,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const restyle = (id: string, patch: Partial<Record<keyof RunStyle, string>>, save = true) => {
     const range = captured.current;
     const keys = Object.keys(patch) as (keyof RunStyle)[];
-    setSpreads(prev => {
+    const change = save ? commit : preview;
+    change(prev => {
       const cur = prev[spread];
       const b = cur?.blocks.find(x => x.id === id);
       if (!cur || !b) return prev;
@@ -927,8 +845,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         for (const k of keys) whole[k] = patch[k] === 'none' ? undefined : patch[k];
         nb = { ...b, ...whole, runs: compactRuns(stripStyle(runsOf(b), keys)) };
       }
-      const next = { ...prev, [spread]: { ...cur, blocks: cur.blocks.map(x => (x.id === id ? nb : x)) } };
-      return save ? persist(next) : next;
+      return { ...prev, [spread]: { ...cur, blocks: cur.blocks.map(x => (x.id === id ? nb : x)) } };
     });
     // Выделение вернётся после того, как надпись построится заново; список
     // на панели отмечает новое оформление куска
@@ -1117,7 +1034,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     // Надпись и пальцы (мир), когда жест начался или пальцев стало больше/меньше
     let base: { pts: Point[]; block: Block } | null = null;
     const begin = (pts: Point[]) => {
-      const now = spreadsRef.current[spread]?.blocks.find(x => x.id === b.id) ?? b;
+      const now = editor.current()[spread]?.blocks.find(x => x.id === b.id) ?? b;
       base = { pts: pts.map(toWorld), block: { ...now, ...moved } };
     };
     return {
@@ -1188,7 +1105,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     // Поле должно появиться и получить фокус прямо в обработчике касания:
     // иначе iOS не покажет клавиатуру
     flushSync(() => {
-      setSpreads({ ...spreads, [spread]: { ...cur, blocks: [...cur.blocks, block] } });
+      preview({ ...spreads, [spread]: { ...cur, blocks: [...cur.blocks, block] } });
       setSelected(block.id);
     });
     edit(block.id);
@@ -1406,7 +1323,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     if (targetSpread !== spread) {
       await canvas.current?.goHome(undefined, TURN_HOME_MS);
       await turnSheet(dir, spread, targetSpread);
-      if (keepHistory) history.current.spread = targetSpread;
+      if (keepHistory) editor.keepHistoryOn(targetSpread);
       flushSync(() => {
         setFlip(null);
         setPage(target);
@@ -1442,19 +1359,22 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Новое оформление страницы n — в запись, а прежнее (то, что записано, а
   // не показано, пока ведут по палитре) — в историю страницы
   const lookChanged = (all: Spreads, n: number, look: PageLook): Spreads => {
-    const before = lookOf(saved.current!.spreads, n);
+    const last = editor.lastEdit();
+    const before = lookOf(last, n);
     if (sameLook(before, look)) return withLook(all, spreadOf(n), sideOf(n), look);
-    const past = [...logOf(saved.current!.spreads, n).past, cleanLook(before)].slice(-LOOK_LOG_SIZE);
+    const past = [...logOf(last, n).past, cleanLook(before)].slice(-LOOK_LOG_SIZE);
     return withLook(all, spreadOf(n), sideOf(n), look, { past, future: [] });
   };
 
   // Цвет бумаги или надписей страницы n: пока палец на палитре — только на
   // экране, отпустили — в запись и историю страницы
-  const setLook = (n: number, patch: PageLook, final: boolean) =>
-    setSpreads(prev => {
+  const setLook = (n: number, patch: PageLook, final: boolean) => {
+    const change = final ? commit : preview;
+    change(prev => {
       const look = { ...lookOf(prev, n), ...patch };
-      return final ? persist(lookChanged(prev, n, look)) : withLook(prev, spreadOf(n), sideOf(n), look);
+      return final ? lookChanged(prev, n, look) : withLook(prev, spreadOf(n), sideOf(n), look);
     });
+  };
 
   // Оформление как у страницы from
   const copyLook = (n: number, from: number) => commit(lookChanged(spreads, n, lookOf(spreads, from)));
@@ -1560,13 +1480,13 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // или фото — над ней (просьба автора: видны и при редактировании)
   const historyButtons = (
     <>
-      <button type="button" className="round-button" aria-label="Отменить" disabled={history.current.past.length === 0} onClick={undo}>
+      <button type="button" className="round-button" aria-label="Отменить" disabled={!editor.canUndo} onClick={undo}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M9 14 4 9l5-5" />
           <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
         </svg>
       </button>
-      <button type="button" className="round-button" aria-label="Вернуть" disabled={history.current.future.length === 0} onClick={redo}>
+      <button type="button" className="round-button" aria-label="Вернуть" disabled={!editor.canRedo} onClick={redo}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="m15 14 5-5-5-5" />
           <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />

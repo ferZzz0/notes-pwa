@@ -33,6 +33,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: npm test
       - run: npm run build
       # На незнакомые пути GitHub Pages отдаёт 404.html — пусть это будет
       # само приложение

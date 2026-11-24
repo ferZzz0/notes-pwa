@@ -2,6 +2,7 @@
   "compilerOptions": {
     // Код собирает Vite, tsc используется только для проверки типов
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",

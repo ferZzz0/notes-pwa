@@ -1,0 +1,36 @@
+.save-warning {
+  position: fixed;
+  z-index: 101;
+  top: calc(var(--safe-top) + 8px);
+  left: calc(var(--safe-left) + 8px);
+  right: calc(var(--safe-right) + 8px);
+  margin: 0 auto;
+  max-width: 32rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger-line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font: 0.875rem/1.35 var(--ui-font);
+}
+
+.save-warning strong { color: var(--danger); }
+.save-warning p { margin: 2px 0 0; }
+
+/* Шестерёнка главного меню остаётся доступной рядом с сообщением. */
+.main-menu ~ .save-warning { right: calc(var(--safe-right) + 64px); }
+
+.save-warning button {
+  margin-left: auto;
+  min-height: 44px;
+  padding: 4px 10px;
+  border: 1px solid var(--danger-line);
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-weight: 600;
+}

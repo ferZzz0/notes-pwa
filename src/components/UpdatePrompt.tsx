@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { getSaveProblem } from '../noteStorage';
+import { reloadAfterSaving } from '../update';
 import './UpdatePrompt.css';
 
 // Как часто спрашивать сервер о новой версии, пока приложение открыто.
@@ -33,6 +35,7 @@ export function UpdatePrompt() {
     needRefresh: [needRefresh],
     updateServiceWorker
   } = useRegisterSW({
+    onNeedReload: reloadAfterSaving,
     onRegisteredSW(_swUrl, registration) {
       if (!registration) return;
       const check = () => void registration.update().catch(() => {});
@@ -72,11 +75,11 @@ export function UpdatePrompt() {
       if (done) return;
       done = true;
       void updateServiceWorker(true).then(() => {
-        if (!navigator.serviceWorker.controller) window.location.reload();
+        if (!navigator.serviceWorker.controller) reloadAfterSaving();
       });
     };
     const tryNow = () => {
-      if (document.visibilityState === 'hidden' || idle()) apply();
+      if (!getSaveProblem() && (document.visibilityState === 'hidden' || idle())) apply();
     };
     tryNow();
     const timer = setInterval(tryNow, BUSY_RETRY_MS);

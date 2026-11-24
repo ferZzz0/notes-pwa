@@ -5,6 +5,9 @@
 // память телефона не резиновая. PNG (и другие картинки с прозрачностью)
 // остаются PNG, остальное — JPEG.
 
+import { allImageIds } from './notes';
+import { getSaveProblem, subscribeToSaveStatus } from './noteStorage';
+
 const DB_NAME = 'notes-pwa-images';
 const STORE = 'images';
 const MAX_SIDE = 1600;
@@ -26,9 +29,10 @@ function run<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDB
   return db().then(
     d =>
       new Promise<T>((resolve, reject) => {
-        const req = action(d.transaction(STORE, mode).objectStore(STORE));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+        const tx = d.transaction(STORE, mode);
+        const req = action(tx.objectStore(STORE));
+        tx.oncomplete = () => resolve(req.result);
+        tx.onabort = () => reject(tx.error ?? new Error('Не удалось завершить запись фото'));
       })
   );
 }
@@ -50,7 +54,7 @@ export async function imageUrl(id: string): Promise<string | null> {
 // Уже открытая картинка — сразу, без ожидания (для перерисовки)
 export const knownImageUrl = (id: string) => urls.get(id) ?? null;
 
-export async function deleteImage(id: string): Promise<void> {
+async function deleteImage(id: string): Promise<void> {
   const url = urls.get(id);
   if (url) URL.revokeObjectURL(url);
   urls.delete(id);
@@ -101,9 +105,35 @@ export async function copyImage(from: string, to: string): Promise<boolean> {
 // Стереть картинки, которых нет ни на одном листе: фото с листа убирают
 // сразу, а картинку — потом (Notebook при открытии), чтобы удаление можно
 // было отменить
-export async function keepImages(ids: Set<string>): Promise<void> {
-  const keys = await run<IDBValidKey[]>('readonly', s => s.getAllKeys()).catch((): IDBValidKey[] => []);
-  for (const key of keys) if (typeof key === 'string' && !ids.has(key)) await deleteImage(key);
+const PHOTO_LOCK = 'notes-pwa:photo-references';
+
+// Фото уже может лежать в IndexedDB, пока его лист ещё только в черновике.
+// До записи ссылки другая вкладка тоже не должна принять это фото за лишнее.
+export async function attachPhoto(attach: () => Promise<void>): Promise<void> {
+  if (!navigator.locks) return attach();
+  await navigator.locks.request(PHOTO_LOCK, { mode: 'shared' }, async () => {
+    await attach();
+    if (!getSaveProblem()) return;
+    await new Promise<void>(resolve => {
+      const stop = subscribeToSaveStatus(() => {
+        if (getSaveProblem()) return;
+        stop();
+        resolve();
+      });
+    });
+  });
+}
+
+export async function collectUnusedImages(): Promise<void> {
+  // Без межвкладочной блокировки безопасно оставить фото до явной очистки.
+  if (!navigator.locks || getSaveProblem()) return;
+  await navigator.locks.request(PHOTO_LOCK, { ifAvailable: true }, async lock => {
+    if (!lock) return;
+    const keys = await run<IDBValidKey[]>('readonly', s => s.getAllKeys());
+    const ids = allImageIds();
+    if (!ids) return;
+    for (const key of keys) if (typeof key === 'string' && !ids.has(key)) await deleteImage(key);
+  }).catch(() => {});
 }
 
 // Стереть все картинки (настройки → «Стереть все данные»)

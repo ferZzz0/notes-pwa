@@ -8,6 +8,7 @@
 
 import type { Run } from './richText';
 import type { EffectId, FilterId, FontId, FrameId, MarkerId, StickerId } from './textStyle';
+import { discardPending, getSaveProblem, localRecord, pendingJson, pendingKeys, readDocument, saveRecord, type StoredRecord } from './noteStorage.ts';
 
 export type Block = {
   id: string;
@@ -110,12 +111,9 @@ const OLD_PAGES_KEY = 'notes-pwa:pages';
 const OLD_DRAFT_KEY = 'notes-pwa:draft';
 const STYLE_KEY = 'notes-pwa:style';
 
-// Разовая очистка: при первом запуске версии с новым RESET_ID устройство
-// стирает все записи и запоминает это, так что записи, сделанные после,
-// остаются. Нужна, чтобы стереть данные у всех пользователей сразу (их
-// записи есть только на их устройствах). Стереть ещё раз — сменить RESET_ID.
-// 2026-10-25 — по решению автора приложения (тестовые записи).
-const RESET_ID = '2026-10-25';
+// Старые версии узнают эту отметку. Оставляем её и при откате приложения:
+// отсутствие отметки больше не повод удалять чьи-либо записи при запуске.
+const LEGACY_RESET_ID = '2026-10-25';
 const RESET_KEY = 'notes-pwa:reset';
 // Все ключи приложения, включая прежние форматы и убранные настройки
 const ALL_KEYS = [SPREADS_KEY, PAGE_KEY, OLD_SPREAD_KEY, OLD_PAGES_KEY, OLD_DRAFT_KEY, STYLE_KEY, 'notes-pwa:settings'];
@@ -124,6 +122,9 @@ const ALL_KEYS = [SPREADS_KEY, PAGE_KEY, OLD_SPREAD_KEY, OLD_PAGES_KEY, OLD_DRAF
 // все ключи приложения — и известные, и с id блокнота. Отметку о разовой
 // очистке не трогаем — иначе она прошла бы ещё раз
 export function clearAll(): void {
+  discardPending();
+  removedNotebooks.clear();
+  legacySources = null;
   try {
     for (const key of ALL_KEYS) localStorage.removeItem(key);
     for (const key of Object.keys(localStorage)) {
@@ -134,13 +135,11 @@ export function clearAll(): void {
   }
 }
 
-export function resetOnce(): void {
+export function keepLegacyResetMarker(): void {
   try {
-    if (localStorage.getItem(RESET_KEY) === RESET_ID) return;
-    clearAll();
-    localStorage.setItem(RESET_KEY, RESET_ID);
+    if (localStorage.getItem(RESET_KEY) === null) localStorage.setItem(RESET_KEY, LEGACY_RESET_ID);
   } catch {
-    // Память недоступна — стирать нечего
+    // Метка нужна только прежним версиям приложения.
   }
 }
 
@@ -167,11 +166,13 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
-function write(key: string, value: unknown): void {
+// Положение и настройки интерфейса сохраняются по возможности. Они не
+// влияют на состояние записи самих блокнотов и листов.
+function writePreference(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // Память недоступна (приватный режим) — записи живут до перезагрузки
+    // Настройка действует до закрытия приложения.
   }
 }
 
@@ -179,31 +180,51 @@ function write(key: string, value: unknown): void {
 const OLD_PAGE_X = { left: -700, right: 60 };
 const OLD_PAGE_Y = 140;
 
+let legacySources: { pages: string | null; draft: string | null } | null = null;
+
+// Исходники переноса удаляем только после успешной записи в формате разворотов.
+function finishMigration(): void {
+  if (!legacySources) return;
+  try {
+    if (legacySources.pages !== null && localStorage.getItem(OLD_PAGES_KEY) === legacySources.pages) localStorage.removeItem(OLD_PAGES_KEY);
+    if (legacySources.draft !== null && localStorage.getItem(OLD_DRAFT_KEY) === legacySources.draft) localStorage.removeItem(OLD_DRAFT_KEY);
+    legacySources = null;
+  } catch {
+    // Новая копия уже записана. При следующем открытии те же id не задвоятся.
+  }
+}
+
 function migrate(spreads: Spreads): void {
   try {
-    const pages = read<Record<string, { text: string; created: string }>>(OLD_PAGES_KEY, {});
+    const rawPages = localStorage.getItem(OLD_PAGES_KEY);
     const draft = localStorage.getItem(OLD_DRAFT_KEY);
-    if (draft && !pages[2]) pages[2] = { text: draft, created: localDate() };
-    const entries = Object.entries(pages);
+    if (rawPages === null && draft === null) return;
+    const pages = JSON.parse(rawPages ?? '{}') as Record<string, { text: string; created: string }>;
+    const entries = Object.entries(pages).map(([key, page]) => ({ n: Number(key), id: `legacy-page-${key}`, ...page }));
+    // На некоторых устройствах остались оба формата. Разный текст на
+    // странице 2 и в черновике сохраняем отдельными надписями.
+    if (draft && draft !== pages[2]?.text) entries.push({ n: 2, id: 'legacy-draft', text: draft, created: localDate() });
     if (entries.length === 0 && draft === null) return;
 
-    for (const [key, page] of entries) {
-      const n = Number(key);
+    if (entries.some(p => !Number.isInteger(p.n) || p.n < 1 || typeof p.text !== 'string')) return;
+    const existing = new Set(Object.values(spreads).flatMap(s => s.blocks.map(b => b.id)));
+    for (const page of entries) {
+      const { n, id } = page;
       if (!page.text) continue;
       const s = Math.floor((n - 1) / 2);
       const spread = spreads[s] ?? { blocks: [] };
+      if (existing.has(id)) continue;
       spread.blocks.push({
-        id: newBlockId(),
+        id,
         x: n % 2 === 1 ? OLD_PAGE_X.left : OLD_PAGE_X.right,
-        y: OLD_PAGE_Y,
+        y: OLD_PAGE_Y + (id === 'legacy-draft' && pages[2]?.text ? 100 : 0),
         text: page.text
       });
       if (!spread.created || page.created < spread.created) spread.created = page.created;
       spreads[s] = spread;
     }
-    write(SPREADS_KEY, spreads);
-    localStorage.removeItem(OLD_PAGES_KEY);
-    localStorage.removeItem(OLD_DRAFT_KEY);
+    legacySources = { pages: rawPages, draft };
+    saveSpreads({ kind: 'notebook', id: FIRST_NOTEBOOK }, spreads);
   } catch {
     // нет доступа к памяти — переносить нечего
   }
@@ -242,26 +263,38 @@ const pageKey = (id: string) => (id === FIRST_NOTEBOOK ? PAGE_KEY : `${PAGE_KEY}
 const renamed = (name: string) => (name === 'Мой дневник' ? 'Мой блокнот' : name.replace(/^Дневник (\d+)$/, 'Блокнот $1'));
 
 export function loadNotebooks(): NotebookInfo[] {
-  const list = read<NotebookInfo[] | null>(NOTEBOOKS_KEY, null);
+  const list = readDocument<NotebookInfo[] | null>(NOTEBOOKS_KEY, null);
   return Array.isArray(list) && list.length > 0
     ? list.map(n => ({ ...n, name: renamed(n.name) }))
     : [{ id: FIRST_NOTEBOOK, name: 'Мой блокнот', color: COVER_COLORS[0] }];
 }
 
-export function saveNotebooks(list: NotebookInfo[]): void {
-  write(NOTEBOOKS_KEY, list);
-}
+const removedNotebooks = new Set<string>();
 
-// Стереть записи блокнота; возвращает id его фото — их стирает images.ts
-export function deleteNotebookData(id: string): string[] {
-  const spreads = read<Spreads>(spreadsKey(id), {});
-  try {
-    localStorage.removeItem(spreadsKey(id));
-    localStorage.removeItem(pageKey(id));
-  } catch {
-    // Память недоступна — стирать нечего
-  }
-  return Object.values(spreads).flatMap(s => s.blocks.map(b => b.image).filter((x): x is string => !!x));
+export function saveNotebooks(list: NotebookInfo[], removedId?: string): void {
+  if (removedId !== undefined) removedNotebooks.add(removedId);
+  saveRecord(NOTEBOOKS_KEY, JSON.stringify(list), localRecord(NOTEBOOKS_KEY), () => {
+    // Сначала сохранить список. Если запись не удалась, у прежнего блокнота
+    // остаются и листы, и фотографии. Повтор завершит подтверждённое удаление.
+    for (const id of removedNotebooks) {
+      if (!list.some(n => n.id === id)) {
+        discardPending(spreadsKey(id));
+        try {
+          localStorage.removeItem(spreadsKey(id));
+          localStorage.removeItem(pageKey(id));
+          if (id === FIRST_NOTEBOOK) {
+            localStorage.removeItem(OLD_PAGES_KEY);
+            localStorage.removeItem(OLD_DRAFT_KEY);
+            legacySources = null;
+          }
+        } catch {
+          // Лучше оставить лишнюю копию. При следующей записи списка повторим.
+          continue;
+        }
+      }
+      removedNotebooks.delete(id);
+    }
+  });
 }
 
 // Метка запуска (sessionStorage живёт, пока приложение открыто, и
@@ -291,24 +324,63 @@ export function loadView(): View {
 }
 
 export function saveView(view: View): void {
-  write(VIEW_KEY, view);
+  writePreference(VIEW_KEY, view);
 }
 
-const readDays = () => read<Record<string, Spread>>(DAYS_KEY, {});
+// На диске все дни по-прежнему в одном ключе. На повторной попытке меняем
+// только свою дату в свежих данных, сохраняя остальные дни из других вкладок.
+const dayPrefix = `${DAYS_KEY}:`;
+function storedDays(): Record<string, Spread> {
+  const days = JSON.parse(localStorage.getItem(DAYS_KEY) ?? '{}');
+  if (!days || Array.isArray(days) || typeof days !== 'object') throw new Error('Не удалось прочитать календарь');
+  return days;
+}
+
+function dayRecord(date: string): StoredRecord {
+  return {
+    read() {
+      const day = storedDays()[date];
+      return day ? JSON.stringify(day) : null;
+    },
+    write(json) {
+      const days = storedDays();
+      if (json === 'null') {
+        if (!(date in days)) return;
+        delete days[date];
+      } else {
+        days[date] = JSON.parse(json) as Spread;
+      }
+      localStorage.setItem(DAYS_KEY, JSON.stringify(days));
+    }
+  };
+}
 
 // Дни, на листах которых что-то есть (для отметок в календаре)
 export function daysWithNotes(): Set<string> {
-  return new Set(
-    Object.entries(readDays())
-      .filter(([, s]) => s.blocks.some(b => !isBlank(b)))
-      .map(([d]) => d)
-  );
+  const marked = new Set<string>();
+  try {
+    for (const [date, day] of Object.entries(storedDays())) {
+      if (day.blocks.some(b => !isBlank(b))) marked.add(date);
+    }
+  } catch {
+    // Если календарь не прочитался, доступны отметки из черновиков.
+  }
+  for (const key of pendingKeys()) {
+    if (!key.startsWith(dayPrefix)) continue;
+    const day = JSON.parse(pendingJson(key)!) as Spread | null;
+    const date = key.slice(dayPrefix.length);
+    if (day?.blocks.some(b => !isBlank(b))) marked.add(date);
+    else marked.delete(date);
+  }
+  return marked;
 }
 
 // id всех фото на всех листах (блокноти и дни): остальные картинки в
 // IndexedDB никому не нужны. null — память не прочитать, и тогда ничего не
 // стираем
 export function allImageIds(): Set<string> | null {
+  // На листе в памяти могут быть новые фото, а на диске — ещё старые.
+  if (getSaveProblem()) return null;
   const ids = new Set<string>();
   try {
     for (const key of Object.keys(localStorage)) {
@@ -328,11 +400,11 @@ type OldCharm = { decal: string; glitter: number; size: number };
 export function loadSpreads(source: Source): Spreads {
   let spreads: Spreads;
   if (source.kind === 'day') {
-    const day = readDays()[source.date];
+    const day = readDocument<Spread | null>(dayPrefix + source.date, null, dayRecord(source.date));
     spreads = day ? { 0: day } : {};
   } else {
-    spreads = read<Spreads>(spreadsKey(source.id), {});
-    if (source.id === FIRST_NOTEBOOK) migrate(spreads);
+    spreads = readDocument<Spreads>(spreadsKey(source.id), {});
+    if (source.id === FIRST_NOTEBOOK && pendingJson(SPREADS_KEY) === undefined) migrate(spreads);
   }
   // Пустые блоки могли остаться, если приложение закрыли, ничего не написав
   for (const s of Object.values(spreads)) s.blocks = s.blocks.filter(b => !isBlank(b));
@@ -356,16 +428,14 @@ export function loadSpreads(source: Source): Spreads {
   return spreads;
 }
 
-export function saveSpreads(source: Source, spreads: Spreads): void {
+export function saveSpreads(source: Source, spreads: Spreads, json?: string): void {
   if (source.kind === 'notebook') {
-    write(spreadsKey(source.id), spreads);
+    const key = spreadsKey(source.id);
+    saveRecord(key, json ?? JSON.stringify(spreads), localRecord(key), source.id === FIRST_NOTEBOOK ? finishMigration : undefined);
     return;
   }
-  const days = readDays();
   const day = spreads[0];
-  if (day && isKept(day)) days[source.date] = day;
-  else delete days[source.date];
-  write(DAYS_KEY, days);
+  saveRecord(dayPrefix + source.date, JSON.stringify(day && isKept(day) ? day : null), dayRecord(source.date));
 }
 
 // Открытая страница (с 1) — чтобы после перезапуска вернуться туда же.
@@ -380,7 +450,7 @@ export function loadPage(source: Source): number {
 }
 
 export function savePage(source: Source, n: number): void {
-  if (source.kind === 'notebook') write(pageKey(source.id), n);
+  if (source.kind === 'notebook') writePreference(pageKey(source.id), n);
 }
 
 // Скопированное кнопкой «Копировать»: надпись, стикер или фото со всем
@@ -396,7 +466,7 @@ export function loadClip(): Clip | null {
 }
 
 export function saveClip(clip: Clip): void {
-  write(CLIP_KEY, clip);
+  writePreference(CLIP_KEY, clip);
 }
 
 // Какой раздел «+» развёрнут — «Стикеры», «Наклейки» или «Брелоки» (только один)
@@ -407,7 +477,7 @@ export function loadAddSection(): AddSection {
   return v === 'stickers' || v === 'decals' || v === 'charms' ? v : null;
 }
 export function saveAddSection(v: AddSection): void {
-  write(ADD_SECTION_KEY, v);
+  writePreference(ADD_SECTION_KEY, v);
 }
 
 // Блёстки новых наклеек — как выбрали в «+» последний раз
@@ -417,7 +487,7 @@ export function loadGlitter(fallback: number): number {
   return typeof v === 'number' && v >= 0 && v <= 1 ? v : fallback;
 }
 export function saveGlitter(v: number): void {
-  write(GLITTER_KEY, v);
+  writePreference(GLITTER_KEY, v);
 }
 
 export function loadStyle(): TextStyle {
@@ -425,7 +495,7 @@ export function loadStyle(): TextStyle {
 }
 
 export function saveStyle(style: TextStyle): void {
-  write(STYLE_KEY, style);
+  writePreference(STYLE_KEY, style);
 }
 
 // Разворот и сторона страницы n (с 1): нечётные — слева, чётные — справа

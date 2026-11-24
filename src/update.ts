@@ -3,6 +3,21 @@
 // пока приложение открыто; кнопка же сама спрашивает сервер, дожидается
 // скачивания и включает новую версию, а по дороге говорит, что происходит.
 
+import { getSaveProblem, subscribeToSaveStatus } from './noteStorage';
+
+// Service worker может смениться и по команде из другой вкладки. Проверяем
+// черновики также в момент самой перезагрузки, уже после скачивания.
+let stopWaiting: (() => void) | undefined;
+export function reloadAfterSaving(): void {
+  if (getSaveProblem()) {
+    stopWaiting ??= subscribeToSaveStatus(reloadAfterSaving);
+    return;
+  }
+  stopWaiting?.();
+  stopWaiting = undefined;
+  location.reload();
+}
+
 // Сколько ждать скачивания новой версии: при торможении Cloudflare (README)
 // оно может зависнуть
 const INSTALL_TIMEOUT_MS = 60_000;
@@ -48,9 +63,13 @@ const installed = (sw: ServiceWorker) =>
 // Проверить, скачать и включить новую версию. onStatus — что сейчас
 // происходит (для панели настроек); в конце — перезагрузка или итог
 export async function updateNow(onStatus: (text: string) => void): Promise<void> {
+  if (getSaveProblem()) {
+    onStatus('Сначала сохрани изменения. Затем можно обновить приложение.');
+    return;
+  }
   const reg = await navigator.serviceWorker?.getRegistration();
   if (!reg) {
-    location.reload();
+    reloadAfterSaving();
     return;
   }
   onStatus('Проверяю, есть ли новая версия…');
@@ -73,7 +92,7 @@ export async function updateNow(onStatus: (text: string) => void): Promise<void>
     }
   }
   onStatus('Включаю новую версию…');
-  navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+  navigator.serviceWorker.addEventListener('controllerchange', reloadAfterSaving, { once: true });
   sw.postMessage({ type: 'SKIP_WAITING' });
-  setTimeout(() => location.reload(), RELOAD_FALLBACK_MS);
+  setTimeout(reloadAfterSaving, RELOAD_FALLBACK_MS);
 }
