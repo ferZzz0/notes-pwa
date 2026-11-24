@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import type { CharmTextures } from '../charmTextures';
 import type { Block } from '../notes';
 import { DEFAULT_GLITTER, decalOf, decalSrc } from '../textStyle';
 import { Glitter } from './Glitter';
@@ -162,12 +163,20 @@ export function pokeCharm(id: string, dir = Math.random() < 0.5 ? -1 : 1) {
 
 // face — «картинкой» (переворот листа, экспорт): висит отвесно, не качается.
 // kick — сколько раз перелистывали: от каждого раза качается
-export function CharmItem({ block, kick = 0, face = false }: { block: Block; kick?: number; face?: boolean }) {
+export function CharmItem({ block, kick = 0, face = false, textures }: { block: Block; kick?: number; face?: boolean; textures?: CharmTextures }) {
   const swing = useRef<HTMLDivElement>(null);
+  const source = useRef<HTMLImageElement>(null);
+  const surface = useRef<HTMLCanvasElement>(null);
   const push = useRef<((speed: number) => void) | null>(null);
   const size = block.width ?? CHARM_SIZE;
   const scale = block.scale ?? 1;
   const src = decalSrc(decalOf(block.decal).id);
+  useLayoutEffect(() => {
+    if (textures && surface.current && source.current) return textures.watch(surface.current, source.current);
+  }, [textures, src]);
+  useLayoutEffect(() => {
+    if (surface.current) textures?.setWidth(surface.current, size * scale);
+  }, [textures, src, size, scale]);
   const [top, setTop] = useState(() => tops.get(src) ?? TOP_GUESS);
   useEffect(() => {
     if (tops.has(src)) return setTop(tops.get(src)!);
@@ -205,7 +214,10 @@ export function CharmItem({ block, kick = 0, face = false }: { block: Block; kic
       }
     };
     const tick = (t: number) => {
-      const dt = Math.min(0.05, last ? (t - last) / 1000 : 1 / 60);
+      // Пропущенный видимый кадр не замедляет ход маятника. После долгой
+      // паузы вкладки начинаем с обычного шага, без скачка вперёд.
+      const elapsed = (t - last) / 1000;
+      const dt = last && elapsed < 0.25 ? elapsed : 1 / 60;
       last = t;
       const n = Math.ceil(dt / (1 / 240));
       for (let i = 0; i < n; i++) step(dt / n);
@@ -284,7 +296,8 @@ export function CharmItem({ block, kick = 0, face = false }: { block: Block; kic
           <circle className="charm-ring" cx="10" cy="49" r="5.5" />
         </svg>
         <div className="charm-body">
-          <img src={src} alt="" draggable={false} />
+          {textures && <canvas className="charm-detail" ref={surface} width={0} height={0} aria-hidden="true" />}
+          <img ref={source} src={src} alt="" draggable={false} />
           <Glitter seed={block.id} amount={block.glitter ?? DEFAULT_GLITTER} />
         </div>
       </div>

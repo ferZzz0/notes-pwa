@@ -43,9 +43,9 @@ export const Glitter = memo(function Glitter({ seed, amount }: { seed: string; a
     const size = dot ? 1.2 + rnd() * 1.5 : 3.5 + rnd() * 6.5;
     const color = Math.floor(rnd() * 4);
     const turn = Math.round(rnd() * 45);
-    // В ячейке 96 px радиус звезды — 24 px, точки — 12 px. Остальное
-    // занимает готовое свечение: теперь браузер двигает маленькую картинку.
-    const width = size * (dot ? 8 : 4);
+    // У прежней ячейки спрайта срезаны по 14 полностью прозрачных px с
+    // каждого края. Центр, размер самой искры и ореол остаются на месте.
+    const width = size * (dot ? 8 : 4) * 68 / 96;
     const place = ([x, y]: number[]) =>
       `translate(${(100 * x / width - 50).toFixed(2)}%, ${(100 * y / width - 50).toFixed(2)}%) rotate(${turn}deg)`;
     const cycle = 8400 + Math.round(motion() * 2800);

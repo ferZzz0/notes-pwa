@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { CharmTextures } from '../charmTextures';
 import { isInk, type DrawingOptions } from '../drawing';
 import { pageImage } from '../exportPage';
 import { attachPhoto, collectUnusedImages, copyImage, imagePng, importImage, pixelSize } from '../images';
@@ -396,6 +397,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const paper = useRef<PaperHandle>(null);
   const selection = useRef<SelectionHandle>(null);
   const camera = useRef<Camera>({ x: 0, y: 0, scale: 1 });
+  const [charmTextures] = useState(() => new CharmTextures());
   const flipDone = useRef<(() => void) | null>(null);
   // Выбранная надпись (рамка и панель) и та, которую сейчас печатают
   const [selected, setSelected] = useState<string | null>(null);
@@ -1657,6 +1659,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         onFrame={(cam, size) => {
           const moved = cam.x !== camera.current.x || cam.y !== camera.current.y || cam.scale !== camera.current.scale;
           camera.current = cam;
+          charmTextures.setZoom(cam.scale);
           inkLayer.current?.viewport(cam, size);
           paper.current?.update(cam, size);
           selection.current?.update();
@@ -1697,7 +1700,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
                 ) : b.kind === 'decal' ? (
                   <DecalItem block={b} />
                 ) : b.kind === 'charm' ? (
-                  <CharmItem block={b} kick={kick} />
+                  <CharmItem block={b} kick={kick} textures={charmTextures} />
                 ) : (
                   <TextBlock
                     block={b}

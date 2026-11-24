@@ -61,3 +61,18 @@
   -webkit-user-drag: none;
   user-select: none;
 }
+
+.charm-detail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  visibility: hidden;
+}
+
+.charm-detail[data-ready] { visibility: visible; }
+.charm-detail[data-ready] + img { visibility: hidden; }
+
+.charm-swing.is-live .glitter > span {
+  image-rendering: pixelated;
+}
