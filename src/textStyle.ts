@@ -173,12 +173,12 @@ export const FILTERS = [
 ] as const;
 
 // Наклейки (просьба автора): выбирают в «+» и наклеивают касаниями по листу,
-// пока не нажмут «×». Не эмодзи телефона, а картинки из открытого набора
-// Microsoft Fluent Emoji 3D (лицензия MIT — public/decals/LICENSE-fluentui-emoji.txt),
-// 256×256 WebP в public/decals; блёстки поверх рисует Glitter
+// пока не нажмут «×». Брелоки и обложки используют тот же каталог.
+// Картинки — 256×256 WebP в public/decals; блёстки поверх рисует Glitter.
 export const DECAL_GROUPS = [
   { id: 'cute', label: 'Милые' },
-  { id: 'halloween', label: 'Хэллоуин' }
+  { id: 'halloween', label: 'Хэллоуин' },
+  { id: 'new-year', label: 'Новый год' }
 ] as const;
 export const DECALS = [
   { id: 'heart', label: 'Сердце', group: 'cute' },
@@ -210,7 +210,25 @@ export const DECALS = [
   { id: 'cat', label: 'Чёрная кошка', group: 'halloween' },
   { id: 'candy', label: 'Конфета', group: 'halloween' },
   { id: 'lollipop', label: 'Леденец', group: 'halloween' },
-  { id: 'crystal-ball', label: 'Хрустальный шар', group: 'halloween' }
+  { id: 'crystal-ball', label: 'Хрустальный шар', group: 'halloween' },
+  { id: 'christmas-tree', label: 'Ёлка', group: 'new-year' },
+  { id: 'wrapped-gift', label: 'Подарок', group: 'new-year' },
+  { id: 'string-lights', label: 'Гирлянда с огоньками', group: 'new-year' },
+  { id: 'evergreen-garland', label: 'Хвойная гирлянда', group: 'new-year' },
+  { id: 'snowflake', label: 'Снежинка', group: 'new-year' },
+  { id: 'snow-globe', label: 'Снежный шар', group: 'new-year' },
+  { id: 'santa', label: 'Санта', group: 'new-year' },
+  { id: 'bell', label: 'Колокольчик', group: 'new-year' },
+  { id: 'fireworks', label: 'Салют', group: 'new-year' },
+  { id: 'party-popper', label: 'Хлопушка', group: 'new-year' },
+  { id: 'red-bow', label: 'Красный бант', group: 'new-year' },
+  { id: 'snowman', label: 'Снеговик', group: 'new-year' },
+  { id: 'bauble-mint', label: 'Мятная карамель', group: 'new-year' },
+  { id: 'bauble-tree', label: 'Подарки под ёлкой', group: 'new-year' },
+  { id: 'bauble-rose', label: 'Розовый атлас', group: 'new-year' },
+  { id: 'bauble-stars', label: 'Перламутровые звёзды', group: 'new-year' },
+  { id: 'bauble-snowman', label: 'Снеговик и звёзды', group: 'new-year' },
+  { id: 'bauble-village', label: 'Деревня под звёздами', group: 'new-year' }
 ] as const;
 export type DecalId = (typeof DECALS)[number]['id'];
 // Первые наклейки были эмодзи — их места занимают похожие картинки
