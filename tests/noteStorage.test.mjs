@@ -79,6 +79,25 @@ test('quota failure keeps the last disk copy and the latest editable draft acros
   assert.deepEqual(loadSpreads(second), spreads('Последняя правка'));
 });
 
+test('a drawing-only calendar day survives a full store and round-trips its transparent eraser cuts', () => {
+  const day = page('2026-11-24');
+  const stroke = { id: 'ink-1', kind: 'ink', x: 10, y: 20, text: '', color: '#334455',
+    ink: { brush: 'marker', size: 12, points: [[0, 0], [40, 0]], cuts: [{ size: 2, points: [[20, -4], [20, 4]] }] } };
+  const drawn = { 0: { blocks: [stroke] } };
+  saveSpreads(first, spreads('Старая заметка'));
+  blocked.set(daysKey, 'QuotaExceededError');
+  saveSpreads(day, drawn);
+  assert.equal(getSaveProblem(), 'full');
+  assert.ok(daysWithNotes().has(day.date));
+  assert.deepEqual(loadSpreads(day), drawn);
+  blocked.clear();
+  retryPendingSaves();
+  assert.deepEqual(loadSpreads(day), drawn);
+  assert.deepEqual(loadSpreads(first), spreads('Старая заметка'));
+  saveSpreads(day, {});
+  assert.equal(daysWithNotes().has(day.date), false);
+});
+
 test('retry merges edited and cleared calendar days with unrelated dates saved in another tab', () => {
   const a = page('2026-11-01'), b = page('2026-11-02'), c = page('2026-11-03');
   saveSpreads(a, spreads('Запись 1'));

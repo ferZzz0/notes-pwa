@@ -7,14 +7,17 @@
 // память своя, отдельная от Safari.
 
 import type { Run } from './richText';
+import { defaultDrawing, maxSize, type DrawingOptions, type Ink, type Tool } from './drawing.ts';
 import type { EffectId, FilterId, FontId, FrameId, MarkerId, StickerId } from './textStyle';
 import { discardPending, getSaveProblem, localRecord, pendingJson, pendingKeys, readDocument, saveRecord, type StoredRecord } from './noteStorage.ts';
 
 export type Block = {
   id: string;
   // Что это: надпись (kind нет), стикер с надписью, фото, наклейка или
-  // брелок (наклейка на цепочке, качается — Charm.tsx)
-  kind?: 'sticker' | 'image' | 'decal' | 'charm';
+  // брелок (наклейка на цепочке, качается — Charm.tsx) или штрих
+  kind?: 'sticker' | 'image' | 'decal' | 'charm' | 'ink';
+  // Векторные точки штриха относительно (x, y), чтобы он переезжал со страницей
+  ink?: Ink;
   // Левый верхний угол в координатах мира (px; верх листа — y = 0): у
   // надписи и стикера — начало текста, у фото — угол рамки
   x: number;
@@ -174,6 +177,24 @@ function writePreference(key: string, value: unknown): void {
   } catch {
     // Настройка действует до закрытия приложения.
   }
+}
+
+const DRAWING_KEY = 'notes-pwa:drawing';
+export function loadDrawingOptions(): DrawingOptions {
+  const saved = read<Partial<DrawingOptions> | null>(DRAWING_KEY, null);
+  const sizes = { ...defaultDrawing.sizes }, colors = { ...defaultDrawing.colors };
+  for (const key of Object.keys(sizes) as Tool[]) {
+    const size = saved?.sizes?.[key];
+    if (size !== undefined && Number.isInteger(size) && size >= 1 && size <= maxSize(key)) sizes[key] = size;
+    const color = key === 'eraser' ? undefined : saved?.colors?.[key];
+    if (key !== 'eraser' && color && /^#[0-9a-f]{6}$/i.test(color)) colors[key] = color;
+  }
+  const tool = saved?.tool && Object.hasOwn(sizes, saved.tool) ? saved.tool : defaultDrawing.tool;
+  return { tool, sizes, colors };
+}
+
+export function saveDrawingOptions(options: DrawingOptions): void {
+  writePreference(DRAWING_KEY, options);
 }
 
 // Где окажется текст из прежней «страницы целиком» на нынешнем листе

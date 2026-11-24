@@ -18,6 +18,7 @@ function stampDates(next: Spreads, old: Spreads): Spreads {
   for (const [key, sp] of Object.entries(next)) {
     const blocks = sp.blocks.map(b => {
       const o = before.get(b.id);
+      if (o?.block === b) return b;
       if (o && undated(o.block) === undated(b)) {
         return b.day === o.block.day && b.edited === o.block.edited ? b : { ...b, day: o.block.day, edited: o.block.edited };
       }

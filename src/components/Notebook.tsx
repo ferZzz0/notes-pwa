@@ -1,16 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { isInk, type DrawingOptions } from '../drawing';
 import { pageImage } from '../exportPage';
 import { attachPhoto, collectUnusedImages, copyImage, imagePng, importImage, pixelSize } from '../images';
 import {
   isBlank,
   isKept,
   loadClip,
+  loadDrawingOptions,
   loadPage,
   loadStyle,
   localDate,
   newBlockId,
   saveClip,
+  saveDrawingOptions,
   savePage,
   saveStyle,
   sideOf,
@@ -47,6 +50,8 @@ import { askMotion, CharmItem, CHARM_SIZE, charmHeight, pokeCharm } from './Char
 import { CharmToolbar } from './CharmToolbar';
 import { ConfirmDialog, NoticeDialog } from './ConfirmDialog';
 import { Canvas, type Camera, type CanvasHandle, type Fixed, type Grab, type Home, type Point, type Rect } from './Canvas';
+import { DrawingLayer, InkItem, type DrawingHandle } from './DrawingLayer';
+import { DrawingToolbar } from './DrawingToolbar';
 import { DECAL_SIZE, DecalItem, ImageItem } from './ImageItem';
 import { ImageToolbar } from './ImageToolbar';
 import { PageSettings } from './PageSettings';
@@ -384,6 +389,10 @@ type Props = {
 export function Notebook({ source, onMenu, onDay }: Props) {
   const dayDate = source.kind === 'day' ? source.date : null;
   const canvas = useRef<CanvasHandle>(null);
+  const inkLayer = useRef<DrawingHandle>(null);
+  const [drawing, setDrawing] = useState(false);
+  const [drawingOptions, setDrawingOptions] = useState(loadDrawingOptions);
+  const [drawingHeight, setDrawingHeight] = useState(0);
   const paper = useRef<PaperHandle>(null);
   const selection = useRef<SelectionHandle>(null);
   const camera = useRef<Camera>({ x: 0, y: 0, scale: 1 });
@@ -443,7 +452,26 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const visibleBlocks = (spreads[spread]?.blocks ?? []).filter(
     b => display === 'both' || (display === 'left' ? b.x < 0 : b.x >= 0)
   );
-  const selectedBlock = turning ? undefined : visibleBlocks.find(b => b.id === selected);
+  const visibleItems = visibleBlocks.filter(b => b.kind !== 'ink');
+  const selectedBlock = turning ? undefined : visibleItems.find(b => b.id === selected);
+  const finishDrawing = () => {
+    inkLayer.current?.cancel();
+    setDrawing(false);
+  };
+  const changeDrawingOptions = (options: DrawingOptions) => {
+    setDrawingOptions(options);
+    saveDrawingOptions(options);
+  };
+  const editDrawing = (change: (blocks: Block[]) => Block[]) => {
+    commit(prev => {
+      const cur = prev[spread] ?? { blocks: [] };
+      const updated = { ...cur, created: cur.created ?? localDate(), blocks: change(cur.blocks) };
+      const next = { ...prev };
+      if (isKept(updated)) next[spread] = updated;
+      else delete next[spread];
+      return next;
+    });
+  };
   // После отмены выбранная вещь может исчезнуть с листа.
   const afterRestore = (next: Spreads | undefined) => {
     if (!next) return;
@@ -451,8 +479,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     setRangeStyle(null);
     if (selected && !Object.values(next).some(s => s.blocks.some(b => b.id === selected))) deselect();
   };
-  const undo = () => afterRestore(editor.undo());
-  const redo = () => afterRestore(editor.redo());
+  const undo = () => { inkLayer.current?.cancel(); afterRestore(editor.undo()); };
+  const redo = () => { inkLayer.current?.cancel(); afterRestore(editor.redo()); };
 
   // Картинки убранных фото стираются не сразу (удаление можно отменить), а
   // при следующем открытии тетради — все, которых нет ни на одном листе
@@ -877,7 +905,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // Всё, что в точке мира p, — сверху вниз (порядок в списке — порядок слоёв)
   const blocksAt = (p: Point) => {
     const pad = TAP_PAD / camera.current.scale;
-    return [...visibleBlocks].reverse().filter(b => {
+    return [...visibleItems].reverse().filter(b => {
       const el = blockElement(b.id);
       return el !== null && hitBlock(el, p, pad);
     });
@@ -1267,7 +1295,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // не в счёт: лист растёт только от того, что написал человек
   useLayoutEffect(() => {
     let r: Rect | null = null;
-    for (const el of document.querySelectorAll<HTMLElement>('.canvas-world > .page-side :is(.text-block, .item-image)')) {
+    for (const el of document.querySelectorAll<HTMLElement>('.canvas-world > .page-side :is(.text-block, .item-image, .ink-item)')) {
       const b = blockRect(el);
       r = r
         ? { x: Math.min(r.x, b.x), y: Math.min(r.y, b.y), w: Math.max(r.x + r.w, b.x + b.w) - Math.min(r.x, b.x), h: Math.max(r.y + r.h, b.y + b.h) - Math.min(r.y, b.y) }
@@ -1429,7 +1457,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       let x0 = sd === 'left' ? -PAGE_WIDTH : 0;
       let x1 = sd === 'left' ? 0 : PAGE_WIDTH;
       let bottom = (window.innerHeight * PAGE_WIDTH * (single ? 1 : 2)) / window.innerWidth;
-      for (const el of node.querySelectorAll<HTMLElement>(':is(.text-block, .item-image)')) {
+      for (const el of node.querySelectorAll<HTMLElement>(':is(.text-block, .item-image, .ink-item)')) {
         const r = blockRect(el);
         if (sd === 'left') x0 = Math.min(x0, r.x - EXPORT_MARGIN);
         else x1 = Math.max(x1, r.x + r.w + EXPORT_MARGIN);
@@ -1461,7 +1489,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   // отменить, Ctrl/⌘+Shift+Z и Ctrl+Y — вернуть (в надписи — её собственные)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]:not([contenteditable="false"])')) return;
+      if (drawing && e.key === 'Escape') { finishDrawing(); return; }
+      if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]:not([contenteditable="false"])') &&
+          !(drawing && e.target.matches('input[type="range"]'))) return;
       if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyZ' || e.code === 'KeyY')) {
         e.preventDefault();
         if (turning) return;
@@ -1469,6 +1499,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         else undo();
         return;
       }
+      if (drawing) return;
       if (e.key === 'ArrowRight' || e.key === 'PageDown') turn('next');
       else if (e.key === 'ArrowLeft' || e.key === 'PageUp') turn('prev');
     };
@@ -1611,17 +1642,16 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         content={content}
         fixed={fixedOf(display)}
         bounded={!transit}
-        // Снизу лист удлиняется только под открытую клавиатуру (и панель над
-        // ней) и на миг перед тем, как она откроется; с одной панелью — нет:
-        // лист не должен сдвигаться вниз (просьба автора)
+        // Нижнюю часть бумаги можно поднять из-под клавиатуры или инструментов рисования.
         extraBottom={
           keyboard > 0
             ? keyboard + (selectedBlock ? toolbarHeight + 16 + HISTORY_ROW : 0)
             : typing
               ? Math.round(window.innerHeight * KEYBOARD_GUESS)
-              : 0
+              : drawing ? drawingHeight : 0
         }
         locked={turning}
+        onDraw={drawing ? (p, scale) => inkLayer.current?.start(p, scale) : undefined}
         background={<Paper ref={paper} display={display} left={paperOf(underLeft, 'left')} right={paperOf(underRight, 'right')} />}
         onFrame={(cam, size) => {
           const moved = cam.x !== camera.current.x || cam.y !== camera.current.y || cam.scale !== camera.current.scale;
@@ -1644,7 +1674,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         // страницы). Пока что-то выбрано, смахивание не листает
         onSwipe={(dir, start, width) => {
           const fromEdge = dir === 'next' ? start.x > width * (1 - TURN_EDGE) : start.x < width * TURN_EDGE;
-          if (fromEdge && !turning && !selectedBlock) turn(dir);
+          if (fromEdge && !turning && !selectedBlock && !drawing) turn(dir);
         }}
         grab={grab}
       >
@@ -1656,7 +1686,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             Каждая — в обёртке, обрезающей её по корешку (item-clip) */}
         {!flip && (
           <div className="page-side page-texts">
-            {visibleBlocks.map(b => (
+            {visibleItems.map(b => (
               <div key={b.id} className="item-clip" data-clip={sideOfBlock(b)}>
                 {b.kind === 'image' ? (
                   <ImageItem block={b} />
@@ -1686,6 +1716,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             ))}
           </div>
         )}
+
+        {!flip && <DrawingLayer ref={inkLayer} blocks={visibleBlocks} display={display} options={drawingOptions} onEdit={editDrawing} />}
 
         {flip && (
           <PageTurn
@@ -1860,7 +1892,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
       {/* Пока надпись выбрана, внизу — её панель: кнопки прячем */}
       {/* Пока лист перелистывается, кнопки плавно гаснут и потом так же
           появляются (просьба автора; App.css: .is-faded) */}
-      {!selectedBlock && (
+      {drawing && <DrawingToolbar options={drawingOptions} onChange={changeDrawingOptions} history={historyButtons}
+        onHeight={setDrawingHeight} onDone={finishDrawing} />}
+      {!selectedBlock && !drawing && (
         <>
           <button type="button" className={`${cornerButtonClass} page-menu-button`} inert={cornersInert} aria-label="Главное меню" onClick={onMenu}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1874,7 +1908,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
                 <path d="M3.5 11.5 12 4l8.5 7.5M6 9.5V20h4.5v-5.5h3V20H18V9.5" />
               </svg>
             </button>
-            <button type="button" className="round-button" aria-label="Маркер" disabled>
+            <button type="button" className="round-button" aria-label="Маркер" onClick={() => { setStamp(null); setDrawing(true); }}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path transform="rotate(40 12 12)" d="M8.5 13V4A1.5 1.5 0 0 1 10 2.5h4A1.5 1.5 0 0 1 15.5 4v9L14 16h-4ZM8.5 13h7M10 16v5l4-1.5V16" />
               </svg>
@@ -1979,7 +2013,7 @@ function PageSide({ spread, side, blocks, date, day, look }: PageSideProps) {
       )}
       <div className="item-clip" data-clip={side}>
         {blocks
-          .filter(b => sideOfBlock(b) === side)
+          .filter(b => b.kind !== 'ink' && sideOfBlock(b) === side)
           .map(b =>
             b.kind === 'image' ? (
               <ImageItem key={b.id} block={b} />
@@ -1991,6 +2025,9 @@ function PageSide({ spread, side, blocks, date, day, look }: PageSideProps) {
               <TextBlock key={b.id} block={b} width={maxWidthOf(b)} face />
             )
           )}
+      </div>
+      <div className="item-clip ink-clip" data-clip={side}>
+        {blocks.filter(isInk).filter(b => sideOfBlock(b) === side).map(b => <InkItem key={b.id} block={b} />)}
       </div>
     </div>
   );

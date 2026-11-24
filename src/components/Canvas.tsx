@@ -6,6 +6,8 @@ export type Camera = { x: number; y: number; scale: number };
 export type Point = { x: number; y: number };
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Size = { w: number; h: number };
+export type DrawSample = Point & { time: number; pressure?: number };
+export type DrawGesture = { move: (samples: DrawSample[]) => void; end: () => void; cancel: () => void };
 
 // Стартовый вид: по ширине экрана помещается width px мира (но масштаб не
 // мельче minScale); точка мира (x, y) — у верха экрана (под вырезом камеры)
@@ -41,6 +43,7 @@ export type CanvasHandle = {
 
 type Props = {
   ref?: Ref<CanvasHandle>;
+  onDraw?: (start: DrawSample, scale: number) => DrawGesture | undefined;
   home: Home;
   // Лист: сначала ровно весь экран в стартовом виде (вместе с полосами
   // под вырезом и «домашней полоской»). Если содержимое (content — его
@@ -135,6 +138,7 @@ export function Canvas({
   onFrame,
   onTap,
   onDoubleTap,
+  onDraw,
   grab,
   onLongPress,
   onLongPressEnd,
@@ -150,8 +154,8 @@ export function Canvas({
   const insetsRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<(CanvasHandle & { reclamp: () => void }) | null>(null);
   // Свежие пропсы для обработчиков, подписанных один раз
-  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd, onSwipe, onPanStart, onPanEnd, inertia, nativeTouch });
-  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, grab, onLongPress, onLongPressEnd, onSwipe, onPanStart, onPanEnd, inertia, nativeTouch };
+  const props = useRef({ home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, onDraw, grab, onLongPress, onLongPressEnd, onSwipe, onPanStart, onPanEnd, inertia, nativeTouch });
+  props.current = { home, content, fixed, bounded, extraBottom, locked, onFrame, onTap, onDoubleTap, onDraw, grab, onLongPress, onLongPressEnd, onSwipe, onPanStart, onPanEnd, inertia, nativeTouch };
 
   useImperativeHandle(
     ref,
@@ -436,6 +440,7 @@ export function Canvas({
       // листа в стандартном размере, даже если лист приблизили или он вырос
       // (просьба автора). На iPhone размер при повороте меняется в несколько
       // шагов, поэтому так — на каждом шаге
+      cancelDrawing();
       stop();
       set(homeCamera());
       flush();
@@ -444,6 +449,19 @@ export function Canvas({
     // --- Пальцы и мышь ---
 
     const pointers = new Map<number, Point>();
+    let drawing: DrawGesture | undefined;
+    let drawPointer: number | null = null;
+    let drawingWithPen = false;
+    const drawSample = (e: PointerEvent): DrawSample => ({
+      ...toWorld(local(e.clientX, e.clientY)), time: e.timeStamp,
+      pressure: e.pointerType === 'pen' && e.pressure > 0 ? e.pressure : undefined
+    });
+    const cancelDrawing = () => {
+      if (drawPointer !== null) pointers.delete(drawPointer);
+      drawPointer = null;
+      drawing?.cancel();
+      drawing = undefined;
+    };
     let downAt: Point = { x: 0, y: 0 };
     let moving = false; // жест стал перелётом/щипком, а не тапом
     // Жест, отданный предмету в мире (первый палец лёг на него)
@@ -487,10 +505,14 @@ export function Canvas({
 
     const onDown = (e: PointerEvent) => {
       if (props.current.locked || matches(e.target, '[data-no-pan]')) return;
+      if (props.current.onDraw && drawPointer !== null) {
+        if (drawingWithPen && e.pointerType === 'touch') return;
+        if (!drawingWithPen && e.pointerType === 'pen') cancelDrawing();
+      }
       // Мышью по тексту — выделение текста, а не перелёт; пальцем у надписи,
       // в которой печатают, — тоже её (nativeTouch)
-      if (e.pointerType === 'mouse' && (e.button !== 0 || isEditable(e.target))) return;
-      if (e.pointerType !== 'mouse' && props.current.nativeTouch?.(e.target, e.clientX, e.clientY)) return;
+      if (e.pointerType === 'mouse' && (e.button !== 0 || (!props.current.onDraw && isEditable(e.target)))) return;
+      if (!props.current.onDraw && e.pointerType !== 'mouse' && props.current.nativeTouch?.(e.target, e.clientX, e.clientY)) return;
       stop();
       const p = local(e.clientX, e.clientY);
       pointers.set(e.pointerId, p);
@@ -502,10 +524,19 @@ export function Canvas({
         downTime = e.timeStamp;
         downCamX = cam.x;
         multi = false;
-        grabbed = props.current.grab?.(p) ?? null;
         pressed = false;
         pressEnded = false;
         clearTimeout(pressTimer);
+        if (props.current.onDraw) {
+          grabbed = null;
+          lastTap.t = 0;
+          drawPointer = e.pointerId;
+          drawingWithPen = e.pointerType === 'pen';
+          drawing = props.current.onDraw(drawSample(e), cam.scale);
+          viewport.setPointerCapture(e.pointerId);
+          return;
+        }
+        grabbed = props.current.grab?.(p) ?? null;
         // Мышью долгое нажатие — правый клик (ниже)
         if (!grabbed && e.pointerType !== 'mouse' && !isInteractive(e.target)) {
           pressTimer = window.setTimeout(() => {
@@ -516,6 +547,11 @@ export function Canvas({
           }, LONG_PRESS_MS);
         }
       } else {
+        // Второй палец превращает всё касание в щипок. Оба указателя нужны
+        // камере, но первый не должен оставить точку или след ластика.
+        drawPointer = null;
+        drawing?.cancel();
+        drawing = undefined;
         multi = true;
         beginMoving();
         grabbed?.begin(firstTwo());
@@ -526,6 +562,13 @@ export function Canvas({
       const prev = pointers.get(e.pointerId);
       if (!prev) return;
       const p = local(e.clientX, e.clientY);
+
+      if (e.pointerId === drawPointer) {
+        pointers.set(e.pointerId, p);
+        const samples = e.getCoalescedEvents?.() ?? [];
+        drawing?.move((samples.length ? samples : [e]).map(drawSample));
+        return;
+      }
 
       // Жест предмета: камера стоит, пальцы двигают его
       if (grabbed) {
@@ -561,6 +604,15 @@ export function Canvas({
 
     const onUp = (e: PointerEvent) => {
       if (!pointers.delete(e.pointerId)) return;
+      if (e.pointerId === drawPointer) {
+        drawPointer = null;
+        if (e.type === 'pointerup') {
+          drawing?.move([drawSample(e)]);
+          drawing?.end();
+        } else drawing?.cancel();
+        drawing = undefined;
+        return;
+      }
       // Из щипка остался один палец — дальше он просто двигает мир (или предмет)
       if (pointers.size > 0) {
         samples = [];
@@ -637,7 +689,7 @@ export function Canvas({
     // иначе — сдвиг (прокрутка двумя пальцами по тачпаду)
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      if (props.current.locked) return;
+      if (props.current.locked || drawPointer !== null) return;
       stop();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? size.h : 1;
       if (e.ctrlKey || e.metaKey) {
@@ -667,7 +719,7 @@ export function Canvas({
     // (Android шлёт и его) уже обработано таймером — только глушим меню
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault();
-      if (pointers.size > 0 || props.current.locked || isInteractive(e.target)) return;
+      if (pointers.size > 0 || props.current.locked || props.current.onDraw || isInteractive(e.target)) return;
       const p = local(e.clientX, e.clientY);
       flush();
       props.current.onLongPress?.(toWorld(p), p, false);
@@ -680,6 +732,11 @@ export function Canvas({
     viewport.addEventListener('pointermove', onMove);
     viewport.addEventListener('pointerup', onUp);
     viewport.addEventListener('pointercancel', onUp);
+    const onLostCapture = (e: PointerEvent) => {
+      if (e.pointerId === drawPointer && e.target === viewport) cancelDrawing();
+    };
+    viewport.addEventListener('lostpointercapture', onLostCapture);
+    window.addEventListener('blur', cancelDrawing);
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length > 0) return;
       if (pressed && !pressEnded) {
@@ -717,6 +774,7 @@ export function Canvas({
     viewport.addEventListener('gesturechange', onGestureChange);
 
     return () => {
+      cancelDrawing();
       stop();
       cancelAnimationFrame(writeFrame);
       clearTimeout(settleTimer);
@@ -726,6 +784,8 @@ export function Canvas({
       viewport.removeEventListener('pointermove', onMove);
       viewport.removeEventListener('pointerup', onUp);
       viewport.removeEventListener('pointercancel', onUp);
+      viewport.removeEventListener('lostpointercapture', onLostCapture);
+      window.removeEventListener('blur', cancelDrawing);
       viewport.removeEventListener('touchend', onTouchEnd);
       viewport.removeEventListener('touchcancel', onTouchCancel);
       viewport.removeEventListener('touchstart', onTouchStart);
@@ -744,7 +804,7 @@ export function Canvas({
   }, [boundsKey]);
 
   return (
-    <div ref={viewportRef} className="canvas">
+    <div ref={viewportRef} className={onDraw ? 'canvas is-drawing' : 'canvas'}>
       <div ref={insetsRef} className="canvas-insets" aria-hidden="true" />
       {background}
       <div ref={worldRef} className="canvas-world">
