@@ -123,21 +123,28 @@ const thumbLeft = (t: number) => `calc(${THUMB / 2}px + (100% - ${THUMB}px) * ${
 // обычный ползунок забрал бы фокус у надписи и закрыл клавиатуру). Меняется,
 // пока ведёшь пальцем; отпустили — сохранить
 export function OpacitySlider({ value = 1, onPick }: { value?: number; onPick: (opacity: number, final: boolean) => void }) {
-  const pick = (e: PointerEvent<HTMLDivElement>, final: boolean) => {
-    const t = trackShare(e);
-    onPick(Math.round((MIN_OPACITY + t * (1 - MIN_OPACITY)) * 20) / 20, final);
-  };
   const percent = Math.round(value * 100);
+  return <ToolbarSlider label="Непрозрачность" value={percent} min={MIN_OPACITY * 100} max={100} step={5}
+    unit="%" onPick={(n, final) => onPick(n / 100, final)} />;
+}
+
+export function ToolbarSlider({ label, value, min, max, step = 1, unit, onPick, sizeTrack = false }: {
+  label: string; value: number; min: number; max: number; step?: number; unit: string;
+  onPick: (value: number, final: boolean) => void; sizeTrack?: boolean;
+}) {
+  const pick = (e: PointerEvent<HTMLDivElement>, final: boolean) =>
+    onPick(min + Math.round(trackShare(e) * (max - min) / step) * step, final);
   return (
     <div className="toolbar-opacity">
       <div
-        className="opacity-track"
+        className={sizeTrack ? 'glitter-track size-track' : 'opacity-track'}
         role="slider"
         tabIndex={0}
-        aria-label="Непрозрачность"
-        aria-valuemin={MIN_OPACITY * 100}
-        aria-valuemax={100}
-        aria-valuenow={percent}
+        aria-label={label}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
+        aria-valuetext={value + unit}
         onPointerDown={e => {
           e.currentTarget.setPointerCapture(e.pointerId);
           pick(e, false);
@@ -147,15 +154,16 @@ export function OpacitySlider({ value = 1, onPick }: { value?: number; onPick: (
         }}
         onPointerUp={e => pick(e, true)}
         onKeyDown={e => {
-          const step = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 0.05 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -0.05 : 0;
-          if (!step) return;
+          const direction = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0;
+          if (!direction && e.key !== 'Home' && e.key !== 'End') return;
           e.preventDefault();
-          onPick(Math.round(Math.min(1, Math.max(MIN_OPACITY, value + step)) * 20) / 20, true);
+          e.stopPropagation();
+          onPick(e.key === 'Home' ? min : e.key === 'End' ? max : Math.min(max, Math.max(min, value + direction * step)), true);
         }}
       >
-        <span className="opacity-thumb" style={{ left: thumbLeft((value - MIN_OPACITY) / (1 - MIN_OPACITY)) }} />
+        <span className="opacity-thumb" style={{ left: thumbLeft((value - min) / (max - min)) }} />
       </div>
-      <span className="opacity-value">{percent}%</span>
+      <span className="opacity-value">{value}{unit}</span>
     </div>
   );
 }

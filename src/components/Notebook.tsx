@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { isInk, type DrawingOptions } from '../drawing';
 import { pageImage } from '../exportPage';
@@ -449,18 +449,19 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const display: PaperDisplay = single && !transit ? side : 'both';
   const home = homeOf(single ? side : 'both');
   // Надписи на видимых страницах открытого разворота
-  const visibleBlocks = (spreads[spread]?.blocks ?? []).filter(
+  const spreadBlocks = spreads[spread]?.blocks;
+  const visibleBlocks = useMemo(() => (spreadBlocks ?? []).filter(
     b => display === 'both' || (display === 'left' ? b.x < 0 : b.x >= 0)
-  );
+  ), [spreadBlocks, display]);
   const visibleItems = visibleBlocks.filter(b => b.kind !== 'ink');
   const selectedBlock = turning ? undefined : visibleItems.find(b => b.id === selected);
   const finishDrawing = () => {
     inkLayer.current?.cancel();
     setDrawing(false);
   };
-  const changeDrawingOptions = (options: DrawingOptions) => {
+  const changeDrawingOptions = (options: DrawingOptions, final = true) => {
     setDrawingOptions(options);
-    saveDrawingOptions(options);
+    if (final) saveDrawingOptions(options);
   };
   const editDrawing = (change: (blocks: Block[]) => Block[]) => {
     commit(prev => {
@@ -1648,10 +1649,10 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             ? keyboard + (selectedBlock ? toolbarHeight + 16 + HISTORY_ROW : 0)
             : typing
               ? Math.round(window.innerHeight * KEYBOARD_GUESS)
-              : drawing ? drawingHeight : 0
+              : drawing ? drawingHeight + 16 + HISTORY_ROW : 0
         }
         locked={turning}
-        onDraw={drawing ? (p, scale) => inkLayer.current?.start(p, scale) : undefined}
+        onDraw={drawing ? (p, scale) => inkLayer.current?.start(p, scale, canvas.current!.visibleRect()) : undefined}
         background={<Paper ref={paper} display={display} left={paperOf(underLeft, 'left')} right={paperOf(underRight, 'right')} />}
         onFrame={(cam, size) => {
           const moved = cam.x !== camera.current.x || cam.y !== camera.current.y || cam.scale !== camera.current.scale;
@@ -1678,6 +1679,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         }}
         grab={grab}
       >
+        {/* Чернила лежат на бумаге под номерами, надписями и всеми предметами. */}
+        {!flip && <DrawingLayer ref={inkLayer} blocks={visibleBlocks} display={display} options={drawingOptions} onEdit={editDrawing} />}
         {display !== 'right' && pageSide(underLeft, 'left')}
         {display !== 'left' && pageSide(underRight, 'right')}
 
@@ -1716,8 +1719,6 @@ export function Notebook({ source, onMenu, onDay }: Props) {
             ))}
           </div>
         )}
-
-        {!flip && <DrawingLayer ref={inkLayer} blocks={visibleBlocks} display={display} options={drawingOptions} onEdit={editDrawing} />}
 
         {flip && (
           <PageTurn
@@ -1995,6 +1996,9 @@ function PageSide({ spread, side, blocks, date, day, look }: PageSideProps) {
   const muted = ink ? { color: `color-mix(in srgb, ${ink} 60%, transparent)` } : undefined;
   return (
     <div className="page-side">
+      <div className="item-clip ink-clip" data-clip={side}>
+        {blocks.filter(isInk).filter(b => sideOfBlock(b) === side).map(b => <InkItem key={b.id} block={b} />)}
+      </div>
       {day ? (
         <span className="page-day" style={strong}>
           {formatDay(day)}
@@ -2025,9 +2029,6 @@ function PageSide({ spread, side, blocks, date, day, look }: PageSideProps) {
               <TextBlock key={b.id} block={b} width={maxWidthOf(b)} face />
             )
           )}
-      </div>
-      <div className="item-clip ink-clip" data-clip={side}>
-        {blocks.filter(isInk).filter(b => sideOfBlock(b) === side).map(b => <InkItem key={b.id} block={b} />)}
       </div>
     </div>
   );

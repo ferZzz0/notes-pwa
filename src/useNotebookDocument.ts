@@ -19,7 +19,10 @@ function stampDates(next: Spreads, old: Spreads): Spreads {
     const blocks = sp.blocks.map(b => {
       const o = before.get(b.id);
       if (o?.block === b) return b;
-      if (o && undated(o.block) === undated(b)) {
+      // Новый вырез заведомо изменил рисунок. При датировке не нужно ещё
+      // дважды сериализовать всю исходную линию, которую он пересёк.
+      const cutCountChanged = b.kind === 'ink' && b.ink?.cuts?.length !== o?.block.ink?.cuts?.length;
+      if (o && !cutCountChanged && undated(o.block) === undated(b)) {
         return b.day === o.block.day && b.edited === o.block.edited ? b : { ...b, day: o.block.day, edited: o.block.edited };
       }
       const day = o?.block.day ?? b.day ?? o?.created ?? today;

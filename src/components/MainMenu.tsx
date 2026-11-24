@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { loadGlitter, newBlockId, saveGlitter, type CoverDecal, type NotebookInfo } from '../notes';
 import { COVER_DESIGNS, DECALS, DEFAULT_GLITTER, decalSrc } from '../textStyle';
-import { CoverDecals, coverDesignOf, designClass } from './CoverArt';
+import { CoverDecals, CoverGlitter, coverDesignOf, designClass } from './CoverArt';
 import { Calendar } from './Calendar';
 import { ConfirmDialog } from './ConfirmDialog';
 import { AppSettings } from './AppSettings';
@@ -93,6 +93,7 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
             {notebooks.map(n => (
               <div key={n.id} className="diary" style={{ '--cover': n.color } as CSSProperties}>
                 <button type="button" className={`diary-cover${designClass(n.design)}`} onClick={() => onOpen(n.id)}>
+                  {n.design === 'glitter' && <CoverGlitter seed={n.id} />}
                   <span className="diary-label">{n.name}</span>
                   <CoverDecals decals={n.decals} />
                 </button>
@@ -143,6 +144,7 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
             {/* Обложка-образец: на ней видно всё сразу, наклейки двигают
                 пальцем прямо по ней */}
             <div className={`diary-color-preview${designClass(edited.design)}`} style={{ '--cover': edited.color } as CSSProperties}>
+              {edited.design === 'glitter' && <CoverGlitter seed={edited.id} />}
               <span className="diary-label">{draft.trim() || edited.name}</span>
               <CoverDecals
                 decals={decals}
@@ -180,7 +182,9 @@ export function MainMenu({ notebooks, onOpen, onDay, onCreate, onRename, onChang
                     className={coverDesignOf(edited.design) === d.id ? 'is-active' : undefined}
                     onClick={() => onChange(edited.id, { design: d.id === 'plain' ? undefined : d.id })}
                   >
-                    <span className={`cover-swatch${designClass(d.id)}`} style={{ '--cover': edited.color } as CSSProperties} />
+                    <span className={`cover-swatch${designClass(d.id)}`} style={{ '--cover': edited.color } as CSSProperties}>
+                      {d.id === 'glitter' && <CoverGlitter seed={edited.id} />}
+                    </span>
                     {d.label}
                   </button>
                 ))}

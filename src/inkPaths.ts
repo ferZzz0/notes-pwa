@@ -1,6 +1,6 @@
 import type { Ink, InkLine } from './drawing';
 
-export const linePath = (line: InkLine) => 'M' + line.points.map(([x, y]) => x + ' ' + y).join(' ');
+export const linePath = (line: Pick<InkLine, 'points'>) => 'M' + line.points.map(([x, y]) => x + ' ' + y).join(' ');
 
 // Диск в каждой точке и перемычки переменной ширины дают мягкое перо
 // с круглыми стыками, даже если направление резко поменялось.

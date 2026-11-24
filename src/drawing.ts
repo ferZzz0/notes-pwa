@@ -115,10 +115,11 @@ export function packInk(part: InkPart, brush: Brush, size: number, color: string
   return { id, kind: 'ink', text: '', x, y, color, ink: { brush, size: round(size), points } };
 }
 
-const boundsCache = new WeakMap<Ink, { x: number; y: number; w: number; h: number }>();
-export function inkBounds(ink: Ink) {
-  const cached = boundsCache.get(ink);
-  if (cached) return cached;
+export type InkBounds = { x: number; y: number; w: number; h: number };
+const boundsCache = new WeakMap<InkPoint[], { size: number; bounds: InkBounds }>();
+export function inkBounds(ink: InkLine) {
+  const cached = boundsCache.get(ink.points);
+  if (cached?.size === ink.size) return cached.bounds;
   let x = Infinity, y = Infinity, right = -Infinity, bottom = -Infinity;
   for (const p of ink.points) {
     x = Math.min(x, p[0]); y = Math.min(y, p[1]);
@@ -126,11 +127,11 @@ export function inkBounds(ink: Ink) {
   }
   const pad = ink.size / 2 + 1;
   const bounds = { x: x - pad, y: y - pad, w: right - x + 2 * pad, h: bottom - y + 2 * pad };
-  boundsCache.set(ink, bounds);
+  boundsCache.set(ink.points, { size: ink.size, bounds });
   return bounds;
 }
 
-function distanceSquared(p: InkPoint, a: InkPoint, b: InkPoint) {
+export function distanceSquared(p: InkPoint, a: InkPoint, b: InkPoint) {
   const dx = b[0] - a[0], dy = b[1] - a[1], length2 = dx * dx + dy * dy;
   const t = length2 ? clamp01(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length2) : 0;
   return (p[0] - a[0] - t * dx) ** 2 + (p[1] - a[1] - t * dy) ** 2;
@@ -158,8 +159,13 @@ export function addCut(block: InkBlock, from: InkPoint, to: InkPoint, size: numb
   if (Math.max(from[0], to[0]) + radius < x + box.x || Math.min(from[0], to[0]) - radius > x + box.x + box.w ||
       Math.max(from[1], to[1]) + radius < y + box.y || Math.min(from[1], to[1]) - radius > y + box.y + box.h) return false;
   const u: InkPoint = [round(from[0] - x), round(from[1] - y)], v: InkPoint = [round(to[0] - x), round(to[1] - y)];
+  const pad = radius + ink.size / 2;
+  const left = Math.min(u[0], v[0]) - pad, right = Math.max(u[0], v[0]) + pad;
+  const top = Math.min(u[1], v[1]) - pad, bottom = Math.max(u[1], v[1]) + pad;
   for (let i = 0; i < Math.max(1, ink.points.length - 1); i++) {
     const a = ink.points[i], b = ink.points[i + 1] ?? a;
+    if (Math.max(a[0], b[0]) < left || Math.min(a[0], b[0]) > right ||
+        Math.max(a[1], b[1]) < top || Math.min(a[1], b[1]) > bottom) continue;
     const nib = ink.size * Math.max(a[2] ?? 1, b[2] ?? 1) / 2;
     if (!touches(a, b, u, v, radius + nib)) continue;
     let last = cuts[cuts.length - 1];

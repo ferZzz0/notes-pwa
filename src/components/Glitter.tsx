@@ -6,7 +6,7 @@ const MAX_SPARKS = 18;
 const COLORS = ['#ffffff', '#fff3a8', '#ffd3f2', '#cdefff'];
 
 // Псевдослучайные числа от seed (mulberry32)
-function random(seed: string) {
+export function glitterRandom(seed: string) {
   let h = 1779033703;
   for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
   let a = h >>> 0;
@@ -30,7 +30,7 @@ function position(rnd: () => number) {
 // Один наблюдатель на лист и прокручиваемые меню. Искры за пределами
 // видимой области остаются статичными.
 let visibility: IntersectionObserver | undefined;
-function observeGlitter(node: SVGSVGElement | null) {
+export function observeGlitter(node: SVGSVGElement | null) {
   if (!node || typeof IntersectionObserver === 'undefined') return;
   visibility ??= new IntersectionObserver(entries => {
     for (const entry of entries) entry.target.toggleAttribute('data-offscreen', !entry.isIntersecting);
@@ -42,9 +42,9 @@ function observeGlitter(node: SVGSVGElement | null) {
 export function Glitter({ seed, amount }: { seed: string; amount: number }) {
   const count = Math.round(Math.min(1, Math.max(0, amount)) * MAX_SPARKS);
   if (count === 0) return null;
-  const rnd = random(seed);
+  const rnd = glitterRandom(seed);
   // Отдельная последовательность для следующих мест сохраняет исходный узор.
-  const motion = random(`${seed}:twinkle`);
+  const motion = glitterRandom(`${seed}:twinkle`);
   const items = Array.from({ length: count }, (_, i) => {
     const first = position(rnd);
     const dot = rnd() < 0.3;

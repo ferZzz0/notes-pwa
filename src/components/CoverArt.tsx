@@ -1,7 +1,7 @@
-import { useRef, type PointerEvent } from 'react';
+import { memo, useRef, type CSSProperties, type PointerEvent } from 'react';
 import type { CoverDecal } from '../notes';
 import { DEFAULT_GLITTER, decalSrc } from '../textStyle';
-import { Glitter } from './Glitter';
+import { Glitter, glitterRandom, observeGlitter } from './Glitter';
 import './CoverArt.css';
 
 type Props = {
@@ -14,6 +14,37 @@ type Props = {
 };
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+const COVER_CYCLE = 7200;
+
+// В каждом участке из четырёх ячеек есть по одной крупинке каждой фазы.
+// Фазы затухают и загораются по очереди, равномерно по площади обложки.
+export const CoverGlitter = memo(function CoverGlitter({ seed }: { seed: string }) {
+  const rnd = glitterRandom(seed + ':cover');
+  const groups = Array.from({ length: 4 }, () => ({ fine: '', bright: '' }));
+  for (let row = 0; row < 7; row++) {
+    for (let col = 0; col < 5; col++) {
+      const shift = Math.floor(rnd() * 4), direction = rnd() < 0.5 ? 1 : 3;
+      const weight = rnd() < 0.35 ? 'bright' : 'fine';
+      for (let cell = 0; cell < 4; cell++) {
+        const x = (2 * col + cell % 2) * 10 + 2 + rnd() * 6;
+        const y = (2 * row + Math.floor(cell / 2)) * 10 + 2 + rnd() * 6;
+        groups[(shift + direction * cell) % 4][weight] += `M${x.toFixed(1)} ${y.toFixed(1)}h.02`;
+      }
+    }
+  }
+  const offset = Math.round(rnd() * COVER_CYCLE);
+  return <svg ref={observeGlitter} className="cover-glitter" aria-hidden="true" viewBox="0 0 100 140" preserveAspectRatio="none"
+    fill="none" strokeLinecap="round">
+    {groups.map((g, i) => <g key={i} style={{
+      animationDuration: `${COVER_CYCLE}ms`, animationDelay: `-${offset + i * COVER_CYCLE / 8}ms`,
+      '--cover-shift': `translate(${i % 2 ? 1.4 : -1.4}px, ${i < 2 ? 1.5 : -1.5}px)`
+    } as CSSProperties}>
+      <path d={g.fine} stroke="#fff1ce" strokeWidth="1.55" />
+      <path d={g.bright} stroke="#fff" strokeWidth="2.15" />
+    </g>)}
+  </svg>;
+});
 
 // Наклейки на обложке блокнота (просьба автора: «лепить на обложку
 // наклейки»): те же картинки с блёстками, что на листах; место и размер — в

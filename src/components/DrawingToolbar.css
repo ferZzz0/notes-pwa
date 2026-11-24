@@ -1,6 +1,7 @@
 .canvas.is-drawing { cursor: crosshair; }
 .canvas.is-drawing.is-panning { cursor: grabbing; }
 .drawing-layer, .ink-item { pointer-events: none; }
+.drawing-layer { isolation: isolate; }
 .ink-item { position: absolute; }
 .ink-item svg { display: block; }
 .item-clip.ink-clip[data-clip='left'] { clip-path: polygon(-100000px 0, 0 0, 0 100000px, -100000px 100000px); }
@@ -13,72 +14,32 @@
   box-shadow: 0 0 0 1px #fff9;
 }
 
-.drawing-toolbar {
-  position: fixed;
-  z-index: 8;
-  bottom: calc(8px + var(--safe-bottom));
-  left: calc(6px + var(--safe-left));
-  right: calc(6px + var(--safe-right));
-  max-width: 420px;
-  margin-inline: auto;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: var(--chrome);
-  color: var(--ink);
-  box-shadow: var(--shadow);
-  font: 500 13px/1.25 var(--ui-font);
-  user-select: none;
-}
-.drawing-toolbar button { font: inherit; color: inherit; cursor: pointer; }
-.drawing-tools { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
-.drawing-tools button {
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 2px;
-  min-height: 46px;
-  padding: 3px 0;
-  font-size: 11px;
-  border: 1px solid transparent;
-  border-radius: 11px;
-  background: transparent;
-}
-.drawing-tools button[aria-pressed='true'] { background: var(--primary-soft); border-color: var(--primary-line); }
-.drawing-tools svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
-.drawing-width { display: flex; align-items: center; gap: 8px; padding-inline: 5px; min-height: 34px; }
-.drawing-width input { flex: 1; min-width: 0; margin: 0; height: 28px; accent-color: var(--ink); }
-.drawing-width output { min-width: 36px; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
-.drawing-actions, .drawing-colors, .drawing-history { display: flex; align-items: center; }
-.drawing-actions { gap: 4px; border-top: 1px solid var(--border); padding-top: 3px; min-height: 37px; }
-.drawing-history { margin-left: auto; }
-.drawing-history .round-button { width: 32px; height: 32px; padding: 6px; box-shadow: none; background: transparent; }
-.drawing-history svg { width: 18px; height: 18px; }
-.drawing-colors { flex: 1; max-width: 205px; }
-.drawing-colors button, .drawing-custom {
-  display: grid;
-  place-items: center;
+.drawing-toolbar .drawing-brushes { grid-template-columns: repeat(2, 1fr); }
+.drawing-brushes .drawing-sample { width: 54px; height: 25px; }
+.drawing-brushes button { min-height: 50px; }
+.drawing-toolbar > button:disabled { opacity: 0.32; }
+.drawing-toolbar .drawing-palette { display: grid; justify-items: center; padding: 10px; gap: 6px; }
+.drawing-swatches { display: flex; align-items: center; }
+.drawing-swatches button, .drawing-custom {
   position: relative;
-  flex: 1;
-  min-width: 0;
-  height: 34px;
-  border: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 32px;
   padding: 0;
+  border: 0;
   background: transparent;
+  cursor: pointer;
 }
-.drawing-colors i { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px #0002; }
-.drawing-colors button[aria-pressed='true'] i { outline: 1.5px solid var(--ink); outline-offset: 2px; }
-.drawing-custom svg { width: 20px; height: 20px; }
-.drawing-custom input { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; opacity: 0; cursor: pointer; }
-.drawing-custom:focus-within { outline: 2px solid var(--ink); border-radius: 6px; }
-.drawing-done { min-height: 32px; padding: 4px 12px; border-radius: 20px; background: var(--primary-soft); border: 1px solid var(--primary-line); }
-@media (max-width: 360px) {
-  .drawing-history .round-button { width: 28px; }
-  .drawing-done { padding-inline: 8px; }
+.drawing-swatches button::after {
+  content: '';
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color);
+  box-shadow: inset 0 0 0 1px #0002;
 }
-@media (orientation: landscape) and (max-height: 500px) and (min-width: 610px) {
-  .drawing-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(285px, 1fr); column-gap: 12px; max-width: 690px; }
-  .drawing-tools { grid-row: span 2; align-items: stretch; }
-  .drawing-tools button { gap: 4px; }
-  .drawing-width { min-height: 28px; }
-}
+.drawing-swatches button[aria-pressed='true']::after { outline: 1.5px solid var(--ink); outline-offset: 2px; }
+.drawing-custom { color: var(--ink); font: 20px/1 var(--ui-font); }
+.drawing-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.drawing-custom:focus-within, .drawing-toolbar [role='slider']:focus-visible { outline: 2px solid var(--ink); border-radius: 12px; }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addCut, inkBounds, packInk, simplifyInk, splitAtPageEdges } from '../src/drawing.ts';
+import { cutEvidence } from '../src/inkCoverage.ts';
 
 test('a gesture crossing the spine stays with both pages, including interpolated pressure', () => {
   const parts = splitAtPageEdges([[-20, 30, 0.2], [20, 50, 0.8]], 'both');
@@ -49,4 +50,30 @@ test('an eraser dot and an edge graze are recorded, disjoint passes stay separat
   assert.equal(addCut(b, [95, 29], [95, 35], 2, cuts), true);
   assert.equal(addCut(b, [5, 60], [145, 60], 10, cuts), false);
   assert.deepEqual(cuts, [{ size: 2, points: [[10, 15], [20, 15]] }, { size: 2, points: [[85, -1], [85, 5]] }]);
+});
+
+test('sparse long strokes, pressure strokes and repeated cuts can be classified without a raster scan', () => {
+  const b = packInk({ side: 'right', points: [[5, 50], [905, 50]] }, 'marker', 20, '#665522', 'm');
+  const crossing = { size: 8, points: [[701, -60], [701, 45]] };
+  assert.equal(cutEvidence(b, [crossing], 2), 'partial');
+  const cut = { ...b, ink: { ...b.ink, cuts: [crossing] } };
+  assert.equal(cutEvidence(cut, [{ size: 4, points: [[701, 35], [701, -5]] }], 2), 'miss');
+  assert.equal(cutEvidence(cut, [{ size: 4, points: [[399, 0]] }], 2), 'partial');
+
+  const dot = packInk({ side: 'left', points: [[-10, 30, 0.6]] }, 'brush', 24, '#112233', 'd');
+  assert.equal(cutEvidence(dot, [{ size: 18, points: [[0, 0]] }], 2), 'empty');
+});
+
+test('an edge graze or hidden centre is not interpreted as a fully erased stroke', () => {
+  const b = packInk({ side: 'right', points: [[40, 70], [640, 70]] }, 'marker', 34, '#ddbb33', 'm');
+  const edge = { size: 5, points: [[35, 16], [593, 16]] };
+  assert.deepEqual(cutEvidence(b, [edge], 2), { changed: false, remains: true });
+  const slit = { ...b, ink: { ...b.ink, cuts: [{ size: 12, points: [[0, 0], [600, 0]] }] } };
+  assert.equal(typeof cutEvidence(slit, [edge], 2), 'object');
+});
+
+test('a larger eraser over an already invisible older dot requires a visible hit before removal', () => {
+  const b = packInk({ side: 'left', points: [[-20, 41]] }, 'pen', 5, '#182030', 'old');
+  b.ink.cuts = [{ size: 9, points: [[0, 0], [141, 3]] }];
+  assert.deepEqual(cutEvidence(b, [{ size: 14, points: [[0, 0], [18, 6]] }], 2), { changed: false, remains: false });
 });

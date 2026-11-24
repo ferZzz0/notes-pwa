@@ -1,8 +1,8 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
-import { brushes, maxSize, type DrawingOptions, type Tool } from '../drawing';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { brushes, maxSize, type Brush, type DrawingOptions, type Tool } from '../drawing';
+import { ColorWheel, StyleSection, ToolbarSlider, keepFocus, menuRoom, useToolbarHeight } from './TextToolbar';
 import './DrawingToolbar.css';
 
-const tools = { ...brushes, eraser: 'Ластик' };
 const icons: Record<Tool, ReactNode> = {
   marker: <path transform="rotate(40 12 12)" d="M8.5 13V4A1.5 1.5 0 0 1 10 2.5h4A1.5 1.5 0 0 1 15.5 4v9L14 16h-4ZM8.5 13h7M10 16v5l4-1.5V16" />,
   pencil: <path d="m4 20 1.3-5L16.9 3.4a1.5 1.5 0 0 1 2.1 0L20.6 5a1.5 1.5 0 0 1 0 2.1L9 18.7 4 20Zm1.3-5 3.7 3.7M14.7 5.6l3.7 3.7M7.2 16.8l9.3-9.3" />,
@@ -16,52 +16,83 @@ const palette = [
 ] as const;
 
 export function DrawingToolbar({ options, onChange, history, onHeight, onDone }: {
-  options: DrawingOptions; onChange: (next: DrawingOptions) => void; history: ReactNode; onDone: () => void;
+  options: DrawingOptions; onChange: (next: DrawingOptions, final?: boolean) => void; history: ReactNode; onDone: () => void;
   onHeight: (height: number) => void;
 }) {
-  const panel = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const measure = () => onHeight(window.innerHeight - panel.current!.getBoundingClientRect().top);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(panel.current!);
-    return () => observer.disconnect();
-  }, [onHeight]);
+  const panel = useToolbarHeight(onHeight);
+  const [menu, setMenu] = useState<'brush' | 'size' | 'color' | null>(null);
   const { tool, sizes, colors } = options;
-  const color = tool === 'eraser' ? undefined : colors[tool];
-  const pick = (value: string) => {
-    if (tool !== 'eraser') onChange({ ...options, colors: { ...colors, [tool]: value } });
+  const lastBrush = useRef<Brush>(tool === 'eraser' ? 'marker' : tool);
+  const brush = tool === 'eraser' ? lastBrush.current : tool;
+  const sizeLabel = tool === 'eraser' ? 'Размер ластика' : 'Толщина';
+  const toggle = (next: NonNullable<typeof menu>) => setMenu(m => m === next ? null : next);
+  const pick = (value: string, final = true) => onChange({ ...options, colors: { ...colors, [brush]: value } }, final);
+  const select = (id: Brush) => {
+    lastBrush.current = id;
+    onChange({ ...options, tool: id });
   };
+  useEffect(() => {
+    if (!menu) return;
+    const outside = (e: PointerEvent) => { if (e.target instanceof Node && !panel.current?.contains(e.target)) setMenu(null); };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); setMenu(null); }
+    };
+    document.addEventListener('pointerdown', outside, true);
+    window.addEventListener('keydown', escape, true);
+    return () => {
+      document.removeEventListener('pointerdown', outside, true);
+      window.removeEventListener('keydown', escape, true);
+    };
+  }, [menu, panel]);
   return (
-    <div ref={panel} className="drawing-toolbar" role="toolbar" aria-label="Рисование">
-      <div className="drawing-tools">
-        {(Object.keys(tools) as Tool[]).map(id => (
-          <button key={id} type="button" aria-pressed={id === tool} onClick={() => onChange({ ...options, tool: id })}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">{icons[id]}</svg>
-            {tools[id]}
-          </button>
-        ))}
-      </div>
-      <div className="drawing-width">
-        <label htmlFor="drawing-size">{tool === 'eraser' ? 'Размер ластика' : 'Толщина'}</label>
-        <input id="drawing-size" type="range" min="1" max={maxSize(tool)} value={sizes[tool]} onChange={e =>
-          onChange({ ...options, sizes: { ...sizes, [tool]: Number(e.target.value) } })} />
-        <output htmlFor="drawing-size">{sizes[tool]} px</output>
-      </div>
-      <div className="drawing-actions">
-        {color && <div className="drawing-colors" role="group" aria-label="Цвет штриха">
-          {palette.map(([label, value]) => (
-            <button key={value} type="button" aria-label={label} title={label} aria-pressed={value === color}
-              onClick={() => pick(value)}><i style={{ backgroundColor: value }} /></button>
+    <div ref={panel} className={menu ? 'text-toolbar drawing-toolbar has-menu' : 'text-toolbar drawing-toolbar'}
+      role="toolbar" aria-label="Рисование" onMouseDown={keepFocus}>
+      <div className="toolbar-history"><div>{history}</div></div>
+      {menu === 'brush' && <div className="toolbar-menu" role="dialog" aria-label="Инструменты рисования">
+        <div className="toolbar-choices drawing-brushes" role="group" aria-label="Кисти">
+          {(Object.keys(brushes) as Brush[]).map(id => (
+            <button key={id} type="button" className={id === tool ? 'is-active' : undefined} aria-pressed={id === tool} onClick={() => select(id)}>
+              <svg viewBox="0 0 56 24" className="drawing-sample" aria-hidden="true" style={{ color: colors[id] }}>
+                {id === 'brush'
+                  ? <path fill="currentColor" stroke="none" d="M3 19C13 16 22 1 32 4S40 16 54 5C43 21 36 18 30 12S14 19 3 19Z" />
+                  : <path d="M4 18C14 17 23 3 30 7S39 19 52 7" strokeWidth={id === 'marker' ? 8 : id === 'pen' ? 3 : 1.6}
+                      opacity={id === 'marker' ? 0.5 : id === 'pencil' ? 0.75 : 1} strokeDasharray={id === 'pencil' ? '1 1.2' : undefined} />}
+              </svg>
+              <small>{brushes[id]}</small>
+            </button>
           ))}
-          <label className="drawing-custom" title="Свой цвет" style={{ color }}>
-            <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="3" /><path d="M6 10h8m-4-4v8" fill="none" stroke="var(--ink)" strokeWidth="1.5" /></svg>
-            <input type="color" aria-label="Свой цвет" value={color} onChange={e => pick(e.target.value)} />
-          </label>
-        </div>}
-        <div className="drawing-history">{history}</div>
-        <button type="button" className="drawing-done" onClick={onDone}>Готово</button>
-      </div>
+        </div>
+      </div>}
+      {menu === 'size' && <div className="toolbar-menu toolbar-opacity-pop" role="dialog" aria-label={sizeLabel}>
+        <StyleSection title={sizeLabel}><ToolbarSlider label={sizeLabel} sizeTrack min={1} max={maxSize(tool)}
+          value={sizes[tool]} unit=" px" onPick={(size, final) => onChange({ ...options, sizes: { ...sizes, [tool]: size } }, final)} /></StyleSection>
+      </div>}
+      {menu === 'color' && <div className="toolbar-menu drawing-palette" role="dialog" aria-label="Цвет штриха">
+        <ColorWheel color={colors[brush]} size={Math.min(170, menuRoom(0) - 50)} onPick={pick} />
+        <div className="drawing-swatches">
+          {palette.map(([label, value]) => <button key={value} type="button" aria-label={label} title={label} aria-pressed={colors[brush] === value}
+            onClick={() => pick(value)} style={{ '--color': value } as CSSProperties} />)}
+          <label title="Свой цвет" className="drawing-custom">＋<input type="color" aria-label="Свой цвет" value={colors[brush]} onChange={e => pick(e.target.value)} /></label>
+        </div>
+      </div>}
+      <button type="button" className="text-toolbar-color" title="Цвет" aria-label="Цвет" aria-haspopup="dialog" aria-expanded={menu === 'color'}
+        disabled={tool === 'eraser'} onClick={() => toggle('color')}><span className="text-toolbar-swatch" style={{ '--color': colors[brush] } as CSSProperties} /></button>
+      <button type="button" aria-label="Кисти" title={brushes[brush]} aria-haspopup="dialog" aria-expanded={menu === 'brush'}
+        className={menu === 'brush' ? 'text-toolbar-font is-active' : 'text-toolbar-font'} onClick={() => { if (tool === 'eraser') select(brush); toggle('brush'); }}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">{icons[brush]}</svg>
+        <svg viewBox="0 0 24 24" className="text-toolbar-chevron" aria-hidden="true"><path d="m7 14 5-5 5 5" /></svg>
+      </button>
+      <button type="button" aria-label={sizeLabel} title={sizeLabel + ' · ' + sizes[tool] + ' px'} aria-haspopup="dialog" aria-expanded={menu === 'size'}
+        className={menu === 'size' ? 'is-active' : undefined} onClick={() => toggle('size')}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 11h16" /><path d="M4 18h16" strokeWidth="4.5" /></svg>
+      </button>
+      <button type="button" aria-label="Ластик" title="Ластик" aria-pressed={tool === 'eraser'} className={tool === 'eraser' ? 'is-active' : undefined}
+        onClick={() => { setMenu(null); lastBrush.current = brush; onChange({ ...options, tool: tool === 'eraser' ? brush : 'eraser' }); }}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">{icons.eraser}</svg>
+      </button>
+      <button type="button" className="text-toolbar-done" aria-label="Готово" title="Готово" onClick={onDone}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+      </button>
     </div>
   );
 }

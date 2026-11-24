@@ -51,9 +51,7 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .glitter:not([data-offscreen]) > g,
-  .design-glitter::before,
-  .design-glitter::after {
+  .glitter:not([data-offscreen]) > g {
     animation: glitter-twinkle var(--glitter-cycle) ease-in-out var(--glitter-delay) infinite;
   }
 
