@@ -5,32 +5,48 @@
   --safe-right: env(safe-area-inset-right);
   --safe-bottom: env(safe-area-inset-bottom);
   --safe-left: env(safe-area-inset-left);
+  --page-corner-margin: 16px;
 
   position: fixed;
   inset: 0;
 }
 
-/* Кнопки внизу посередине (между стрелками перелистывания): меню, «+»,
-   шестерёнка. Ряд сам касаний не ловит — только кнопки; их панели
-   (position: fixed) открываются от экрана, а не от ряда */
+@media (max-width: 360px) {
+  .app-root {
+    --page-corner-margin: 8px;
+  }
+}
+
+/* Пять кнопок по 40px, между ними до 12px. Одинаковые поля оставляют
+   домик по центру экрана и место для обеих угловых кнопок. */
 .bottom-center {
+  --side-space: calc(var(--page-corner-margin) + 44px + max(var(--safe-left), var(--safe-right)));
   position: fixed;
-  left: 0;
-  right: 0;
+  left: var(--side-space);
+  right: var(--side-space);
   bottom: calc(20px + var(--safe-bottom));
   z-index: 7;
   display: flex;
-  justify-content: center;
-  gap: 12px;
+  justify-content: space-between;
+  max-width: 248px;
+  margin-inline: auto;
   pointer-events: none;
 }
 
-/* Настройки листа — отдельно от ряда: в правом нижнем углу, ниже ряда */
+/* Главное меню и настройки листа — в противоположных нижних углах. */
+.page-menu-button,
 .page-settings-button {
   position: fixed;
-  right: calc(16px + var(--safe-right));
   bottom: calc(10px + var(--safe-bottom));
   z-index: 7;
+}
+
+.page-menu-button {
+  left: calc(var(--page-corner-margin) + var(--safe-left));
+}
+
+.page-settings-button {
+  right: calc(var(--page-corner-margin) + var(--safe-right));
 }
 
 /* «×» — закончить наклеивать: над «+» и шестерёнкой, крупнее них */
@@ -65,6 +81,7 @@
    «Вернуть» тоже, даже когда нечего отменять (их :disabled ниже иначе
    оставлял бледную кнопку на весь переворот — жалоба автора) */
 .bottom-center > *,
+.page-menu-button,
 .page-settings-button,
 .stamp-cancel {
   transition: opacity 0.2s ease-out;
@@ -77,10 +94,8 @@
   pointer-events: none;
 }
 
-/* Открыто меню «+» — кнопки вне нижнего ряда (шестерёнка листа, «×»
-   наклеивания) касаний не ловят: касание проходит к фону меню и закрывает
-   его, как касание мимо (кнопки ряда и так под этим фоном) */
-.round-button.is-blocked {
+/* Открыто меню «+» — касание в углу попадает на фон и закрывает меню. */
+.round-button[inert] {
   pointer-events: none;
 }
 

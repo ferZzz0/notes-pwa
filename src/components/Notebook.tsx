@@ -420,7 +420,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const [turning, setTurning] = useState(false);
   // Сообщение посреди экрана (NoticeDialog — вместо системного alert)
   const [notice, setNotice] = useState<Notice | null>(null);
-  // Открыто меню «+»: шестерёнка листа и «×» наклеивания не нажимаются
+  // Пока открыто меню «+», касание любой угловой кнопки закрывает меню.
   const [addOpen, setAddOpen] = useState(false);
   // Сколько раз перелистывали — от каждого раза брелок качается
   const [kick, setKick] = useState(0);
@@ -1476,6 +1476,9 @@ export function Notebook({ source, onMenu, onDay }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  const cornerButtonClass = turning ? 'round-button is-faded' : 'round-button';
+  const cornersInert = turning || addOpen;
+
   // «Отменить» / «Вернуть»: в нижнем ряду, а пока открыта панель надписи
   // или фото — над ней (просьба автора: видны и при редактировании)
   const historyButtons = (
@@ -1859,20 +1862,21 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           появляются (просьба автора; App.css: .is-faded) */}
       {!selectedBlock && (
         <>
-          {/* Ряд внизу: меню — ровно посередине экрана (просьба автора: два
-              слева, два справа) */}
-          <div className={turning ? 'bottom-center is-faded' : 'bottom-center'}>
+          <button type="button" className={`${cornerButtonClass} page-menu-button`} inert={cornersInert} aria-label="Главное меню" onClick={onMenu}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 5.5h6v6H4zM14 5.5h6v6h-6zM4 15.5h6v4H4zM14 15.5h6v4h-6z" />
+            </svg>
+          </button>
+          <div className={turning ? 'bottom-center is-faded' : 'bottom-center'} inert={turning}>
             {historyButtons}
-            <button type="button" className="round-button" aria-label="Главное меню" onClick={onMenu}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 5.5h6v6H4zM14 5.5h6v6h-6zM4 15.5h6v4H4zM14 15.5h6v4h-6z" />
-              </svg>
-            </button>
-            {/* Лист — в стартовое положение: начало листа, обычный размер (просьба автора) */}
             <button type="button" className="round-button" aria-label="К началу листа" onClick={() => void canvas.current?.goHome()}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                {/* Домик (просьба автора) */}
                 <path d="M3.5 11.5 12 4l8.5 7.5M6 9.5V20h4.5v-5.5h3V20H18V9.5" />
+              </svg>
+            </button>
+            <button type="button" className="round-button" aria-label="Маркер" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path transform="rotate(40 12 12)" d="M8.5 13V4A1.5 1.5 0 0 1 10 2.5h4A1.5 1.5 0 0 1 15.5 4v9L14 16h-4ZM8.5 13h7M10 16v5l4-1.5V16" />
               </svg>
             </button>
             <AddMenu
@@ -1898,7 +1902,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
           {stamp && (
             <button
               type="button"
-              className={`round-button stamp-cancel${turning ? ' is-faded' : ''}${addOpen ? ' is-blocked' : ''}`}
+              className={`${cornerButtonClass} stamp-cancel`}
+              inert={cornersInert}
               aria-label={stamp.charm ? 'Закончить вешать брелоки' : 'Закончить наклеивать'}
               onClick={() => setStamp(null)}
             >
@@ -1912,7 +1917,8 @@ export function Notebook({ source, onMenu, onDay }: Props) {
               углу (просьба автора; отладка — в настройках главного меню) */}
           <button
             type="button"
-            className={`round-button page-settings-button${turning ? ' is-faded' : ''}${addOpen ? ' is-blocked' : ''}`}
+            className={`${cornerButtonClass} page-settings-button`}
+            inert={cornersInert}
             aria-label="Настройки листа"
             onClick={() => {
               deselect();
