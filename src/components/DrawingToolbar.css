@@ -4,11 +4,16 @@
 .drawing-layer { isolation: isolate; }
 .ink-item { position: absolute; }
 .ink-item svg { display: block; }
+.ink-surface { display: none; position: absolute; pointer-events: none; }
+.drawing-layer[data-ink-surface] .ink-item > svg { display: none; }
+.drawing-layer[data-ink-surface] .ink-surface { display: block; transform: translateZ(0); }
 .item-clip.ink-clip[data-clip='left'] { clip-path: polygon(-100000px 0, 0 0, 0 100000px, -100000px 100000px); }
 .item-clip.ink-clip[data-clip='right'] { clip-path: polygon(0 0, 100000px 0, 100000px 100000px, 0 100000px); }
 .eraser-tip {
   position: absolute;
-  transform: translate(-50%, -50%);
+  left: 0;
+  top: 0;
+  will-change: transform;
   border: 1px solid var(--ink);
   border-radius: 50%;
   box-shadow: 0 0 0 1px #fff9;

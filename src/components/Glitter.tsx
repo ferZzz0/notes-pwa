@@ -1,9 +1,8 @@
-import type { CSSProperties } from 'react';
+import { memo, type CSSProperties } from 'react';
 import './Glitter.css';
 
 // Количество искр задаёт ползунок, рисунок и ритм — id наклейки.
 const MAX_SPARKS = 18;
-const COLORS = ['#ffffff', '#fff3a8', '#ffd3f2', '#cdefff'];
 
 // Псевдослучайные числа от seed (mulberry32)
 export function glitterRandom(seed: string) {
@@ -18,19 +17,12 @@ export function glitterRandom(seed: string) {
   };
 }
 
-// Искорка с центром (0, 0) и лучами длины 1
-const SPARK = 'M0-1C.12-.12.12-.12 1 0 .12.12.12.12 0 1-.12.12-.12.12-1 0-.12-.12-.12-.12 0-1Z';
-
-function position(rnd: () => number) {
-  const x = 6 + rnd() * 88;
-  const y = 6 + rnd() * 88;
-  return `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
-}
+const position = (rnd: () => number) => [6 + rnd() * 88, 6 + rnd() * 88];
 
 // Один наблюдатель на лист и прокручиваемые меню. Искры за пределами
 // видимой области остаются статичными.
 let visibility: IntersectionObserver | undefined;
-export function observeGlitter(node: SVGSVGElement | null) {
+export function observeGlitter(node: Element | null) {
   if (!node || typeof IntersectionObserver === 'undefined') return;
   visibility ??= new IntersectionObserver(entries => {
     for (const entry of entries) entry.target.toggleAttribute('data-offscreen', !entry.isIntersecting);
@@ -39,7 +31,7 @@ export function observeGlitter(node: SVGSVGElement | null) {
   return () => visibility?.unobserve(node);
 }
 
-export function Glitter({ seed, amount }: { seed: string; amount: number }) {
+export const Glitter = memo(function Glitter({ seed, amount }: { seed: string; amount: number }) {
   const count = Math.round(Math.min(1, Math.max(0, amount)) * MAX_SPARKS);
   if (count === 0) return null;
   const rnd = glitterRandom(seed);
@@ -49,26 +41,29 @@ export function Glitter({ seed, amount }: { seed: string; amount: number }) {
     const first = position(rnd);
     const dot = rnd() < 0.3;
     const size = dot ? 1.2 + rnd() * 1.5 : 3.5 + rnd() * 6.5;
-    const color = COLORS[Math.floor(rnd() * COLORS.length)];
-    const turn = rnd() * 45;
+    const color = Math.floor(rnd() * 4);
+    const turn = Math.round(rnd() * 45);
+    // В ячейке 96 px радиус звезды — 24 px, точки — 12 px. Остальное
+    // занимает готовое свечение: теперь браузер двигает маленькую картинку.
+    const width = size * (dot ? 8 : 4);
+    const place = ([x, y]: number[]) =>
+      `translate(${(100 * x / width - 50).toFixed(2)}%, ${(100 * y / width - 50).toFixed(2)}%) rotate(${turn}deg)`;
     const cycle = 8400 + Math.round(motion() * 2800);
     const style = {
-      '--glitter-a': first,
-      '--glitter-b': position(motion),
-      '--glitter-c': position(motion),
-      '--glitter-d': position(motion),
+      width: width + '%', height: width + '%',
+      backgroundPosition: `${color * 100 / 3}% ${dot ? 100 : 0}%`,
+      '--glitter-a': place(first),
+      '--glitter-b': place(position(motion)),
+      '--glitter-c': place(position(motion)),
+      '--glitter-d': place(position(motion)),
       '--glitter-cycle': `${cycle}ms`,
       '--glitter-delay': `${-Math.round(rnd() * cycle)}ms`
     } as CSSProperties;
-    return (
-      <g key={i} fill={color} style={style}>
-        {dot ? <circle r={size} /> : <path d={SPARK} transform={`rotate(${turn.toFixed(0)}) scale(${size.toFixed(2)})`} />}
-      </g>
-    );
+    return <span key={i} style={style} />;
   });
   return (
-    <svg ref={observeGlitter} className="glitter" viewBox="0 0 100 100" aria-hidden="true">
+    <span ref={observeGlitter} className="glitter" aria-hidden="true">
       {items}
-    </svg>
+    </span>
   );
-}
+});

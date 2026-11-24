@@ -1,22 +1,11 @@
 import { addCut, inkBounds, simplifyInk, type InkBlock, type InkLine, type InkPart } from './drawing';
 import { cutEvidence } from './inkCoverage';
-import { brushPath, linePath } from './inkPaths';
+import { paintLine } from './inkPaths';
 
 const TILE = 128;
 let scratch: CanvasRenderingContext2D | null = null;
 
-function paint(line: InkLine, outline?: string) {
-  const path = new Path2D(outline ?? linePath(line));
-  const dot = line.points.length === 1;
-  if (dot && !outline) path.arc(line.points[0][0], line.points[0][1], line.size / 2, 0, 2 * Math.PI);
-  return (ctx: CanvasRenderingContext2D) => {
-    if (dot || outline) ctx.fill(path);
-    else { ctx.lineWidth = line.size; ctx.stroke(path); }
-  };
-}
-
-// Обходим штрихи один раз по упрощённой траектории всего жеста. Пока палец
-// движется, бумага показывает одну маску на страницу, без правок отдельных штрихов.
+// Обходим штрихи один раз по упрощённой траектории законченного жеста.
 export function eraseStrokes(blocks: InkBlock[], trace: InkPart[], size: number, scale: number) {
   const routes = trace.map(({ side, points }) => {
     const line = { size, points: simplifyInk(points, 0.25 / scale, size) };
@@ -79,8 +68,6 @@ export function inspectCut(block: InkBlock, cuts: InkLine[], scale: number): 'mi
   // Если браузер не дал временный холст, векторный вырез всё равно работает.
   if (!scratch) return 'partial';
   const ctx = scratch;
-  const original = paint(ink, ink.brush === 'brush' ? brushPath(ink) : undefined);
-  const previous = (ink.cuts ?? []).map(c => paint(c)), current = cuts.map(c => paint(c));
   let { changed, remains } = evidence;
   const bounds = inkBounds(ink), visited = new Set<string>();
   const inspect = (tx: number, ty: number) => {
@@ -105,15 +92,15 @@ export function inspectCut(block: InkBlock, cuts: InkLine[], scale: number): 'mi
     ctx.clip();
     ctx.setTransform(resolution, 0, 0, resolution, -tx * TILE, -ty * TILE);
     ctx.lineCap = ctx.lineJoin = 'round';
-    original(ctx);
+    paintLine(ctx, ink, ink.brush === 'brush');
     ctx.globalCompositeOperation = 'destination-out';
-    for (const draw of previous) draw(ctx);
+    for (const cut of ink.cuts ?? []) paintLine(ctx, cut);
     const before = ctx.getImageData(x, y, w, h).data;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, TILE, TILE);
     ctx.setTransform(resolution, 0, 0, resolution, -tx * TILE, -ty * TILE);
     ctx.globalCompositeOperation = 'source-over';
-    for (const draw of current) draw(ctx);
+    for (const cut of cuts) paintLine(ctx, cut);
     const mask = ctx.getImageData(x, y, w, h).data;
     ctx.restore();
     for (let i = 3; i < before.length; i += 4) {

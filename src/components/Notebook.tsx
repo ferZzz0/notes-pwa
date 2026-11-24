@@ -1657,6 +1657,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         onFrame={(cam, size) => {
           const moved = cam.x !== camera.current.x || cam.y !== camera.current.y || cam.scale !== camera.current.scale;
           camera.current = cam;
+          inkLayer.current?.viewport(cam, size);
           paper.current?.update(cam, size);
           selection.current?.update();
           if (moved) followCaret();
@@ -1680,7 +1681,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         grab={grab}
       >
         {/* Чернила лежат на бумаге под номерами, надписями и всеми предметами. */}
-        {!flip && <DrawingLayer ref={inkLayer} blocks={visibleBlocks} display={display} options={drawingOptions} onEdit={editDrawing} />}
+        {!flip && <DrawingLayer ref={inkLayer} blocks={visibleBlocks} display={display} drawing={drawing} options={drawingOptions} onEdit={editDrawing} />}
         {display !== 'right' && pageSide(underLeft, 'left')}
         {display !== 'left' && pageSide(underRight, 'right')}
 

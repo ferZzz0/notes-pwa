@@ -6,10 +6,15 @@
   height: 100%;
   overflow: visible;
   pointer-events: none;
-  filter: drop-shadow(0 0 1.5px rgb(255 255 255 / 0.95)) drop-shadow(0 0 3px rgb(255 240 180 / 0.7));
 }
 
-.glitter > g {
+.glitter > span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-image: url('../assets/glitter-sparks.png');
+  background-size: 400% 200%;
+  background-repeat: no-repeat;
   transform: var(--glitter-a);
 }
 
@@ -51,12 +56,12 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .glitter:not([data-offscreen]) > g {
+  .glitter:not([data-offscreen]) > span {
     animation: glitter-twinkle var(--glitter-cycle) ease-in-out var(--glitter-delay) infinite;
   }
 
   /* В PNG сохраняется исходный узор со всеми выбранными блёстками. */
-  .page-export .glitter > g {
+  .page-export .glitter > span {
     animation: none;
   }
 }
