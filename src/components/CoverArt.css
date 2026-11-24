@@ -40,11 +40,36 @@
 }
 
 .design-glitter {
-  --cover-pattern:
-    radial-gradient(circle at 30% 40%, rgb(255 255 255 / 0.9) 0 1px, transparent 1.6px) 0 0 / 9px 11px,
-    radial-gradient(circle at 70% 20%, rgb(255 240 190 / 0.8) 0 1px, transparent 1.6px) 0 0 / 13px 7px,
-    radial-gradient(circle at 50% 80%, rgb(255 210 240 / 0.7) 0 0.8px, transparent 1.4px) 0 0 / 7px 9px,
-    linear-gradient(135deg, rgb(255 255 255 / 0.28), transparent 35%, rgb(255 255 255 / 0.22) 55%, transparent 75%, rgb(255 255 255 / 0.2));
+  --cover-pattern: linear-gradient(135deg, rgb(255 255 255 / 0.28), transparent 35%, rgb(255 255 255 / 0.22) 55%, transparent 75%, rgb(255 255 255 / 0.2));
+  --glitter-a: translate(0, 0);
+  --glitter-b: translate(4px, 2px);
+  --glitter-c: translate(1px, -3px);
+  --glitter-d: translate(-3px, 3px);
+  overflow: hidden;
+}
+
+/* Два слоя мелких крупинок мерцают в разном ритме под наклейками и названием. */
+.design-glitter::before,
+.design-glitter::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.design-glitter::before {
+  --glitter-cycle: 10.8s;
+  --glitter-delay: -1.2s;
+  background: radial-gradient(circle at 30% 40%, rgb(255 255 255 / 0.9) 0 1px, transparent 1.6px) 4px 4px / 9px 11px;
+}
+
+.design-glitter::after {
+  --glitter-cycle: 12.4s;
+  --glitter-delay: -7.5s;
+  background:
+    radial-gradient(circle at 70% 20%, rgb(255 240 190 / 0.8) 0 1px, transparent 1.6px) 4px 4px / 13px 7px,
+    radial-gradient(circle at 50% 80%, rgb(255 210 240 / 0.7) 0 0.8px, transparent 1.4px) 4px 4px / 7px 9px;
 }
 
 /* Наклейки на обложке: в её пределах, над закладкой, под наклейкой с названием */

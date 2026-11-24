@@ -88,7 +88,7 @@ export function AddMenu({ onPhoto, onSticker, onDecal, onCharm, onPaste, canPast
                 }}
               >
                 <img src={decalSrc(d.id)} alt="" draggable={false} />
-                <Glitter seed={seed + d.id} amount={glitter} twinkle />
+                <Glitter seed={seed + d.id} amount={glitter} />
               </button>
             ))}
           </div>

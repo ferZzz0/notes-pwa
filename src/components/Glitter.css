@@ -9,21 +9,56 @@
   filter: drop-shadow(0 0 1.5px rgb(255 255 255 / 0.95)) drop-shadow(0 0 3px rgb(255 240 180 / 0.7));
 }
 
-/* В меню — мерцают (на листе неподвижные: мерцание перерисовывало бы лист) */
-.glitter.is-twinkling > * {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: glitter-twinkle 1.6s ease-in-out infinite;
+.glitter > g {
+  transform: var(--glitter-a);
 }
 
+/* Между вспышками обе границы перехода прозрачны. Искра меняет место,
+   только когда уже погасла. У каждой свои длительность и начальная фаза. */
 @keyframes glitter-twinkle {
-  50% {
-    opacity: 0.25;
+  0%, 21%, 100% {
+    opacity: 0;
+    transform: var(--glitter-a);
+  }
+  10% {
+    opacity: 0.9;
+    transform: var(--glitter-a);
+  }
+  25%, 46% {
+    opacity: 0;
+    transform: var(--glitter-b);
+  }
+  35% {
+    opacity: 0.9;
+    transform: var(--glitter-b);
+  }
+  50%, 71% {
+    opacity: 0;
+    transform: var(--glitter-c);
+  }
+  60% {
+    opacity: 0.9;
+    transform: var(--glitter-c);
+  }
+  75%, 96% {
+    opacity: 0;
+    transform: var(--glitter-d);
+  }
+  85% {
+    opacity: 0.9;
+    transform: var(--glitter-d);
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .glitter.is-twinkling > * {
+@media (prefers-reduced-motion: no-preference) {
+  .glitter:not([data-offscreen]) > g,
+  .design-glitter::before,
+  .design-glitter::after {
+    animation: glitter-twinkle var(--glitter-cycle) ease-in-out var(--glitter-delay) infinite;
+  }
+
+  /* В PNG сохраняется исходный узор со всеми выбранными блёстками. */
+  .page-export .glitter > g {
     animation: none;
   }
 }
