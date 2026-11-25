@@ -1,7 +1,7 @@
 import { memo, useRef, type CSSProperties, type PointerEvent } from 'react';
 import type { CoverDecal } from '../notes';
 import { DEFAULT_GLITTER, decalSrc } from '../textStyle';
-import { Glitter, glitterRandom, observeGlitter } from './Glitter';
+import { Glitter, glitterMotionProps, glitterRandom } from './Glitter';
 import './CoverArt.css';
 
 type Props = {
@@ -34,7 +34,7 @@ export const CoverGlitter = memo(function CoverGlitter({ seed }: { seed: string 
     }
   }
   const offset = Math.round(rnd() * COVER_CYCLE);
-  return <svg ref={observeGlitter} className="cover-glitter" aria-hidden="true" viewBox="0 0 100 140" preserveAspectRatio="none"
+  return <svg {...glitterMotionProps} className="cover-glitter" aria-hidden="true" viewBox="0 0 100 140" preserveAspectRatio="none"
     fill="none" strokeLinecap="round">
     {groups.map((g, i) => <g key={i} style={{
       animationDuration: `${COVER_CYCLE}ms`, animationDelay: `-${offset + i * COVER_CYCLE / 8}ms`,

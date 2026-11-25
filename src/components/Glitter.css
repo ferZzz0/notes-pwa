@@ -56,7 +56,7 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .glitter:not([data-offscreen]) > span {
+  .glitter:where([data-twinkle]):not([data-offscreen]) > span {
     animation: glitter-twinkle var(--glitter-cycle) ease-in-out var(--glitter-delay) infinite;
   }
 
