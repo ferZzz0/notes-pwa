@@ -3,8 +3,6 @@ import './Glitter.css';
 
 // Количество искр задаёт ползунок, рисунок и ритм — id наклейки.
 const MAX_SPARKS = 18;
-// Временно оставляем блёстки неподвижными и на предметах, и на обложках.
-const ANIMATE_GLITTER = false;
 
 // Псевдослучайные числа от seed (mulberry32)
 export function glitterRandom(seed: string) {
@@ -24,7 +22,7 @@ const position = (rnd: () => number) => [6 + rnd() * 88, 6 + rnd() * 88];
 // Один наблюдатель на лист и прокручиваемые меню. Искры за пределами
 // видимой области остаются статичными.
 let visibility: IntersectionObserver | undefined;
-function observeGlitter(node: Element | null) {
+export function observeGlitter(node: Element | null) {
   if (!node || typeof IntersectionObserver === 'undefined') return;
   visibility ??= new IntersectionObserver(entries => {
     for (const entry of entries) entry.target.toggleAttribute('data-offscreen', !entry.isIntersecting);
@@ -32,8 +30,6 @@ function observeGlitter(node: Element | null) {
   visibility.observe(node);
   return () => visibility?.unobserve(node);
 }
-
-export const glitterMotionProps = ANIMATE_GLITTER ? { ref: observeGlitter, 'data-twinkle': '' } : {};
 
 export const Glitter = memo(function Glitter({ seed, amount }: { seed: string; amount: number }) {
   const count = Math.round(Math.min(1, Math.max(0, amount)) * MAX_SPARKS);
@@ -66,7 +62,7 @@ export const Glitter = memo(function Glitter({ seed, amount }: { seed: string; a
     return <span key={i} style={style} />;
   });
   return (
-    <span {...glitterMotionProps} className="glitter" aria-hidden="true">
+    <span ref={observeGlitter} className="glitter" aria-hidden="true">
       {items}
     </span>
   );

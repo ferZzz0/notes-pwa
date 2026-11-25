@@ -67,7 +67,7 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .cover-glitter[data-twinkle] > g {
+  .cover-glitter > g {
     animation-name: cover-twinkle;
     animation-timing-function: ease-in-out;
     animation-iteration-count: infinite;
