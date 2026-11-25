@@ -4,8 +4,7 @@
 .drawing-layer { isolation: isolate; }
 .ink-item { position: absolute; }
 .ink-item svg { display: block; }
-.ink-surface { display: none; position: absolute; pointer-events: none; }
-.drawing-layer[data-ink-surface] .ink-item > svg { display: none; }
+.ink-surface { display: none; position: absolute; pointer-events: none; image-rendering: pixelated; }
 .drawing-layer[data-ink-surface] .ink-surface { display: block; transform: translateZ(0); }
 .item-clip.ink-clip[data-clip='left'] { clip-path: polygon(-100000px 0, 0 0, 0 100000px, -100000px 100000px); }
 .item-clip.ink-clip[data-clip='right'] { clip-path: polygon(0 0, 100000px 0, 100000px 100000px, 0 100000px); }

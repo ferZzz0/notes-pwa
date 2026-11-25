@@ -57,7 +57,7 @@ const SavedStrokes = memo(function SavedStrokes({ blocks }: { blocks: InkBlock[]
   return <>{blocks.map(b => <g key={b.id} transform={`translate(${b.x} ${b.y})`}><InkGraphic block={b} /></g>)}</>;
 });
 
-const InkSheet = memo(function InkSheet({ blocks, side }: { blocks: InkBlock[]; side: Sheet }) {
+const InkSheet = memo(function InkSheet({ blocks, side, vector }: { blocks: InkBlock[]; side: Sheet; vector: boolean }) {
   const bounds = useMemo(() => {
     let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
     for (const b of blocks) {
@@ -70,14 +70,15 @@ const InkSheet = memo(function InkSheet({ blocks, side }: { blocks: InkBlock[]; 
   if (!blocks.length) return null;
   return <div className="item-clip ink-clip" data-clip={side}>
     <div className="ink-item" style={bounds}>
-      <svg width={bounds.width} height={bounds.height} viewBox={`${bounds.left} ${bounds.top} ${bounds.width} ${bounds.height}`}>
+      {vector && <svg width={bounds.width} height={bounds.height} viewBox={`${bounds.left} ${bounds.top} ${bounds.width} ${bounds.height}`}>
         <g><SavedStrokes blocks={blocks} /></g>
-      </svg>
+      </svg>}
     </div>
   </div>;
 });
 
 type Edit = (blocks: Block[]) => Block[];
+type Viewport = { view: Rect; scale: number };
 export type DrawingHandle = {
   start: (point: DrawSample, scale: number, view: Rect) => DrawGesture;
   cancel: () => void;
@@ -90,43 +91,63 @@ type Props = {
   drawing: boolean;
   options: DrawingOptions;
   onEdit: (change: Edit) => void;
+  readViewport: () => Viewport | null;
 };
 
 // Только этот слой перерисовывается во время жеста. В историю и хранилище
 // идёт один законченный шаг. Щипок или pointercancel отбрасывает черновик.
-export function DrawingLayer({ ref, blocks, display, drawing, options, onEdit }: Props) {
+export function DrawingLayer({ ref, blocks, display, drawing, options, onEdit, readViewport }: Props) {
   const [draft, setDraft] = useState<InkBlock[]>([]);
-  const root = useRef<HTMLDivElement>(null);
+  const [vectorFallback, setVectorFallback] = useState(false);
   const bitmap = useRef<HTMLCanvasElement>(null);
   const tip = useRef<HTMLDivElement>(null);
   const surface = useRef<InkSurface | null>(null);
-  const viewport = useRef<{ view: Rect; scale: number } | null>(null);
+  const viewport = useRef<Viewport | null>(null);
   const warmTimer = useRef(0);
   const erasing = drawing && options.tool === 'eraser';
   const original = useMemo(() => blocks.filter(isInk), [blocks]);
+  const hasCuts = useMemo(() => original.some(b => b.ink.cuts?.length), [original]);
+  const useSurface = original.length > 0 && (erasing || hasCuts);
+  const showBitmap = useSurface && !vectorFallback;
   const sides = useMemo(() => ({ left: original.filter(b => b.x < 0), right: original.filter(b => b.x >= 0) }), [original]);
   const active = useRef<DrawGesture | null>(null);
   const prepare = useCallback((view: Rect, scale: number) => {
     clearTimeout(warmTimer.current);
-    if (!erasing || !original.length || !bitmap.current || view.w <= 0 || view.h <= 0) return null;
+    if (!useSurface || !bitmap.current || view.w <= 0 || view.h <= 0) return null;
     if (!surface.current) {
       const ctx = bitmap.current.getContext('2d');
-      if (!ctx) return null;
-      surface.current = new InkSurface(ctx, () => root.current?.removeAttribute('data-ink-surface'));
+      if (!ctx) {
+        setVectorFallback(true);
+        return null;
+      }
+      surface.current = new InkSurface(ctx, () => setVectorFallback(true));
     }
-    const ready = surface.current.prepare(original, view, scale);
-    root.current?.toggleAttribute('data-ink-surface', ready);
-    return ready ? surface.current : null;
-  }, [erasing, original]);
+    // Запас по краям позволяет двигать лист и приближаться к рисунку,
+    // используя уже нарисованные пиксели, в том числе вне режима рисования.
+    const visible = surface.current.prepare(original, view, scale, 0.25);
+    setVectorFallback(!surface.current.covers(view));
+    return visible ? surface.current : null;
+  }, [useSurface, original]);
   useLayoutEffect(() => {
-    if (erasing && original.length && viewport.current) prepare(viewport.current.view, viewport.current.scale);
-    else {
-      root.current?.removeAttribute('data-ink-surface');
+    const canvas = bitmap.current;
+    const redraw = () => {
+      const position = viewport.current ?? readViewport();
+      if (position) prepare(position.view, position.scale);
+    };
+    if (useSurface) {
+      redraw();
+      canvas?.addEventListener('contextrestored', redraw);
+    } else {
+      setVectorFallback(false);
       surface.current?.dispose();
       surface.current = null;
     }
-    return () => { clearTimeout(warmTimer.current); active.current?.cancel(); };
-  }, [erasing, original, prepare]);
+    return () => {
+      canvas?.removeEventListener('contextrestored', redraw);
+      clearTimeout(warmTimer.current);
+      active.current?.cancel();
+    };
+  }, [useSurface, erasing, prepare, readViewport]);
   useEffect(() => () => {
     active.current?.cancel();
     surface.current?.dispose();
@@ -139,11 +160,15 @@ export function DrawingLayer({ ref, blocks, display, drawing, options, onEdit }:
       const last = viewport.current;
       if (last && last.scale === cam.scale && sameView(last.view, view)) return;
       viewport.current = { view, scale: cam.scale };
-      if (!erasing) return;
-      active.current?.cancel();
-      root.current?.removeAttribute('data-ink-surface');
+      if (!useSurface) return;
+      if (erasing) active.current?.cancel();
       clearTimeout(warmTimer.current);
-      warmTimer.current = window.setTimeout(() => prepare(view, cam.scale), 100);
+      if (!surface.current?.covers(view)) prepare(view, cam.scale);
+      // Во время щипка масштабируется готовый слой. Поднять чёткость
+      // до нового масштаба достаточно один раз, когда камера остановилась.
+      if (!surface.current?.covers(view, cam.scale)) {
+        warmTimer.current = window.setTimeout(() => prepare(view, cam.scale), 120);
+      }
     },
     start(first, scale, view) {
       active.current?.cancel();
@@ -233,10 +258,10 @@ export function DrawingLayer({ ref, blocks, display, drawing, options, onEdit }:
   }));
 
   return (
-    <div ref={root} className="page-side drawing-layer" aria-hidden="true">
-      <InkSheet blocks={sides.left} side="left" />
-      <InkSheet blocks={sides.right} side="right" />
-      {erasing && <canvas ref={bitmap} className="ink-surface" width={1} height={1} />}
+    <div className="page-side drawing-layer" data-ink-surface={showBitmap ? '' : undefined} aria-hidden="true">
+      <InkSheet blocks={sides.left} side="left" vector={!showBitmap} />
+      <InkSheet blocks={sides.right} side="right" vector={!showBitmap} />
+      {useSurface && <canvas ref={bitmap} className="ink-surface" width={1} height={1} />}
       {draft.map(b => (
         <div key={b.id} className="item-clip ink-clip" data-clip={b.x < 0 ? 'left' : 'right'}><InkItem block={b} /></div>
       ))}

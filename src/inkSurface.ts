@@ -1,5 +1,5 @@
-import { inkBounds, type InkBlock, type InkBounds as Rect, type InkPart, type Sheet } from './drawing';
-import { brushOpacity, paintLine, pencilDashes } from './inkPaths';
+import { inkBounds, type InkBlock, type InkBounds as Rect, type InkPart, type Sheet } from './drawing.ts';
+import { brushOpacity, paintLine, pencilDashes } from './inkPaths.ts';
 
 function intersect(a: Rect, b: Rect): Rect | undefined {
   const x = Math.max(a.x, b.x), y = Math.max(a.y, b.y);
@@ -47,6 +47,7 @@ function paintStroke(ctx: CanvasRenderingContext2D, b: InkBlock) {
 }
 
 export const sameView = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+const screenDensity = (scale: number) => scale * Math.min(3, window.devicePixelRatio || 1);
 
 function sameInk(before: InkBlock[], after: InkBlock[]) {
   return before === after || (before.length === after.length && after.every((b, i) => {
@@ -55,18 +56,23 @@ function sameInk(before: InkBlock[], after: InkBlock[]) {
   }));
 }
 
-// Холст покрывает только видимые чернила. Векторы остаются в документе.
-// Во время жеста изменяются только пиксели под новым отрезком ластика.
+// Холст хранит чернила в окрестности экрана. Векторы остаются в документе.
+// При стирании изменяются только пиксели под новым отрезком ластика.
 export class InkSurface {
+  private readonly ctx: CanvasRenderingContext2D;
+  private readonly unavailable: () => void;
   private blocks: InkBlock[] = [];
   private view: Rect = { x: 0, y: 0, w: 0, h: 0 };
   private viewport?: Rect;
+  private requestedDensity = 0;
   private density = 1;
   private visible = false;
   private dirty?: Rect;
   private repairTimer = 0;
 
-  constructor(private ctx: CanvasRenderingContext2D, private unavailable: () => void) {
+  constructor(ctx: CanvasRenderingContext2D, unavailable: () => void) {
+    this.ctx = ctx;
+    this.unavailable = unavailable;
     ctx.canvas.addEventListener('contextlost', this.invalidate);
   }
 
@@ -74,15 +80,32 @@ export class InkSurface {
     clearTimeout(this.repairTimer);
     this.visible = false;
     this.viewport = undefined;
+    this.dirty = undefined;
     this.unavailable();
   };
 
-  prepare(blocks: InkBlock[], view: Rect, scale: number) {
+  covers(view: Rect, scale?: number) {
+    const cached = this.viewport;
+    return !!cached && (scale === undefined || this.requestedDensity === screenDensity(scale)) &&
+      cached.x <= view.x && cached.y <= view.y &&
+      cached.x + cached.w >= view.x + view.w && cached.y + cached.h >= view.y + view.h;
+  }
+
+  prepare(blocks: InkBlock[], view: Rect, scale: number, margin = 0) {
     const canvas = this.ctx.canvas;
-    if (this.ctx.isContextLost?.()) return false;
-    // Ограничиваем память экрана на больших планшетах и при Retina-зуме.
-    const density = Math.min(scale * Math.min(2, devicePixelRatio), 4096 / Math.max(view.w, view.h), Math.sqrt(2_000_000 / (view.w * view.h)));
-    if (this.viewport && sameView(this.viewport, view) && density === this.density && sameInk(this.blocks, blocks)) {
+    if (this.ctx.isContextLost?.()) {
+      this.invalidate();
+      return false;
+    }
+    if (margin > 0) {
+      if (this.covers(view, scale)) view = this.viewport!;
+      else {
+        const dx = view.w * margin, dy = view.h * margin;
+        view = { x: view.x - dx, y: view.y - dy, w: view.w + 2 * dx, h: view.h + 2 * dy };
+      }
+    }
+    const requestedDensity = screenDensity(scale);
+    if (this.viewport && sameView(this.viewport, view) && requestedDensity === this.requestedDensity && sameInk(this.blocks, blocks)) {
       this.blocks = blocks;
       return this.visible;
     }
@@ -90,7 +113,7 @@ export class InkSurface {
     this.dirty = undefined;
     this.blocks = blocks;
     this.viewport = view;
-    this.density = density;
+    this.requestedDensity = requestedDensity;
     let area: Rect | undefined;
     for (const b of blocks) {
       const r = intersect(worldBounds(b), sheetRect(view, b.x < 0 ? 'left' : 'right'));
@@ -98,9 +121,14 @@ export class InkSurface {
     }
     if (!area) {
       canvas.width = canvas.height = 1;
+      canvas.style.width = canvas.style.height = '0px';
       this.visible = false;
       return false;
     }
+    // Разрешение ограничивает площадь самих чернил: пустые поля не должны
+    // отнимать чёткость у небольшой надписи. Потолок нужен для больших листов.
+    const density = Math.min(requestedDensity, 4095 / Math.max(area.w, area.h), Math.sqrt(2_000_000 / (area.w * area.h)));
+    this.density = density;
     const px = Math.floor((area.x - view.x) * density), py = Math.floor((area.y - view.y) * density);
     const w = Math.ceil((area.x + area.w - view.x) * density) - px;
     const h = Math.ceil((area.y + area.h - view.y) * density) - py;
@@ -133,7 +161,9 @@ export class InkSurface {
       if (!area) continue;
       ctx.save();
       clip(ctx, sheet);
-      if (b.ink.cuts?.length) {
+      const local = { ...area, x: area.x - b.x, y: area.y - b.y };
+      const cuts = b.ink.cuts?.filter(cut => intersect(inkBounds(cut), local));
+      if (cuts?.length) {
         // Старые вырезы относятся только к своему штриху. Временный холст
         // переиспользуется, в него попадает только видимая часть штриха.
         scratch ??= document.createElement('canvas').getContext('2d');
@@ -148,7 +178,7 @@ export class InkSurface {
           paintStroke(scratch, b);
           scratch.globalCompositeOperation = 'destination-out';
           scratch.fillStyle = scratch.strokeStyle = '#000';
-          for (const cut of b.ink.cuts) paintLine(scratch, cut);
+          for (const cut of cuts) paintLine(scratch, cut);
           scratch.restore();
           ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.drawImage(scratch.canvas, 0, 0, w, h, x, y, w, h);

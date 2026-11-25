@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { CharmTextures } from '../charmTextures';
 import { isInk, type DrawingOptions } from '../drawing';
@@ -397,6 +397,10 @@ export function Notebook({ source, onMenu, onDay }: Props) {
   const paper = useRef<PaperHandle>(null);
   const selection = useRef<SelectionHandle>(null);
   const camera = useRef<Camera>({ x: 0, y: 0, scale: 1 });
+  const readInkViewport = useCallback(() => {
+    const view = canvas.current?.visibleRect();
+    return view ? { view, scale: camera.current.scale } : null;
+  }, []);
   const [charmTextures] = useState(() => new CharmTextures());
   const flipDone = useRef<(() => void) | null>(null);
   // Выбранная надпись (рамка и панель) и та, которую сейчас печатают
@@ -1684,7 +1688,7 @@ export function Notebook({ source, onMenu, onDay }: Props) {
         grab={grab}
       >
         {/* Чернила лежат на бумаге под номерами, надписями и всеми предметами. */}
-        {!flip && <DrawingLayer ref={inkLayer} blocks={visibleBlocks} display={display} drawing={drawing} options={drawingOptions} onEdit={editDrawing} />}
+        {!flip && <DrawingLayer ref={inkLayer} blocks={visibleBlocks} display={display} drawing={drawing} options={drawingOptions} onEdit={editDrawing} readViewport={readInkViewport} />}
         {display !== 'right' && pageSide(underLeft, 'left')}
         {display !== 'left' && pageSide(underRight, 'right')}
 
